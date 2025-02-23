@@ -1,6 +1,7 @@
 mod unit;
 mod fight;
 mod player;
+mod effect;
 
 use std::collections::HashMap;
 use std::env;
@@ -13,7 +14,7 @@ struct Log {
     players: HashMap<i32, player::Player>,
     units: HashMap<i32, unit::Unit>,
     fights: HashMap<i16, fight::Fight>,
-    effects: HashMap<i32, unit::Effect>,
+    effects: HashMap<i32, effect::Effect>,
 }
 
 impl Log {
@@ -72,8 +73,9 @@ impl Log {
                 "BEGIN_LOG" => self.handle_begin_log(parts),
                 "BEGIN_COMBAT" | "END_COMBAT" => self.handle_combat_change(parts),
                 "UNIT_ADDED" => self.handle_unit_added(parts),
-                // "PLAYER_INFO" => self.handle_player_info(parts),
-                "PLAYER_INFO" => {println!("{:?}", parts)},
+                "PLAYER_INFO" => self.handle_player_info(parts),
+                "ABILITY_INFO" => self.handle_ability_info(parts),
+                "EFFECT_INFO" => self.handle_effect_info(parts),
                 _ => {},
             }
         }
@@ -104,7 +106,6 @@ impl Log {
             if display_name != "\"\"" {
                 let player = player::Player {
                     unit_id: unit_id,
-                    unit_type: unit::UnitType::Player,
                     is_local_player: Self::is_true(parts[4]),
                     player_per_session_id: player_per_session_id,
                     class_id: player::match_class(parts[8]),
@@ -117,6 +118,9 @@ impl Log {
                     is_grouped_with_local_player: Self::is_true(parts[17]),
                     unit_state: unit::blank_unit_state(),
                     effects: Vec::new(),
+                    gear: player::empty_loadout(),
+                    primary_abilities: Vec::new(),
+                    backup_abilities: Vec::new(),
                 };
                 self.players.insert(unit_id, player);
             }
@@ -160,20 +164,85 @@ impl Log {
         let effect_stacks_list: Vec<i16> = parts[4].split(",").map(|x| x.parse::<i16>().unwrap()).collect();
         for (i, effect_id) in effect_id_list.iter().enumerate() {
             if let Some(player) = self.players.get_mut(&unit_id) {
-                // println!("Adding effect {} to player {} who is {}", effect_id, unit_id, player.display_name);
-                player.effects.push(*effect_id);
+                // check if player has effect already
+                if !player.effects.contains(effect_id) {
+                    player.effects.push(*effect_id);
+                }
             }
+        }
+
+        let gear_parts = parts.len() - 2;
+        for i in 5..gear_parts {
+            let gear_piece = self.handle_equipment_info(parts[i]);
+            if let Some(player) = self.players.get_mut(&unit_id) {
+                player.insert_gear_piece(gear_piece);
+            }
+        }
+
+        let primary_ability_id_list: Vec<i32> = parts[parts.len() - 2].split(",").map(|x| x.parse::<i32>().unwrap()).collect();
+        let backup_ability_id_list: Vec<i32> = parts[parts.len() - 1].split(",").map(|x| x.parse::<i32>().unwrap()).collect();
+        if let Some(player) = self.players.get_mut(&unit_id) {
+            player.primary_abilities = primary_ability_id_list;
+            player.backup_abilities = backup_ability_id_list;
         }
     }
 
-    // fn handle_equipment_info(&mut self, part: &str) -> player::GearPiece {
-    //     // let gear_piece = player::GearPiece {};
-    //     // gear_piece
-    // }
+    fn handle_equipment_info(&mut self, part: &str) -> player::GearPiece {
+        let split: Vec<&str> = part.split(",").collect();
+        // check all enums for none values, and print what they are
+        if player::match_gear_slot(split[0]) == player::GearSlot::None {
+            println!("Unknown gear slot: {}", split[0]);
+        }
+        if player::match_gear_trait(split[4]) == player::GearTrait::None && split[4] != "NONE" {
+            println!("Unknown gear trait: {}", split[4]);
+        }
+        if player::match_gear_quality(split[5]) == player::GearQuality::None {
+            println!("Unknown gear quality: {}", split[5]);
+        }
+        if player::match_enchant_type(split[7]) == player::EnchantType::None {
+            println!("Unknown enchant type: {}", split[7]);
+        }
+        let gear_piece = player::GearPiece {
+            slot: player::match_gear_slot(split[0]),
+            item_id: split[1].parse::<i32>().unwrap(),
+            is_cp: Self::is_true(split[2]),
+            level: split[3].parse::<i8>().unwrap(),
+            trait_id: player::match_gear_trait(split[4]),
+            quality: player::match_gear_quality(split[5]),
+            set_id: split[6].parse::<i32>().unwrap(),
+            enchant: player::GearEnchant {
+                enchant_type: player::match_enchant_type(split[7]),
+                is_enchant_cp: Self::is_true(split[8]),
+                enchant_level: split[9].parse::<i8>().unwrap(),
+                enchant_quality: player::match_gear_quality(split[10]),
+            },
+        };
+        gear_piece
+    }
 
-    fn query_fights(&self) {
-        for fight in self.fights.values() {
-            println!("{}", fight);
+    fn handle_ability_info(&mut self, parts: Vec<&str>) {
+        let effect_id: i32 = parts[2].parse::<i32>().unwrap(); // abilityId usually unique, but can be reused for scribing abilities
+        let effect = effect::Effect {
+            id: effect_id,
+            name: parts[3].to_string(),
+            icon: parts[4].to_string(),
+            interruptible: Self::is_true(parts[5]),
+            blockable: Self::is_true(parts[6]),
+            stack_count: 0,
+            effect_type: effect::EffectType::None,
+            status_effect_type: effect::StatusEffectType::None,
+            synergy: None,
+        };
+        self.effects.insert(effect_id, effect);
+    }
+
+    fn handle_effect_info(&mut self, parts: Vec<&str>) {
+        let effect_id: i32 = parts[2].parse::<i32>().unwrap();
+        let effect = self.effects.get_mut(&effect_id).unwrap();
+        effect.effect_type = effect::parse_effect_type(parts[3]);
+        effect.status_effect_type = effect::parse_status_effect_type(parts[4]);
+        if parts.len() > 6 {
+            effect.synergy = parts[6].parse::<i32>().ok();
         }
     }
 }
@@ -184,7 +253,10 @@ fn main() {
 
     let mut analyser = Log::new();
     analyser.read_file(file_path).unwrap();
-    analyser.query_fights();
+
+    for player in analyser.players.values() {
+        println!("{}", player);
+    }
 }
 
 fn parse_config(args: &[String]) -> (&str, &str) {

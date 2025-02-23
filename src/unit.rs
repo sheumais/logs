@@ -1,7 +1,6 @@
 use std::fmt;
 
-#[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum UnitType {
     Monster,
     Player,
@@ -10,8 +9,7 @@ pub enum UnitType {
 }
 
 
-#[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Reaction {
     PlayerAlly,
     NpcAlly,
@@ -30,6 +28,7 @@ pub fn match_reaction(string: &str) -> Reaction {
     }
 }
 
+#[derive(Debug)]
 pub struct UnitState {
     pub health: i32,
     pub max_health: i32,
@@ -64,17 +63,6 @@ pub fn blank_unit_state() -> UnitState {
         map_y: 0.0,
         heading: 0.0,
     }
-}
-
-pub struct Effect {
-    pub id: i32,
-    pub name: String,
-    pub icon: String,
-    pub stacks: i16,
-    pub time_remaining: i32,
-    pub effect_type: i32,
-    pub status_effect_type: i32,
-    pub grants_synergy: bool,
 }
 
 pub struct Unit {
