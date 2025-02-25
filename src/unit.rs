@@ -3,9 +3,7 @@ use std::fmt;
 #[derive(Debug, PartialEq)]
 pub enum UnitType {
     Monster,
-    Player,
     Object,
-    None,
 }
 
 
@@ -28,19 +26,20 @@ pub fn match_reaction(string: &str) -> Reaction {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub struct UnitState {
-    pub health: i32,
-    pub max_health: i32,
-    pub magicka: i32,
-    pub max_magicka: i32,
-    pub stamina: i32,
-    pub max_stamina: i32,
-    pub ultimate: i32,
-    pub max_ultimate: i32,
-    pub werewolf: i32,
-    pub werewolf_max: i32,
-    pub shield: i32,
+    pub unit_id: u32,
+    pub health: u32,
+    pub max_health: u32,
+    pub magicka: u32,
+    pub max_magicka: u32,
+    pub stamina: u32,
+    pub max_stamina: u32,
+    pub ultimate: u32,
+    pub max_ultimate: u32,
+    pub werewolf: u32,
+    pub werewolf_max: u32,
+    pub shield: u32,
     pub map_x: f32,
     pub map_y: f32,
     pub heading: f32, // Radians
@@ -48,6 +47,7 @@ pub struct UnitState {
 
 pub fn blank_unit_state() -> UnitState {
     UnitState {
+        unit_id: 0,
         health: 0,
         max_health: 0,
         magicka: 0,
@@ -65,15 +65,16 @@ pub fn blank_unit_state() -> UnitState {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Unit {
-    pub unit_id: i32,
+    pub unit_id: u32,
     pub unit_type: UnitType,
-    pub monster_id: i32,
+    pub monster_id: u32,
     pub is_boss: bool,
     pub name: String,
     pub level: i8,
-    pub champion_points: i16,
-    pub owner_unit_id: i32,
+    pub champion_points: u16,
+    pub owner_unit_id: u32,
     pub reaction: Reaction,
     pub unit_state: UnitState,
 }

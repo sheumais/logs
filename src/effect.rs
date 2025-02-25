@@ -1,14 +1,14 @@
 #[derive(Debug, PartialEq)]
 pub struct Effect {
-    pub id: i32,
+    pub id: u32,
     pub name: String,
     pub icon: String,
     pub interruptible: bool,
     pub blockable: bool,
-    pub stack_count: i16,
+    pub stack_count: u16,
     pub effect_type: EffectType,
     pub status_effect_type: StatusEffectType,
-    pub synergy: Option<i32>,
+    pub synergy: Option<u32>,
 }
 
 #[derive(Debug, PartialEq)]

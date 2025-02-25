@@ -1,27 +1,32 @@
 use std::fmt;
-use crate::unit::{Unit, UnitType};
+use crate::unit::Unit;
 use crate::player::Player;
+use crate::event::{Event, Cast};
 
+#[derive(Debug, PartialEq)]
 pub struct Fight {
-    pub id: i16,
+    pub id: u16,
     pub players: Vec<Player>,
     pub monsters: Vec<Unit>,
     pub bosses: Vec<Unit>,
-    pub start_time: i64,
-    pub end_time: i64,
+    pub start_time: u64,
+    pub end_time: u64,
+    pub events: Vec<Event>,
+    pub casts: Vec<Cast>
 }
 
 impl fmt::Display for Fight {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{{ id: {}, players: {:?}, monsters: {:?}, bosses: {:?}, start_time: {}, end_time: {} }}",
+            "{{ id: {}, players: {:?}, monsters: {:?}, bosses: {:?}, start_time: {}, end_time: {}, events: {:?} }}",
             self.id,
-            self.players.len(),
-            self.monsters.len(),
-            self.bosses.len(),
+            self.players,
+            self.monsters,
+            self.bosses,
             self.start_time,
-            self.end_time
+            self.end_time,
+            self.events,
         )
     }
 }

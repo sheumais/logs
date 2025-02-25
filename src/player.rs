@@ -1,23 +1,24 @@
-use crate::unit::{UnitType, UnitState};
+use crate::unit::UnitState;
 use std::fmt;
 
+#[derive(Debug, PartialEq)]
 pub struct Player {
-    pub unit_id: i32,
+    pub unit_id: u32,
     pub is_local_player: bool,
-    pub player_per_session_id: i32,
+    pub player_per_session_id: u32,
     pub class_id: ClassId,
     pub race_id: RaceId,
     pub name: String,
     pub display_name: String,
     pub character_id: i128,
     pub level: i8,
-    pub champion_points: i16,
+    pub champion_points: u16,
     pub is_grouped_with_local_player: bool,
     pub unit_state: UnitState,
-    pub effects: Vec<i32>,
+    pub effects: Vec<u32>,
     pub gear: Loadout,
-    pub primary_abilities: Vec<i32>,
-    pub backup_abilities: Vec<i32>,
+    pub primary_abilities: Vec<u32>,
+    pub backup_abilities: Vec<u32>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -225,7 +226,6 @@ pub enum GearSlot {
     OffHand,
     OffHandBackup,
     Costume,
-    Poison,
     BackupOff,
     None,
 }
@@ -254,25 +254,25 @@ pub fn match_gear_slot(string: &str) -> GearSlot {
 
 #[derive(Debug, PartialEq)]
 pub enum GearQuality {
+    Trash,
     Normal,
-    Fine,
-    Superior,
-    Epic,
-    Legendary,
-    Artifact,
+    Magic,
     Arcane,
+    Artifact,
+    Legendary,
+    Mythic,
     None,
 }
 
 pub fn match_gear_quality(string: &str) -> GearQuality {
     match string {
+        "TRASH" => GearQuality::Trash,
         "NORMAL" => GearQuality::Normal,
-        "FINE" => GearQuality::Fine,
-        "SUPERIOR" => GearQuality::Superior,
-        "EPIC" => GearQuality::Epic,
-        "LEGENDARY" => GearQuality::Legendary,
-        "ARTIFACT" => GearQuality::Artifact,
+        "MAGIC" => GearQuality::Magic,
         "ARCANE" => GearQuality::Arcane,
+        "ARTIFACT" => GearQuality::Artifact,
+        "LEGENDARY" => GearQuality::Legendary,
+        "MYTHIC" => GearQuality::Mythic,
         _ => GearQuality::None,
     }
 }
@@ -297,8 +297,6 @@ pub enum GearTrait {
     Healthy,
     Arcane,
     Robust,
-    Ornate,
-    Intricate,
     Bloodthirsty,
     Harmony,
     Protective,
@@ -421,12 +419,12 @@ pub struct GearEnchant {
 #[derive(Debug, PartialEq)]
 pub struct GearPiece {
     pub slot: GearSlot,
-    pub item_id: i32,
+    pub item_id: u32,
     pub is_cp: bool,
     pub level: i8,
     pub trait_id: GearTrait,
     pub quality: GearQuality,
-    pub set_id: i32,
+    pub set_id: u32,
     pub enchant: GearEnchant,
 }
 
