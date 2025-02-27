@@ -25,7 +25,7 @@ pub struct Event {
     pub target_unit_state: UnitState,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone, Eq, Hash)]
 pub enum EventResult {
     Queued,
     HotTick,
@@ -143,6 +143,27 @@ pub fn parse_event_result(event_result: &str) -> EventResult {
         "REINCARNATING" => EventResult::Reincarnating,
         "RESURRECT" => EventResult::Resurrect,
         _ => EventResult::None,
+    }
+}
+
+pub fn does_damage(event_result: EventResult) -> bool {
+    match event_result {
+        EventResult::Damage => true,
+        EventResult::BlockedDamage => true,
+        EventResult::CriticalDamage => true,
+        EventResult::DotTick => true,
+        EventResult::DotTickCritical => true,
+        _ => false,
+    }
+}
+
+pub fn does_heal(event_result: EventResult) -> bool {
+    match event_result {
+        EventResult::Heal => true,
+        EventResult::HotTick => true,
+        EventResult::HotTickCritical => true,
+        EventResult::CriticalHeal => true,
+        _ => false,
     }
 }
 

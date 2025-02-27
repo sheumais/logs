@@ -5,9 +5,11 @@ mod effect;
 mod event;
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::env;
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
+use num_format::{Locale, ToFormattedString};
 
 
 struct Log {
@@ -115,7 +117,7 @@ impl Log {
     fn handle_unit_added(&mut self, parts: Vec<&str>) {
         let unit_id: u32 = parts[2].parse::<u32>().unwrap();
         if parts[3] == "PLAYER" {
-            let display_name = parts[11].to_string();
+            let display_name = parts[11].trim_matches('"').to_string();
             let name = parts[10].to_string();
             let player_per_session_id: u32 = parts[5].parse::<u32>().unwrap();
             if display_name != "\"\"" {
@@ -128,7 +130,7 @@ impl Log {
                     name: name,
                     display_name: display_name,
                     character_id: parts[12].parse::<i128>().unwrap(),
-                    level: parts[13].parse::<i8>().unwrap(),
+                    level: parts[13].parse::<u8>().unwrap(),
                     champion_points: parts[14].parse::<u16>().unwrap(),
                     is_grouped_with_local_player: Self::is_true(parts[17]),
                     unit_state: unit::blank_unit_state(),
@@ -146,7 +148,7 @@ impl Log {
                 monster_id: parts[6].parse::<u32>().unwrap(),
                 is_boss: Self::is_true(parts[7]),
                 name: parts[10].to_string(),
-                level: parts[13].parse::<i8>().unwrap(),
+                level: parts[13].parse::<u8>().unwrap(),
                 champion_points: parts[14].parse::<u16>().unwrap(),
                 owner_unit_id: parts[15].parse::<u32>().unwrap(),
                 reaction: unit::match_reaction(parts[16]),
@@ -160,7 +162,7 @@ impl Log {
                 monster_id: 0,
                 is_boss: false,
                 name: parts[10].to_string(),
-                level: parts[13].parse::<i8>().unwrap(),
+                level: parts[13].parse::<u8>().unwrap(),
                 champion_points: parts[14].parse::<u16>().unwrap(),
                 owner_unit_id: parts[15].parse::<u32>().unwrap(),
                 reaction: unit::match_reaction(parts[16]),
@@ -240,14 +242,14 @@ impl Log {
             slot: player::match_gear_slot(split[0]),
             item_id: split[1].parse::<u32>().unwrap(),
             is_cp: Self::is_true(split[2]),
-            level: split[3].parse::<i8>().unwrap(),
+            level: split[3].parse::<u8>().unwrap(),
             trait_id: player::match_gear_trait(split[4]),
             quality: player::match_gear_quality(split[5]),
             set_id: split[6].parse::<u32>().unwrap(),
             enchant: player::GearEnchant {
                 enchant_type: player::match_enchant_type(split[7]),
                 is_enchant_cp: Self::is_true(split[8]),
-                enchant_level: split[9].parse::<i8>().unwrap(),
+                enchant_level: split[9].parse::<u8>().unwrap(),
                 enchant_quality: player::match_gear_quality(split[10]),
             },
         };
@@ -317,7 +319,7 @@ impl Log {
             self.parse_unit_state(parts.clone(), 19)
         };
 
-        if (event::parse_event_result(parts[2]) == event::EventResult::None) {
+        if event::parse_event_result(parts[2]) == event::EventResult::None {
             println!("Unknown event result: {}", parts[2]);
         }
         let event = event::Event {
@@ -366,6 +368,55 @@ fn main() {
 
     let mut analyser = Log::new();
     analyser.read_file(file_path).unwrap();
+    analyser.players.retain(|_, player| player.name != "Offline");
+    analyser.players.retain(|_, player| player.display_name != "");
+
+    let mut time_sum: u32 = 0;
+    for fight in analyser.fights.values() {
+        let time_difference: u32 = (fight.end_time - fight.start_time).try_into().unwrap();
+        time_sum += time_difference;
+    }
+    time_sum /= 1000;
+
+    println!("Over {} seconds:", time_sum);
+    for player in analyser.players.values() {
+        let mut sum = 0;
+        for fight in analyser.fights.values() {
+            for event in &fight.events {
+                if event::does_damage(event.result) && event.source_unit_state.unit_id == player.unit_id {
+                    sum += event.hit_value;
+                }
+            }
+        }
+        if sum > 0 {
+            println!("{} by {} (DPS: {})", sum.to_formatted_string(&Locale::en), player.display_name, (sum / time_sum).to_formatted_string(&Locale::en));
+        }
+    }
+    
+
+    // let mut current_health: HashMap<u32, u32> = HashMap::new();
+    // let mut unique_results: HashSet<event::EventResult> = HashSet::new();
+
+    // for fight in analyser.fights.values() {
+    //     for event in &fight.events {
+    //         let target_unit_id = event.target_unit_state.unit_id;
+    //         let previous_health = current_health.get(&target_unit_id).cloned().unwrap_or(event.target_unit_state.max_health);
+    //         let health_change = previous_health as i32 - event.target_unit_state.health as i32;
+    //         // println!("TUID: {}, PREV: {}, CHNGE: {}, HTVLE: {}", target_unit_id, previous_health, health_change, event.hit_value);
+
+    //         if health_change.abs() as u32 == event.hit_value /*&& unique_results.insert(event.result)*/ {
+    //             if health_change > 0 && !event::does_damage(event.result) {
+    //                 println!("{:?} (Damage)", event.result);
+    //             } else if health_change < 0 && !event::does_heal(event.result) {
+    //                 println!("{:?} (Heal)", event.result);
+    //             } else {
+    //                 // println!("{:?} (None)", event.result);
+    //             }
+    //         }
+
+    //         current_health.insert(target_unit_id, event.target_unit_state.health);
+    //     }
+    // }
 }
 
 fn parse_config(args: &[String]) -> (&str, &str) {

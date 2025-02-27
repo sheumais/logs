@@ -11,7 +11,7 @@ pub struct Player {
     pub name: String,
     pub display_name: String,
     pub character_id: i128,
-    pub level: i8,
+    pub level: u8,
     pub champion_points: u16,
     pub is_grouped_with_local_player: bool,
     pub unit_state: UnitState,
@@ -228,6 +228,8 @@ pub enum GearSlot {
     Costume,
     BackupOff,
     None,
+    // poison?
+    // poison_backup?
 }
 
 pub fn match_gear_slot(string: &str) -> GearSlot {
@@ -302,7 +304,7 @@ pub enum GearTrait {
     Protective,
     Swift,
     Triune,
-    Prosperous,
+    Prosperous, // appeared in a log
     None,
 }
 
@@ -413,7 +415,7 @@ pub fn match_enchant_type(string: &str) -> EnchantType {
 pub struct GearEnchant {
     pub enchant_type: EnchantType,
     pub is_enchant_cp: bool,
-    pub enchant_level: i8,
+    pub enchant_level: u8,
     pub enchant_quality: GearQuality,
 }
 #[derive(Debug, PartialEq)]
@@ -421,7 +423,7 @@ pub struct GearPiece {
     pub slot: GearSlot,
     pub item_id: u32,
     pub is_cp: bool,
-    pub level: i8,
+    pub level: u8,
     pub trait_id: GearTrait,
     pub quality: GearQuality,
     pub set_id: u32,

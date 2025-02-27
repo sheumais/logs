@@ -72,7 +72,7 @@ pub struct Unit {
     pub monster_id: u32,
     pub is_boss: bool,
     pub name: String,
-    pub level: i8,
+    pub level: u8,
     pub champion_points: u16,
     pub owner_unit_id: u32,
     pub reaction: Reaction,
