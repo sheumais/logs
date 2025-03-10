@@ -82,6 +82,7 @@ pub enum EventResult {
     KillingBlow,
     Reincarnating,
     Resurrect,
+    TargetTooClose,
     None,
 }
 
@@ -142,6 +143,7 @@ pub fn parse_event_result(event_result: &str) -> EventResult {
         "KILLING_BLOW" => EventResult::KillingBlow,
         "REINCARNATING" => EventResult::Reincarnating,
         "RESURRECT" => EventResult::Resurrect,
+        "TARGET_TOO_CLOSE" => EventResult::TargetTooClose,
         _ => EventResult::None,
     }
 }

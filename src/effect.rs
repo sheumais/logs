@@ -1,3 +1,5 @@
+use crate::unit::UnitState;
+
 #[derive(Debug, PartialEq)]
 pub struct Effect {
     pub id: u32,
@@ -9,6 +11,32 @@ pub struct Effect {
     pub effect_type: EffectType,
     pub status_effect_type: StatusEffectType,
     pub synergy: Option<u32>,
+}
+
+pub struct EffectEvent {
+    pub change_type: EffectChangeType,
+    pub stack_count: u16,
+    pub cast_track_id: u32,
+    pub ability_id: u32,
+    pub source_unit_state: UnitState,
+    pub target_unit_state: UnitState,
+    pub player_initiated_remove_cast_track_id: bool,
+}
+
+pub enum EffectChangeType {
+    Faded,
+    Gained,
+    Updated,
+    None,
+}
+
+pub fn parse_effect_change_type(string: &str) -> EffectChangeType {
+    match string {
+        "FADED" => EffectChangeType::Faded,
+        "GAINED" => EffectChangeType::Gained,
+        "UPDATED" => EffectChangeType::Updated,
+        _ => EffectChangeType::None
+    }
 }
 
 #[derive(Debug, PartialEq)]
