@@ -13,7 +13,9 @@ pub struct Effect {
     pub synergy: Option<u32>,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct EffectEvent {
+    pub time: u64,
     pub change_type: EffectChangeType,
     pub stack_count: u16,
     pub cast_track_id: u32,
@@ -23,6 +25,7 @@ pub struct EffectEvent {
     pub player_initiated_remove_cast_track_id: bool,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum EffectChangeType {
     Faded,
     Gained,

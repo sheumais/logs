@@ -80,7 +80,12 @@ impl Log {
     }
     
     fn get_current_fight(&mut self) -> Option<&mut crate::fight::Fight> {
-        self.fights.get_mut(&(self.fights.len() as u16 - 1))
+        if let Some(fight) = self.fights.get_mut(&(self.fights.len() as u16 - 1)) {
+            if fight.end_time == 0 {
+                return Some(fight);
+            }
+        }
+        None
     }
 
     fn is_true(value: &str) -> bool {
@@ -123,12 +128,13 @@ impl Log {
                 self.players.insert(unit_id, player);
             }
         } else if parts[3] == "MONSTER" {
+            let name = parts[10].trim_matches('"').to_string();
             let monster = crate::unit::Unit {
                 unit_id: unit_id,
                 unit_type: crate::unit::UnitType::Monster,
                 monster_id: parts[6].parse::<u32>().unwrap(),
                 is_boss: Self::is_true(parts[7]),
-                name: parts[10].to_string(),
+                name: name,
                 level: parts[13].parse::<u8>().unwrap(),
                 champion_points: parts[14].parse::<u16>().unwrap(),
                 owner_unit_id: parts[15].parse::<u32>().unwrap(),
@@ -155,19 +161,46 @@ impl Log {
 
     fn handle_combat_change(&mut self, parts: Vec<&str>) {
         if parts[1] == "BEGIN_COMBAT" {
-            self.fights.insert(self.fights.len() as u16, crate::fight::Fight {
+            let mut new_fight = crate::fight::Fight {
                 id: self.fights.len() as u16,
+                name: String::new(),
                 players: Vec::new(),
                 monsters: Vec::new(),
-                bosses: Vec::new(),
                 start_time: parts[0].parse::<u64>().unwrap(),
                 end_time: 0,
                 events: Vec::new(),
                 casts: Vec::new(),
-            });
+                effect_events: Vec::new(),
+            };
+            for player in self.players.values() {
+                new_fight.players.push(player.clone());
+            }
+            self.fights.insert(self.fights.len() as u16, new_fight);
         } else if parts[1] == "END_COMBAT" {
+            let fight_name = {
+                let mut name = "Unknown";
+                if let Some(fight) = self.get_current_fight() {
+                    let mut unit_ids = Vec::new();
+                    for event in &fight.events {
+                        if crate::event::does_damage(event.result) {
+                            unit_ids.push(event.target_unit_state.unit_id);
+                        }
+                    }
+                    for unit_id in unit_ids {
+                        if let Some(unit) = self.units.get(&unit_id) {
+                            if unit.unit_type == crate::unit::UnitType::Monster {
+                                name = &unit.name;
+                                break;
+                            }
+                        }
+                    }
+                }
+                name.to_string()
+            };
+        
             if let Some(fight) = self.get_current_fight() {
                 fight.end_time = parts[0].parse::<u64>().unwrap();
+                fight.name = fight_name;
             }
         }
     }
@@ -241,9 +274,10 @@ impl Log {
 
     fn handle_ability_info(&mut self, parts: Vec<&str>) {
         let effect_id: u32 = parts[2].parse::<u32>().unwrap(); // abilityId usually unique, but can be reused for scribing abilities
+        let name = parts[3].trim_matches('"').to_string();
         let effect = crate::effect::Effect {
             id: effect_id,
-            name: parts[3].to_string(),
+            name: name,
             icon: parts[4].to_string(),
             interruptible: Self::is_true(parts[5]),
             blockable: Self::is_true(parts[6]),
@@ -360,6 +394,7 @@ impl Log {
         };
 
         let effect_event = crate::effect::EffectEvent {
+            time: parts[0].parse::<u64>().unwrap(),
             change_type: crate::effect::parse_effect_change_type(parts[2]),
             stack_count: parts[3].parse::<u16>().unwrap(),
             cast_track_id: parts[4].parse::<u32>().unwrap(),
@@ -368,6 +403,20 @@ impl Log {
             target_unit_state: target_unit_state,
             player_initiated_remove_cast_track_id: false, // what is an example where this is true?
         };
+
+        let player_id = target_unit_state.unit_id;
+        let effect_id = effect_event.ability_id;
+
+        if let Some(player) = self.players.get_mut(&player_id) {
+            if !player.effects.contains(&effect_id) {
+                player.effects.push(effect_id);
+            }
+        }
+
+        if let Some(fight) = self.get_current_fight() {
+            fight.effect_events.push(effect_event);
+        }
+
         // if parts.len() > 27 {
         //     println!("{:?}", parts);
         // }

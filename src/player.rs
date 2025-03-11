@@ -1,7 +1,7 @@
 use crate::unit::UnitState;
 use std::fmt;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Player {
     pub unit_id: u32,
     pub is_local_player: bool,
@@ -21,7 +21,7 @@ pub struct Player {
     pub backup_abilities: Vec<u32>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Loadout {
     pub head: GearPiece,
     pub shoulders: GearPiece,
@@ -153,7 +153,7 @@ pub fn empty_loadout() -> Loadout {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ClassId {
     Dragonknight,
     Sorcerer,
@@ -178,7 +178,7 @@ pub fn match_class(string: &str) -> ClassId {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum RaceId {
     Argonian,
     Breton,
@@ -254,7 +254,7 @@ pub fn match_gear_slot(string: &str) -> GearSlot {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum GearQuality {
     Trash,
     Normal,
@@ -279,7 +279,7 @@ pub fn match_gear_quality(string: &str) -> GearQuality {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum GearTrait {
     Powered,
     Charged,
@@ -345,7 +345,7 @@ pub fn match_gear_trait(string: &str) -> GearTrait {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum EnchantType {
     AbsorbHealth,
     AbsorbMagicka,
@@ -411,14 +411,14 @@ pub fn match_enchant_type(string: &str) -> EnchantType {
         _ => EnchantType::None,
     }
 }
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct GearEnchant {
     pub enchant_type: EnchantType,
     pub is_enchant_cp: bool,
     pub enchant_level: u8,
     pub enchant_quality: GearQuality,
 }
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct GearPiece {
     pub slot: GearSlot,
     pub item_id: u32,
