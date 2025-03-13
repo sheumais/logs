@@ -21,57 +21,25 @@ impl Log {
         new_self
     }
 
-    pub fn parse_line(&mut self, line: &str) {
-        let mut in_brackets = false;
-        let mut current_segment_start = 0;
-        let mut parts = Vec::new();
-    
-        for (i, char) in line.char_indices() {
-            match char {
-                '[' => {
-                    in_brackets = true;
-                    current_segment_start = i + 1;
-                }
-                ']' => {
-                    in_brackets = false;
-                    parts.push(&line[current_segment_start..i]);
-                    current_segment_start = i + 1;
-                }
-                ',' if !in_brackets => {
-                    parts.push(&line[current_segment_start..i]);
-                    current_segment_start = i + 1; 
-                }
-                _ => {}
-            }
-        }
-    
-        if current_segment_start < line.len() {
-            parts.push(&line[current_segment_start..]);
-        }
-        parts.retain(|part| !part.is_empty());
-    
-        if parts.len() >= 2 {
-            match parts[1] {
-                "BEGIN_LOG" => self.handle_begin_log(parts),
-                "BEGIN_COMBAT" | "END_COMBAT" => self.handle_combat_change(parts),
-                "UNIT_ADDED" => self.handle_unit_added(parts),
-                "PLAYER_INFO" => self.handle_player_info(parts),
-                "ABILITY_INFO" => self.handle_ability_info(parts),
-                "EFFECT_INFO" => self.handle_effect_info(parts),
-                "COMBAT_EVENT" => self.handle_combat_event(parts),
-                "BEGIN_CAST" => self.handle_begin_cast(parts),
-                // "END_CAST"
-                // "HEALTH_REGEN"
-                // "UNIT_CHANGED"
-                // "UNIT_REMOVED"
-                "EFFECT_CHANGED" => self.handle_effect_changed(parts),
-                // "MAP_INFO"
-                // "ZONE_INFO"
-                // "TRIAL_INIT"
-                // "BEGIN_TRIAL"
-                // "END_TRIAL"
-                _ => {},
-            }
+    pub fn parse_line(&mut self, parts: Vec<&str>) {    
+        match parts[1] {
+            "BEGIN_LOG" => self.handle_begin_log(parts),
+            "BEGIN_COMBAT" | "END_COMBAT" => self.handle_combat_change(parts),
+            "UNIT_ADDED" => self.handle_unit_added(parts),
+            "PLAYER_INFO" => self.handle_player_info(parts),
+            "ABILITY_INFO" => self.handle_ability_info(parts),
+            "EFFECT_INFO" => self.handle_effect_info(parts),
+            "COMBAT_EVENT" => self.handle_combat_event(parts),
+            "BEGIN_CAST" => self.handle_begin_cast(parts),
+            // "END_CAST"
+            // "HEALTH_REGEN"
+            // "UNIT_CHANGED"
+            // "UNIT_REMOVED"
+            "EFFECT_CHANGED" => self.handle_effect_changed(parts),
+            // "MAP_INFO"
+            // "ZONE_INFO"
+            // "TRIAL_INIT"
+            _ => {},
         }
     }
 
@@ -259,9 +227,9 @@ impl Log {
             item_id: split[1].parse::<u32>().unwrap(),
             is_cp: Self::is_true(split[2]),
             level: split[3].parse::<u8>().unwrap(),
-            trait_id: crate::player::match_gear_trait(split[4]),
+            gear_trait: crate::player::match_gear_trait(split[4]),
             quality: crate::player::match_gear_quality(split[5]),
-            set_id: split[6].parse::<u32>().unwrap(),
+            set_id: split[6].parse::<u16>().unwrap(),
             enchant: crate::player::GearEnchant {
                 enchant_type: crate::player::match_enchant_type(split[7]),
                 is_enchant_cp: Self::is_true(split[8]),
@@ -336,12 +304,12 @@ impl Log {
             self.parse_unit_state(parts.clone(), 19)
         };
 
-        if crate::event::parse_event_result(parts[2]) == crate::event::EventResult::None {
+        if crate::event::parse_event_result(parts[2]).is_none() {
             println!("Unknown event result: {}", parts[2]);
         }
         let event = crate::event::Event {
             time: parts[0].parse::<u64>().unwrap(),
-            result: crate::event::parse_event_result(parts[2]),
+            result: crate::event::parse_event_result(parts[2]).unwrap(),
             damage_type: crate::event::parse_damage_type(parts[3]),
             power_type: parts[4].parse::<u32>().unwrap(),
             hit_value: parts[5].parse::<u32>().unwrap(),
@@ -416,10 +384,5 @@ impl Log {
         if let Some(fight) = self.get_current_fight() {
             fight.effect_events.push(effect_event);
         }
-
-        // if parts.len() > 27 {
-        //     println!("{:?}", parts);
-        // }
-        // println!("{}", parts.len());
     }
 }

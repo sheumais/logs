@@ -71,29 +71,6 @@ impl fmt::Display for Player {
     }
 }
 
-impl fmt::Display for Loadout {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Loadout {{ head: {}, shoulders: {}, chest: {}, hands: {}, waist: {}, legs: {}, feet: {}, neck: {}, ring1: {}, ring2: {}, main_hand: {}, main_hand_backup: {}, off_hand: {}, off_hand_backup: {} }}",
-            self.head,
-            self.shoulders,
-            self.chest,
-            self.hands,
-            self.waist,
-            self.legs,
-            self.feet,
-            self.neck,
-            self.ring1,
-            self.ring2,
-            self.main_hand,
-            self.main_hand_backup,
-            self.off_hand,
-            self.off_hand_backup
-        )
-    }
-}
-
 impl Loadout {
     pub fn insert(&mut self, slot: GearSlot, gear_piece: GearPiece) {
         match slot {
@@ -122,7 +99,7 @@ pub fn empty_gear_piece() -> GearPiece {
         item_id: 0,
         is_cp: false,
         level: 0,
-        trait_id: GearTrait::None,
+        gear_trait: GearTrait::None,
         quality: GearQuality::None,
         set_id: 0,
         enchant: GearEnchant {
@@ -153,7 +130,7 @@ pub fn empty_loadout() -> Loadout {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ClassId {
     Dragonknight,
     Sorcerer,
@@ -162,7 +139,6 @@ pub enum ClassId {
     Warden,
     Necromancer,
     Arcanist,
-    None,
 }
 
 pub fn match_class(string: &str) -> ClassId {
@@ -174,7 +150,7 @@ pub fn match_class(string: &str) -> ClassId {
         "5" => ClassId::Necromancer,
         "6" => ClassId::Templar,
         "117" => ClassId::Arcanist,
-        _ => ClassId::None,
+        _ => ClassId::Nightblade,
     }
 }
 
@@ -254,7 +230,7 @@ pub fn match_gear_slot(string: &str) -> GearSlot {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum GearQuality {
     Trash,
     Normal,
@@ -424,38 +400,16 @@ pub struct GearPiece {
     pub item_id: u32,
     pub is_cp: bool,
     pub level: u8,
-    pub trait_id: GearTrait,
+    pub gear_trait: GearTrait,
     pub quality: GearQuality,
-    pub set_id: u32,
+    pub set_id: u16,
     pub enchant: GearEnchant,
 }
 
-impl fmt::Display for GearPiece {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{{ slot: {:?}, item_id: {}, is_cp: {}, level: {}, trait_id: {:?}, quality: {:?}, set_id: {}, enchant: {:?} }}",
-            self.slot,
-            self.item_id,
-            self.is_cp,
-            self.level,
-            self.trait_id,
-            self.quality,
-            self.set_id,
-            self.enchant
-        )
-    }
-}
-
-impl fmt::Display for GearEnchant {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{{ enchant_type: {:?}, is_enchant_cp: {}, enchant_level: {}, enchant_quality: {:?} }}",
-            self.enchant_type,
-            self.is_enchant_cp,
-            self.enchant_level,
-            self.enchant_quality
-        )
+pub fn veteran_level_to_cp(level: u8, is_cp: bool) -> u8 {
+    if is_cp {
+        level * 10
+    } else {
+        level
     }
 }
