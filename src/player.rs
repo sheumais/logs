@@ -35,8 +35,10 @@ pub struct Loadout {
     pub ring2: GearPiece,
     pub main_hand: GearPiece,
     pub main_hand_backup: GearPiece,
+    pub poison: GearPiece,
     pub off_hand: GearPiece,
     pub off_hand_backup: GearPiece,
+    pub backup_poison: GearPiece,
 }
 
 impl Player {
@@ -88,6 +90,8 @@ impl Loadout {
             GearSlot::MainHandBackup => self.main_hand_backup = gear_piece,
             GearSlot::OffHand => self.off_hand = gear_piece,
             GearSlot::OffHandBackup => self.off_hand_backup = gear_piece,
+            GearSlot::Poison => self.poison = gear_piece,
+            GearSlot::BackupPoison => self.backup_poison = gear_piece,
             _ => {}
         }
     }
@@ -104,7 +108,7 @@ pub fn empty_gear_piece() -> GearPiece {
         set_id: 0,
         enchant: GearEnchant {
             enchant_type: EnchantType::None,
-            is_enchant_cp: false,
+            is_cp: false,
             enchant_level: 0,
             enchant_quality: GearQuality::None,
         },
@@ -125,8 +129,10 @@ pub fn empty_loadout() -> Loadout {
         ring2: empty_gear_piece(),
         main_hand: empty_gear_piece(),
         main_hand_backup: empty_gear_piece(),
+        poison: empty_gear_piece(),
         off_hand: empty_gear_piece(),
         off_hand_backup: empty_gear_piece(),
+        backup_poison: empty_gear_piece(),
     }
 }
 
@@ -199,13 +205,12 @@ pub enum GearSlot {
     Ring2,
     MainHand,
     MainHandBackup,
+    Poison,
     OffHand,
     OffHandBackup,
+    BackupPoison,
     Costume,
-    BackupOff,
     None,
-    // poison?
-    // poison_backup?
 }
 
 pub fn match_gear_slot(string: &str) -> GearSlot {
@@ -221,11 +226,12 @@ pub fn match_gear_slot(string: &str) -> GearSlot {
         "RING1" => GearSlot::Ring1,
         "RING2" => GearSlot::Ring2,
         "MAIN_HAND" => GearSlot::MainHand,
-        "OFF_HAND" => GearSlot::MainHandBackup,
-        "BACKUP" => GearSlot::OffHand,
-        "BACKUP_MAIN" => GearSlot::OffHandBackup,
+        "OFF_HAND" => GearSlot::OffHand,
+        "BACKUP_MAIN" => GearSlot::MainHandBackup,
+        "BACKUP_OFF" => GearSlot::OffHandBackup,
         "COSTUME" => GearSlot::Costume,
-        "BACKUP_OFF" => GearSlot::BackupOff,
+        "POISON" => GearSlot::Poison,
+        "BACKUP_POISON" => GearSlot::BackupPoison,
         _ => GearSlot::None,
     }
 }
@@ -280,7 +286,6 @@ pub enum GearTrait {
     Protective,
     Swift,
     Triune,
-    Prosperous, // appeared in a log
     None,
 }
 
@@ -300,12 +305,12 @@ pub fn match_gear_trait(string: &str) -> GearTrait {
         "ARMOR_IMPENETRABLE" => GearTrait::Impenetrable,
         "ARMOR_REINFORCED" => GearTrait::Reinforced,
         "ARMOR_WELL_FITTED" => GearTrait::WellFitted,
-        "ARMOR_INVIGORATING" => GearTrait::Invigorating,
+        // "ARMOR_INVIGORATING" => GearTrait::Invigorating,
         "ARMOR_DIVINES" => GearTrait::Divines,
         "ARMOR_NIRNHONED" => GearTrait::Nirnhoned,
         "ARMOR_INFUSED" => GearTrait::Infused,
         "ARMOR_TRAINING" => GearTrait::Training,
-        "ARMOR_PROSPEROUS" => GearTrait::Prosperous,
+        "ARMOR_PROSPEROUS" => GearTrait::Invigorating,
 
         "WEAPON_INFUSED" => GearTrait::Infused,
         "WEAPON_NIRNHONED" => GearTrait::Nirnhoned,
@@ -330,10 +335,12 @@ pub enum EnchantType {
     Beserker,
     ChargedWeapon,
     DamageShield,
+    DiseaseResistance,
     FieryWeapon,
     FrozenWeapon,
     Health,
     HealthRegen,
+    IncreaseBashDamage,
     IncreasePhysicalDamage,
     IncreaseSpellDamage,
     Magicka,
@@ -364,6 +371,8 @@ pub fn match_enchant_type(string: &str) -> EnchantType {
         "REDUCE_FEAT_COST" => EnchantType::ReduceFeatCost,
         "REDUCE_POTION_COOLDOWN" => EnchantType::ReducePotionCooldown,
         "REDUCE_BLOCK_AND_BASH" => EnchantType::ReduceBlockAndBash,
+        "INCREASE_BASH_DAMAGE" => EnchantType::IncreaseBashDamage,
+        "DISEASE_RESISTANT" => EnchantType::DiseaseResistance,
         
         "ABSORB_STAMINA" => EnchantType::AbsorbStamina,
         "ABSORB_MAGICKA" => EnchantType::AbsorbMagicka,
@@ -390,7 +399,7 @@ pub fn match_enchant_type(string: &str) -> EnchantType {
 #[derive(Debug, PartialEq, Clone)]
 pub struct GearEnchant {
     pub enchant_type: EnchantType,
-    pub is_enchant_cp: bool,
+    pub is_cp: bool,
     pub enchant_level: u8,
     pub enchant_quality: GearQuality,
 }

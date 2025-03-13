@@ -266,6 +266,7 @@ pub fn does_damage(event_result: EventResult) -> bool {
     }
 }
 
+#[allow(dead_code)]
 pub fn does_heal(event_result: EventResult) -> bool {
     match event_result {
         EventResult::Heal => true,

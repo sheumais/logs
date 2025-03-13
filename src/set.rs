@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref SETS: HashMap<u16, &'static str> = parse_set_data_into_hashmap();
+    static ref SETS: HashMap<u16, &'static str> = parse_set_data_into_hashmap(); 
+    // Set data from https://github.com/Baertram/LibSets/blob/LibSets-reworked/LibSets/Data/
 }
 
 pub fn parse_set_data_into_hashmap() -> HashMap<u16, &'static str> {

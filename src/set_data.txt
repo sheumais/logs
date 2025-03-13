@@ -333,10 +333,10 @@
 389,Arms of Relequen
 390,Mantle of Siroria
 391,Vestment of Olorime
-392,Perfect Aegis of Galenwe
-393,Perfect Arms of Relequen
-394,Perfect Mantle of Siroria
-395,Perfect Vestment of Olorime
+392,Perfected Aegis of Galenwe
+393,Perfected Arms of Relequen
+394,Perfected Mantle of Siroria
+395,Perfected Vestment of Olorime
 397,Balorgh
 398,Vykosa
 399,Hanu's Compassion
@@ -363,12 +363,12 @@
 420,Soldier of Anguish
 421,Steadfast Hero
 422,Battalion Defender
-423,Perfect Gallant Charge
-424,Perfect Radial Uppercut
-425,Perfect Spectral Cloak
-426,Perfect Virulent Shot
-427,Perfect Wild Impulse
-428,Perfect Mender's Ward
+423,Perfected Gallant Charge
+424,Perfected Radial Uppercut
+425,Perfected Spectral Cloak
+426,Perfected Virulent Shot
+427,Perfected Wild Impulse
+428,Perfected Mender's Ward
 429,Mighty Glacier
 430,Tzogvin's Warband
 431,Icy Conjuror

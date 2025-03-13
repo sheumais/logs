@@ -13,44 +13,75 @@ impl Colour {
         Colour { r, g, b }
     }
 
+    fn from_tuple(color: (u8, u8, u8)) -> Self {
+        Colour::new(color.0, color.1, color.2)
+    }
+
+    const TRASH: (u8, u8, u8) = (195, 195, 195);
+    const NORMAL: (u8, u8, u8) = (255, 255, 255);
+    const MAGIC: (u8, u8, u8) = (45, 197, 14);
+    const ARCANE: (u8, u8, u8) = (58, 146, 255);
+    const ARTIFACT: (u8, u8, u8) = (160, 46, 247);
+    const LEGENDARY: (u8, u8, u8) = (238, 202, 42);
+    const MYTHIC: (u8, u8, u8) = (255, 130, 0);
+
+    const BLEED: (u8, u8, u8) = (235, 69, 97);
+    const COLD: (u8, u8, u8) = (143, 242, 255);
+    const DISEASE: (u8, u8, u8) = (37, 153, 190);
+    const FIRE: (u8, u8, u8) = (229, 115, 16);
+    const GENERIC: (u8, u8, u8) = (191, 191, 191);
+    const MAGIC_DAMAGE: (u8, u8, u8) = (74, 128, 255);
+    const OBLIVION: (u8, u8, u8) = (147, 43, 181);
+    const PHYSICAL: (u8, u8, u8) = (229, 204, 128);
+    const POISON: (u8, u8, u8) = (209, 250, 153);
+    const SHOCK: (u8, u8, u8) = (184, 168, 240);
+
+    const ARCANIST: (u8, u8, u8) = (209, 250, 153);
+    const DRAGONKNIGHT: (u8, u8, u8) = (229, 115, 16);
+    const NECROMANCER: (u8, u8, u8) = (147, 43, 181);
+    const NIGHTBLADE: (u8, u8, u8) = (232, 155, 155);
+    const SORCERER: (u8, u8, u8) = (184, 168, 240);
+    const TEMPLAR: (u8, u8, u8) = (231, 222, 96);
+    const WARDEN: (u8, u8, u8) = (14, 120, 21);
+
     pub fn from_gear_quality(gear_quality: GearQuality) -> Self {
         match gear_quality {
-            GearQuality::Trash => Colour::new(195, 195, 195),
-            GearQuality::Normal => Colour::new(255, 255, 255),
-            GearQuality::Magic => Colour::new(45, 197, 14),
-            GearQuality::Arcane => Colour::new(58, 146, 255),
-            GearQuality::Artifact => Colour::new(160, 46, 247),
-            GearQuality::Legendary => Colour::new(238, 202, 42),
-            GearQuality::Mythic => Colour::new(255, 130, 0),
-            _ => Colour::new(255,255,255)
+            GearQuality::Trash => Colour::from_tuple(Self::TRASH),
+            GearQuality::Normal => Colour::from_tuple(Self::NORMAL),
+            GearQuality::Magic => Colour::from_tuple(Self::MAGIC),
+            GearQuality::Arcane => Colour::from_tuple(Self::ARCANE),
+            GearQuality::Artifact => Colour::from_tuple(Self::ARTIFACT),
+            GearQuality::Legendary => Colour::from_tuple(Self::LEGENDARY),
+            GearQuality::Mythic => Colour::from_tuple(Self::MYTHIC),
+            _ => Colour::from_tuple(Self::NORMAL),
         }
     }
 
     pub fn from_damage_type(damage_type: DamageType) -> Self {
         match damage_type {
-            DamageType::Bleed => Colour::new(235, 69, 97),
-            DamageType::Cold => Colour::new(143, 242, 255),
-            DamageType::Disease => Colour::new(37, 153, 190),
-            DamageType::Fire => Colour::new(229, 115, 16),
-            DamageType::Generic => Colour::new(191, 191, 191),
-            DamageType::Magic => Colour::new(74, 128, 255),
-            DamageType::Oblivion => Colour::new(147, 43, 181),
-            DamageType::Physical => Colour::new(229, 204, 128),
-            DamageType::Poison => Colour::new(209, 250, 153),
-            DamageType::Shock => Colour::new(184, 168, 240),
-            _ => Colour::new(191, 191, 191)
+            DamageType::Bleed => Colour::from_tuple(Self::BLEED),
+            DamageType::Cold => Colour::from_tuple(Self::COLD),
+            DamageType::Disease => Colour::from_tuple(Self::DISEASE),
+            DamageType::Fire => Colour::from_tuple(Self::FIRE),
+            DamageType::Generic => Colour::from_tuple(Self::GENERIC),
+            DamageType::Magic => Colour::from_tuple(Self::MAGIC_DAMAGE),
+            DamageType::Oblivion => Colour::from_tuple(Self::OBLIVION),
+            DamageType::Physical => Colour::from_tuple(Self::PHYSICAL),
+            DamageType::Poison => Colour::from_tuple(Self::POISON),
+            DamageType::Shock => Colour::from_tuple(Self::SHOCK),
+            _ => Colour::from_tuple(Self::GENERIC),
         }
     }
 
     pub fn from_class_id(class_id: ClassId) -> Self {
         match class_id {
-            ClassId::Arcanist => Colour::new(209, 250, 153),
-            ClassId::Dragonknight => Colour::new(229, 115, 16),
-            ClassId::Necromancer => Colour::new(147, 43, 181),
-            ClassId::Nightblade => Colour::new(232, 155, 155),
-            ClassId::Sorcerer => Colour::new(184, 168, 240),
-            ClassId::Templar => Colour::new(231, 222, 96),
-            ClassId::Warden => Colour::new(14, 120, 21),
+            ClassId::Arcanist => Colour::from_tuple(Self::ARCANIST),
+            ClassId::Dragonknight => Colour::from_tuple(Self::DRAGONKNIGHT),
+            ClassId::Necromancer => Colour::from_tuple(Self::NECROMANCER),
+            ClassId::Nightblade => Colour::from_tuple(Self::NIGHTBLADE),
+            ClassId::Sorcerer => Colour::from_tuple(Self::SORCERER),
+            ClassId::Templar => Colour::from_tuple(Self::TEMPLAR),
+            ClassId::Warden => Colour::from_tuple(Self::WARDEN),
         }
     }
 
@@ -132,7 +163,7 @@ pub fn print_colour_test() {
         set_id: 650,
         enchant: GearEnchant {
             enchant_type: EnchantType::IncreasePhysicalDamage,
-            is_enchant_cp: true,
+            is_cp: true,
             enchant_level: 50,
             enchant_quality: GearQuality::Legendary,
         },
@@ -143,24 +174,33 @@ pub fn print_colour_test() {
 
 impl fmt::Display for Loadout {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "head: {}\nshoulders: {}\nchest: {}\nhands: {}\nwaist: {}\nlegs: {}\nfeet: {}\nneck: {}\nring1: {}\nring2: {}\nmain_hand: {}\nmain_hand_backup: {}\noff_hand: {}\noff_hand_backup: {}\n",
-            self.head,
-            self.shoulders,
-            self.chest,
-            self.hands,
-            self.waist,
-            self.legs,
-            self.feet,
-            self.neck,
-            self.ring1,
-            self.ring2,
-            self.main_hand,
-            self.main_hand_backup,
-            self.off_hand,
-            self.off_hand_backup
-        )
+        let gear_pieces = vec![
+            &self.head,
+            &self.shoulders,
+            &self.chest,
+            &self.hands,
+            &self.waist,
+            &self.legs,
+            &self.feet,
+            &self.neck,
+            &self.ring1,
+            &self.ring2,
+            &self.main_hand,
+            &self.off_hand,
+            &self.poison,
+            &self.main_hand_backup,
+            &self.off_hand_backup,
+            &self.backup_poison,
+        ];
+
+        let gear_list: Vec<String> = gear_pieces
+            .iter()
+            .filter(|&&gear| gear != &player::empty_gear_piece())
+            .map(|&gear| gear.to_string())
+            .collect();
+
+        let result = gear_list.join("\n");
+        write!(f, "{}", result)
     }
 }
 
@@ -168,23 +208,28 @@ impl fmt::Display for GearPiece {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut colour = Colour::from_gear_quality(self.quality);
         let level = player::veteran_level_to_cp(self.level, self.is_cp);
-        let cp_string= if self.is_cp {
-            "CP"
-        } else {
-            "Level"
-        };
-        if set::is_mythic_set(self.set_id) {colour = Colour::new(255, 130, 0)}
-        
-        let display_text = format!(
-            "{} {:?} {:?} {:?} {} {}",
-            cp_string,
-            level,
-            self.gear_trait,
-            self.slot,
-            set::get_set_name(self.set_id).unwrap_or_else(|| ""),
-            self.enchant, 
-        );
-        
+        let cp_string = if self.is_cp {"CP"} else {"Level "};
+        if set::is_mythic_set(self.set_id) {colour = Colour::from_tuple(Colour::MYTHIC);}
+        let set_name = set::get_set_name(self.set_id);
+
+        let mut display_text = format!("");
+
+        if level != 160 {
+            display_text.push_str(&format!("{}{:?} ", cp_string, level));
+        }
+
+        if let Some(name) = set_name {
+            display_text.push_str(&format!("{} ", name));
+        }
+
+        if self.gear_trait != GearTrait::None {
+            display_text.push_str(&format!("{:?} ", self.gear_trait));
+        }
+
+        if self.enchant.enchant_type != EnchantType::Invalid {
+            display_text.push_str(&format!("{} ", self.enchant));
+        }
+
         let colored_text = foreground_rgb(&display_text, colour);
         write!(f, "{}", colored_text)
     }
@@ -193,20 +238,18 @@ impl fmt::Display for GearPiece {
 impl fmt::Display for GearEnchant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let color = Colour::from_gear_quality(self.enchant_quality);
-        let level = player::veteran_level_to_cp(self.enchant_level, self.is_enchant_cp);
-        let cp_string= if self.is_enchant_cp {
-            "CP"
-        } else {
-            "Level"
-        };
+        let level = player::veteran_level_to_cp(self.enchant_level, self.is_cp);
+        let cp_string = if self.is_cp {"CP"} else {"Level "};
 
-        let display_text = format!(
-            "{} {:?} {:?}",
-            cp_string,
-            level,
+        let mut display_text = format!(
+            "{:?} ",
             self.enchant_type,
         );
-        
+
+        if level != 160 {
+            display_text.push_str(&format!("{}{:?} ", cp_string, level));
+        }
+
         let colored_text = foreground_rgb(&display_text, color);
         write!(f, "{}", colored_text)
     }

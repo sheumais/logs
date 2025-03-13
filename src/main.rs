@@ -11,10 +11,7 @@ use std::env;
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
 use effect::EffectChangeType;
-use std::collections::HashMap;
 use crate::ui::*;
-use crate::player::*;
-use crate::event::*;
 
 // use num_format::{Locale, ToFormattedString}; // todo make ui.rs for handling all console UI stuff with colours
 use crate::log::Log;
@@ -93,7 +90,7 @@ fn main() {
         let logs = read_file(file_path).unwrap();
         let query_id: u32 = query.parse::<u32>().unwrap_or(0);
         let mut effect_name = "Unknown".to_string();
-        let log_analysis = &logs[2];
+        let log_analysis = &logs[0];
 
         if query_id != 0 {
             for (_index, effect) in &log_analysis.effects {
@@ -141,13 +138,21 @@ fn main() {
                 println!("{}: Buff: {}, Time: {}s ({}%)", fight.name, effect_name, time_with_buff / 1000, percentage);
             }
         } else {
-            for (_index, fight) in &log_analysis.fights {
-                let mut time_with_buff = 0;
-                let mut gained_buff_timestamp = 0;
-                let mut has_buff: bool = false;
-                for player in &fight.players {
+            for log in logs {
+                for (_index, fight) in log.fights {
+                    for player in &fight.players {
+                        if player.gear != crate::player::empty_loadout() {
+                            println!("-------------------");
+                            let name = foreground_rgb(&player.display_name, Colour::from_class_id(player.class_id));
+                            println!("{}\n{}", name, player.gear);
+                        }
+                    }
+                }
+                for (_, player) in log.players {
                     if player.gear != crate::player::empty_loadout() {
-                        println!("{}", player.gear);
+                        println!("-------------------");
+                        let name = foreground_rgb(&player.display_name, Colour::from_class_id(player.class_id));
+                        println!("{}\n{}", name, player.gear);
                     }
                 }
             }

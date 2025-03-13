@@ -173,8 +173,7 @@ impl Log {
         }
     }
 
-    // unitId, [longTermEffectAbilityId,...], [longTermEffectStackCounts,...], [<equipmentInfo>,...], [primaryAbilityId,...], [backupAbilityId,...]
-    // ["934981", "PLAYER_INFO", "47", "142210,142079,78219,89959,89958,89957,150054,172646,193447,147226,13975,184887,184873,45557,45549,63601,58955,45562,142092,184858,63880,142218,45565,185239,45601,184923,45603,45607,29062,40393,45596,39248,184847,55676,184932,185058,63802,55386,36588,185186,185243,183049,45500,15594,45267,45270,45272,185195,45514,186233,99875,45513,45509,186230,186231,186232", "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1", "HEAD,94779,T,16,ARMOR_DIVINES,LEGENDARY,270,STAMINA,T,16,LEGENDARY", "NECK,194512,T,16,JEWELRY_BLOODTHIRSTY,LEGENDARY,694,INCREASE_PHYSICAL_DAMAGE,T,16,LEGENDARY", "CHEST,187412,T,16,ARMOR_DIVINES,LEGENDARY,652,STAMINA,T,16,LEGENDARY", "SHOULDERS,147377,T,16,ARMOR_DIVINES,LEGENDARY,127,STAMINA,T,16,LEGENDARY", "MAIN_HAND,87874,T,16,WEAPON_NIRNHONED,LEGENDARY,127,FIERY_WEAPON,T,16,LEGENDARY", "OFF_HAND,87874,T,16,WEAPON_CHARGED,LEGENDARY,127,POISONED_WEAPON,T,16,LEGENDARY", "WAIST,187472,T,16,ARMOR_DIVINES,LEGENDARY,652,STAMINA,T,16,LEGENDARY", "LEGS,187452,T,16,ARMOR_DIVINES,LEGENDARY,652,STAMINA,T,16,LEGENDARY", "FEET,187423,T,16,ARMOR_DIVINES,LEGENDARY,652,STAMINA,T,16,LEGENDARY", "RING1,147512,T,16,JEWELRY_BLOODTHIRSTY,LEGENDARY,127,INCREASE_PHYSICAL_DAMAGE,T,16,LEGENDARY", "RING2,147512,T,16,JEWELRY_BLOODTHIRSTY,LEGENDARY,127,INCREASE_PHYSICAL_DAMAGE,T,16,LEGENDARY", "HAND,187432,T,16,ARMOR_DIVINES,LEGENDARY,652,STAMINA,T,16,LEGENDARY", "BACKUP_MAIN,166198,T,16,WEAPON_INFUSED,LEGENDARY,526,BERSERKER,T,16,LEGENDARY", "40382,40195,38901,183006,186366,40161", "39011,186229,183241,182988,185842,189867"]
+    // 3597,PLAYER_INFO,1,[142079,78219,72824,150054,147459,46751,39248,35770,46041,33090,70390,117848,45301,63802,13984,34741,61930,135397,203342,215493,122586,120017,61685,120023,61662,120028,61691,120029,61666,120008,61744,120015,109966,177885,147417,93109,120020,88490,120021,120025,120013,61747,177886,120024,120026],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[[HEAD,185032,T,8,ARMOR_PROSPEROUS,ARCANE,640,INVALID,F,0,NORMAL],[NECK,171437,T,16,JEWELRY_ARCANE,LEGENDARY,576,INCREASE_BASH_DAMAGE,F,35,ARCANE],[CHEST,45095,T,16,ARMOR_REINFORCED,LEGENDARY,0,PRISMATIC_DEFENSE,F,5,LEGENDARY],[SHOULDERS,56058,F,12,ARMOR_NIRNHONED,MAGIC,0,INVALID,F,0,NORMAL],[OFF_HAND,184873,T,6,ARMOR_DIVINES,ARCANE,640,INVALID,F,0,NORMAL],[WAIST,184888,F,1,ARMOR_DIVINES,NORMAL,640,INVALID,F,0,NORMAL],[LEGS,45169,T,1,ARMOR_TRAINING,ARCANE,0,MAGICKA,F,35,MAGIC],[FEET,45061,F,50,ARMOR_IMPENETRABLE,ARTIFACT,0,MAGICKA,F,35,ARCANE],[COSTUME,55262,F,1,NONE,ARCANE,0,INVALID,F,0,NORMAL],[RING1,139657,F,1,JEWELRY_BLOODTHIRSTY,ARTIFACT,0,INVALID,F,0,NORMAL],[RING2,44904,F,0,NONE,LEGENDARY,0,INVALID,F,0,NORMAL],[BACKUP_POISON,79690,F,1,NONE,LEGENDARY,0,INVALID,F,0,NORMAL],[HAND,185058,F,28,ARMOR_STURDY,NORMAL,640,HEALTH,F,30,NORMAL],[BACKUP_MAIN,185007,T,12,WEAPON_CHARGED,MAGIC,640,DAMAGE_SHIELD,F,35,ARTIFACT],[BACKUP_OFF,184897,T,12,WEAPON_PRECISE,NORMAL,640,FROZEN_WEAPON,F,35,ARCANE]],[25267,61919,34843,36901,25380,113105],[36935,35419,61507,34727,36028]
     fn handle_player_info(&mut self, parts: Vec<&str>) {
         let unit_id: u32 = parts[2].parse::<u32>().unwrap();
         let effect_id_list: Vec<u32> = parts[3].split(",").map(|x| x.parse::<u32>().unwrap()).collect();
@@ -207,20 +206,20 @@ impl Log {
         let split: Vec<&str> = part.split(",").collect();
         // check all enums for none values, and print what they are
         if crate::player::match_gear_slot(split[0]) == crate::player::GearSlot::None {
-            // println!("Unknown gear slot: {}", split[0]);
-            println!("{}", part);
+            println!("Unknown gear slot: {}", split[0]);
+            // println!("{}", part);
         }
         if crate::player::match_gear_trait(split[4]) == crate::player::GearTrait::None && split[4] != "NONE" {
-            // println!("Unknown gear trait: {}", split[4]);
-            println!("{}", part);
+            println!("Unknown gear trait: {}", split[4]);
+            // println!("{}", part);
         }
         if crate::player::match_gear_quality(split[5]) == crate::player::GearQuality::None {
-            // println!("Unknown gear quality: {}", split[5]);
-            println!("{}", part);
+            println!("Unknown gear quality: {}", split[5]);
+            // println!("{}", part);
         }
         if crate::player::match_enchant_type(split[7]) == crate::player::EnchantType::None {
-            // println!("Unknown enchant type: {}", split[7]);
-            println!("{}", part);
+            println!("Unknown enchant type: {}", split[7]);
+            // println!("{}", part);
         }
         let gear_piece = crate::player::GearPiece {
             slot: crate::player::match_gear_slot(split[0]),
@@ -232,7 +231,7 @@ impl Log {
             set_id: split[6].parse::<u16>().unwrap(),
             enchant: crate::player::GearEnchant {
                 enchant_type: crate::player::match_enchant_type(split[7]),
-                is_enchant_cp: Self::is_true(split[8]),
+                is_cp: Self::is_true(split[8]),
                 enchant_level: split[9].parse::<u8>().unwrap(),
                 enchant_quality: crate::player::match_gear_quality(split[10]),
             },
