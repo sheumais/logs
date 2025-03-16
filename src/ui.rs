@@ -214,12 +214,20 @@ impl fmt::Display for GearPiece {
 
         let mut display_text = format!("");
 
+        display_text.push_str(&format!("{:?} ", self.slot));
+
         if level != 160 {
             display_text.push_str(&format!("{}{:?} ", cp_string, level));
         }
 
         if let Some(name) = set_name {
             display_text.push_str(&format!("{} ", name));
+        }
+
+        if set::is_weapon_slot(&self.slot) {
+            let weapon_type = set::get_weapon_type_from_hashmap(self.item_id);
+            let weapon_type_name = set::get_weapon_name(weapon_type);
+            display_text.push_str(&format!("{} ", weapon_type_name));
         }
 
         if self.gear_trait != GearTrait::None {

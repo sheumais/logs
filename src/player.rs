@@ -396,6 +396,7 @@ pub fn match_enchant_type(string: &str) -> EnchantType {
         _ => EnchantType::None,
     }
 }
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct GearEnchant {
     pub enchant_type: EnchantType,
@@ -403,6 +404,7 @@ pub struct GearEnchant {
     pub enchant_level: u8,
     pub enchant_quality: GearQuality,
 }
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct GearPiece {
     pub slot: GearSlot,
