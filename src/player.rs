@@ -10,7 +10,7 @@ pub struct Player {
     pub race_id: RaceId,
     pub name: String,
     pub display_name: String,
-    pub character_id: i128,
+    pub character_id: u64,
     pub level: u8,
     pub champion_points: u16,
     pub is_grouped_with_local_player: bool,
@@ -52,7 +52,7 @@ impl fmt::Display for Player {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Player {{ unit_id: {}, is_local_player: {}, player_per_session_id: {}, class_id: {:?}, race_id: {:?}, name: {}, display_name: {}, character_id: {}, level: {}, champion_points: {}, is_grouped_with_local_player: {}, unit_state: {:?}, effects: {:?}, gear: {}, primary_abilities: {:?}, backup_abilities: {:?} }}",
+            "Player {{ unit_id: {}, is_local_player: {}, player_per_session_id: {}, class_id: {:?}, race_id: {:?}, name: {}, display_name: {}, character_id: {}, level: {}, champion_points: {}, is_grouped_with_local_player: {}, unit_state: {:?}, effects: {:?}, gear: {:?}, primary_abilities: {:?}, backup_abilities: {:?} }}",
             self.unit_id,
             self.is_local_player,
             self.player_per_session_id,

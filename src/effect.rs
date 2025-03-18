@@ -11,6 +11,7 @@ pub struct Effect {
     pub effect_type: EffectType,
     pub status_effect_type: StatusEffectType,
     pub synergy: Option<u32>,
+    pub scribing: Option<String>
 }
 
 #[derive(Debug, PartialEq)]

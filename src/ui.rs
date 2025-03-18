@@ -168,97 +168,97 @@ pub fn print_colour_test() {
             enchant_quality: GearQuality::Legendary,
         },
     };
-    println!("{}", gear_piece);
+    // println!("{}", gear_piece);
 }
 
 
-impl fmt::Display for Loadout {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let gear_pieces = vec![
-            &self.head,
-            &self.shoulders,
-            &self.chest,
-            &self.hands,
-            &self.waist,
-            &self.legs,
-            &self.feet,
-            &self.neck,
-            &self.ring1,
-            &self.ring2,
-            &self.main_hand,
-            &self.off_hand,
-            &self.poison,
-            &self.main_hand_backup,
-            &self.off_hand_backup,
-            &self.backup_poison,
-        ];
+// impl fmt::Display for Loadout {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // let gear_pieces = vec![
+        //     &self.head,
+        //     &self.shoulders,
+        //     &self.chest,
+        //     &self.hands,
+        //     &self.waist,
+        //     &self.legs,
+        //     &self.feet,
+        //     &self.neck,
+        //     &self.ring1,
+        //     &self.ring2,
+        //     &self.main_hand,
+        //     &self.off_hand,
+        //     &self.poison,
+        //     &self.main_hand_backup,
+        //     &self.off_hand_backup,
+        //     &self.backup_poison,
+        // ];
 
-        let gear_list: Vec<String> = gear_pieces
-            .iter()
-            .filter(|&&gear| gear != &player::empty_gear_piece())
-            .map(|&gear| gear.to_string())
-            .collect();
+//         let gear_list: Vec<String> = gear_pieces
+//             .iter()
+//             .filter(|&&gear| gear != &player::empty_gear_piece())
+//             .map(|&gear| gear.to_string())
+//             .collect();
 
-        let result = gear_list.join("\n");
-        write!(f, "{}", result)
-    }
-}
+//         let result = gear_list.join("\n");
+//         write!(f, "{}", result)
+//     }
+// }
 
-impl fmt::Display for GearPiece {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut colour = Colour::from_gear_quality(self.quality);
-        let level = player::veteran_level_to_cp(self.level, self.is_cp);
-        let cp_string = if self.is_cp {"CP"} else {"Level "};
-        if set::is_mythic_set(self.set_id) {colour = Colour::from_tuple(Colour::MYTHIC);}
-        let set_name = set::get_set_name(self.set_id);
+// impl fmt::Display for GearPiece {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         let mut colour = Colour::from_gear_quality(self.quality);
+//         let level = player::veteran_level_to_cp(self.level, self.is_cp);
+//         let cp_string = if self.is_cp {"CP"} else {"Level "};
+//         if set::is_mythic_set(self.set_id) {colour = Colour::from_tuple(Colour::MYTHIC);}
+//         let set_name = set::get_set_name(self.set_id);
 
-        let mut display_text = format!("");
+//         let mut display_text = format!("");
 
-        display_text.push_str(&format!("{:?} ", self.slot));
+//         display_text.push_str(&format!("{:?} ", self.slot));
 
-        if level != 160 {
-            display_text.push_str(&format!("{}{:?} ", cp_string, level));
-        }
+//         if level != 160 {
+//             display_text.push_str(&format!("{}{:?} ", cp_string, level));
+//         }
 
-        if let Some(name) = set_name {
-            display_text.push_str(&format!("{} ", name));
-        }
+//         if let Some(name) = set_name {
+//             display_text.push_str(&format!("{} ", name));
+//         }
 
-        if set::is_weapon_slot(&self.slot) {
-            let weapon_type = set::get_weapon_type_from_hashmap(self.item_id);
-            let weapon_type_name = set::get_weapon_name(weapon_type);
-            display_text.push_str(&format!("{} ", weapon_type_name));
-        }
+//         if set::is_weapon_slot(&self.slot) {
+//             let weapon_type = set::get_weapon_type_from_hashmap(self.item_id);
+//             let weapon_type_name = set::get_weapon_name(weapon_type);
+//             display_text.push_str(&format!("{} ", weapon_type_name));
+//         }
 
-        if self.gear_trait != GearTrait::None {
-            display_text.push_str(&format!("{:?} ", self.gear_trait));
-        }
+//         if self.gear_trait != GearTrait::None {
+//             display_text.push_str(&format!("{:?} ", self.gear_trait));
+//         }
 
-        if self.enchant.enchant_type != EnchantType::Invalid {
-            display_text.push_str(&format!("{} ", self.enchant));
-        }
+//         if self.enchant.enchant_type != EnchantType::Invalid {
+//             display_text.push_str(&format!("{} ", self.enchant));
+//         }
 
-        let colored_text = foreground_rgb(&display_text, colour);
-        write!(f, "{}", colored_text)
-    }
-}
+//         let colored_text = foreground_rgb(&display_text, colour);
+//         write!(f, "{}", colored_text)
+//     }
+// }
 
-impl fmt::Display for GearEnchant {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let color = Colour::from_gear_quality(self.enchant_quality);
-        let level = player::veteran_level_to_cp(self.enchant_level, self.is_cp);
-        let cp_string = if self.is_cp {"CP"} else {"Level "};
+// impl fmt::Display for GearEnchant {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         let color = Colour::from_gear_quality(self.enchant_quality);
+//         let level = player::veteran_level_to_cp(self.enchant_level, self.is_cp);
+//         let cp_string = if self.is_cp {"CP"} else {"Level "};
 
-        let mut display_text = format!(
-            "{:?} ",
-            self.enchant_type,
-        );
+//         let mut display_text = format!(
+//             "{:?} ",
+//             self.enchant_type,
+//         );
 
-        if level != 160 {
-            display_text.push_str(&format!("{}{:?} ", cp_string, level));
-        }
+//         if level != 160 {
+//             display_text.push_str(&format!("{}{:?} ", cp_string, level));
+//         }
 
-        let colored_text = foreground_rgb(&display_text, color);
-        write!(f, "{}", colored_text)
-    }
-}
+//         let colored_text = foreground_rgb(&display_text, color);
+//         write!(f, "{}", colored_text)
+//     }
+// }

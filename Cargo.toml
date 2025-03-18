@@ -8,3 +8,7 @@ edition = "2021"
 [dependencies]
 num-format = "0.4.4"
 lazy_static = "1.5.0"
+yew = { version = "0.21.0", features = ["csr"] }
+web-sys = "0.3.77"
+plotly = {version = "0.12.1", features = ["wasm"] }
+yew-hooks = "0.3.3"
