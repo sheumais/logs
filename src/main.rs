@@ -99,7 +99,7 @@ fn main() {
                 }
             }
     
-            for (_index, fight) in &log_analysis.fights {
+            for fight in &log_analysis.fights {
                 let mut time_with_buff = 0;
                 let mut gained_buff_timestamp = 0;
                 let mut has_buff: bool = false;
@@ -139,12 +139,22 @@ fn main() {
             }
         } else {
             for log in logs {
-                for (_index, fight) in log.fights {
+                for fight in log.fights {
                     for player in &fight.players {
                         if player.gear != crate::player::empty_loadout() {
                             println!("-------------------");
                             let name = foreground_rgb(&player.display_name, Colour::from_class_id(player.class_id));
                             println!("{}\n{}", name, player.gear);
+                            // for skill in &player.primary_abilities {
+                            //     if skill.scribing.is_some() {
+                            //         println!("{:?}", skill);
+                            //     }
+                            // }
+                            // for skill in &player.backup_abilities {
+                            //     if skill.scribing.is_some() {
+                            //         println!("{:?}", skill);
+                            //     }
+                            // }
                         }
                     }
                 }
@@ -153,6 +163,16 @@ fn main() {
                         println!("-------------------");
                         let name = foreground_rgb(&player.display_name, Colour::from_class_id(player.class_id));
                         println!("{}\n{}", name, player.gear);
+                        // for skill in &player.primary_abilities {
+                        //     if skill.scribing.is_some() {
+                        //         println!("{:?}", skill);
+                        //     }
+                        // }
+                        // for skill in &player.backup_abilities {
+                        //     if skill.scribing.is_some() {
+                        //         println!("{:?}", skill);
+                        //     }
+                        // }
                     }
                 }
             }

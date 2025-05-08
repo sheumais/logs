@@ -7,7 +7,7 @@ lazy_static! {
     // Set data from https://github.com/Baertram/LibSets/blob/LibSets-reworked/LibSets/Data/
 
     static ref ITEM_TYPES: HashMap<u32, &'static str> = parse_set_data_into_hashmap_item_types();
-    // Item type data from https://esoitem.uesp.net/viewMinedItems.php
+    // Item type from game using https://github.com/sheumais/ItemTypeDataExtractTool
 }
 
 pub fn parse_set_data_into_hashmap() -> HashMap<u16, &'static str> {
@@ -68,7 +68,7 @@ pub fn is_mythic_set(id: u16) -> bool {
 
 pub fn parse_set_data_into_hashmap_item_types() -> HashMap<u32, &'static str> {
     let mut item_type_table = HashMap::new();
-    let data = include_str!("id_to_weapon.txt");
+    let data = include_str!("data.csv");
 
     for line in data.lines() {
         let parts: Vec<&str> = line.split(',').collect();
@@ -86,25 +86,29 @@ pub fn parse_set_data_into_hashmap_item_types() -> HashMap<u32, &'static str> {
     item_type_table
 }
 
-pub fn get_weapon_type_from_hashmap(id: u32) -> &'static str {
+pub fn get_item_type_from_hashmap(id: u32) -> &'static str {
     return ITEM_TYPES.get(&id).cloned().unwrap_or("UNKNOWN");
 }
 
-pub fn get_weapon_name(name: &'static str) -> &'static str {
+pub fn get_item_type_name(name: &'static str) -> &'static str {
     match name {
-        "1H_AXE" => "Axe",
-        "1H_DAGGER" => "Dagger",
-        "1H_MACE" => "Mace",
-        "1H_SWORD" => "Sword",
-        "2H_AXE" => "2H Axe",
-        "2H_MAUL" => "2H Maul",
-        "2H_SWORD" => "2H Sword",
-        "FROST" => "Frost Staff",
-        "INFERNO" => "Inferno Staff",
-        "LIGHTNING" => "Lightning Staff",
-        "RESTORATION" => "Restoration Staff",
+        "AXE" => "Axe",
+        "DAGGER" => "Dagger",
+        "MACE" => "Mace",
+        "SWORD" => "Sword",
+        "TWO_HANDED_AXE" => "2H Axe",
+        "TWO_HANDED_MACE" => "2H Maul",
+        "TWO_HANDED_SWORD" => "2H Sword",
+        "FROST_STAFF" => "Ice Staff",
+        "FIRE_STAFF" => "Inferno Staff",
+        "LIGHTNING_STAFF" => "Lightning Staff",
+        "HEALING_STAFF" => "Restoration Staff",
         "SHIELD" => "Shield",
         "BOW" => "Bow",
+        "LIGHT" => "Light",
+        "MEDIUM" => "Medium",
+        "HEAVY" => "Heavy",
+        "MARA" => "Ring of Mara",
         _ => "Unknown",
     }
 }
@@ -112,6 +116,21 @@ pub fn get_weapon_name(name: &'static str) -> &'static str {
 pub fn is_weapon_slot(slot: &GearSlot) -> bool {
     match slot {
         GearSlot::MainHand | GearSlot::MainHandBackup | GearSlot::OffHand | GearSlot::OffHandBackup => true,
+        _ => false
+    }
+}
+
+pub fn is_armour_slot(slot: &GearSlot) -> bool {
+    match slot {
+        GearSlot::Chest | GearSlot::Head | GearSlot::Shoulders | GearSlot::Hands | GearSlot::Waist | GearSlot::Legs | GearSlot::Feet => true,
+        _ => false
+    }
+}
+
+#[allow(dead_code)]
+pub fn is_jewellery_slot(slot: &GearSlot) -> bool {
+    match slot {
+        GearSlot::Necklace | GearSlot::Ring1 | GearSlot::Ring2 => true,
         _ => false
     }
 }

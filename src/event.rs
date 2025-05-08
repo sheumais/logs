@@ -29,7 +29,9 @@ pub struct Event {
 pub enum EventResult {
     AbilityOnCooldown,
     Absorbed,
+    AtPetLimit,
     BadTarget,
+    BadTargetCombatState,
     BladeTurn,
     Blocked,
     BlockedDamage,
@@ -118,6 +120,7 @@ pub enum EventResult {
     SelfPlayingTribute,
     SiegeLimit,
     SiegeNotAllowedInZone,
+    SiegePackedUp,
     SiegeTooClose,
     Silenced,
     Snared,
@@ -143,7 +146,9 @@ pub fn parse_event_result(event_result: &str) -> Option<EventResult> {
     match event_result {
         "ABILITY_ON_COOLDOWN" => Some(EventResult::AbilityOnCooldown),
         "ABSORBED" => Some(EventResult::Absorbed),
+        "AT_PET_LIMIT" => Some(EventResult::AtPetLimit),
         "BAD_TARGET" => Some(EventResult::BadTarget),
+        "BAD_TARGET_COMBAT_STATE" => Some(EventResult::BadTargetCombatState),
         "BLADETURN" => Some(EventResult::BladeTurn),
         "BLOCKED" => Some(EventResult::Blocked),
         "BLOCKED_DAMAGE" => Some(EventResult::BlockedDamage),
@@ -232,6 +237,7 @@ pub fn parse_event_result(event_result: &str) -> Option<EventResult> {
         "SELF_PLAYING_TRIBUTE" => Some(EventResult::SelfPlayingTribute),
         "SIEGE_LIMIT" => Some(EventResult::SiegeLimit),
         "SIEGE_NOT_ALLOWED_IN_ZONE" => Some(EventResult::SiegeNotAllowedInZone),
+        "SIEGE_PACKED_UP" => Some(EventResult::SiegePackedUp),
         "SIEGE_TOO_CLOSE" => Some(EventResult::SiegeTooClose),
         "SILENCED" => Some(EventResult::Silenced),
         "SNARED" => Some(EventResult::Snared),
@@ -255,7 +261,7 @@ pub fn parse_event_result(event_result: &str) -> Option<EventResult> {
     }
 }
 
-pub fn does_damage(event_result: EventResult) -> bool {
+pub fn is_damage_event(event_result: EventResult) -> bool {
     match event_result {
         EventResult::Damage => true,
         EventResult::BlockedDamage => true,
@@ -267,7 +273,7 @@ pub fn does_damage(event_result: EventResult) -> bool {
 }
 
 #[allow(dead_code)]
-pub fn does_heal(event_result: EventResult) -> bool {
+pub fn is_heal_event(event_result: EventResult) -> bool {
     match event_result {
         EventResult::Heal => true,
         EventResult::HotTick => true,

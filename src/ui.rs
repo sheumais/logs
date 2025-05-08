@@ -154,16 +154,16 @@ pub fn print_colour_test() {
     }
 
     let gear_piece = GearPiece {
-        slot: GearSlot::Neck,
+        slot: GearSlot::Necklace,
         item_id: 123456,
         is_cp: true,
-        level: 50,
+        level: 14,
         gear_trait: GearTrait::Bloodthirsty,
         quality: GearQuality::Artifact,
         set_id: 650,
         enchant: GearEnchant {
             enchant_type: EnchantType::IncreasePhysicalDamage,
-            is_cp: true,
+            is_cp: false,
             enchant_level: 50,
             enchant_quality: GearQuality::Legendary,
         },
@@ -182,7 +182,7 @@ impl fmt::Display for Loadout {
             &self.waist,
             &self.legs,
             &self.feet,
-            &self.neck,
+            &self.necklace,
             &self.ring1,
             &self.ring2,
             &self.main_hand,
@@ -216,7 +216,7 @@ impl fmt::Display for GearPiece {
 
         display_text.push_str(&format!("{:?} ", self.slot));
 
-        if level != 160 {
+        if level > 0 && level <= player::maximum_item_level() {
             display_text.push_str(&format!("{}{:?} ", cp_string, level));
         }
 
@@ -224,10 +224,8 @@ impl fmt::Display for GearPiece {
             display_text.push_str(&format!("{} ", name));
         }
 
-        if set::is_weapon_slot(&self.slot) {
-            let weapon_type = set::get_weapon_type_from_hashmap(self.item_id);
-            let weapon_type_name = set::get_weapon_name(weapon_type);
-            display_text.push_str(&format!("{} ", weapon_type_name));
+        if set::get_item_type_from_hashmap(self.item_id) != "UNKNOWN" {
+            display_text.push_str(&format!("{} ", set::get_item_type_name(set::get_item_type_from_hashmap(self.item_id))));
         }
 
         if self.gear_trait != GearTrait::None {
@@ -237,6 +235,8 @@ impl fmt::Display for GearPiece {
         if self.enchant.enchant_type != EnchantType::Invalid {
             display_text.push_str(&format!("{} ", self.enchant));
         }
+
+        display_text.push_str(&format!("({})", self.item_id));
 
         let colored_text = foreground_rgb(&display_text, colour);
         write!(f, "{}", colored_text)
@@ -250,12 +250,12 @@ impl fmt::Display for GearEnchant {
         let cp_string = if self.is_cp {"CP"} else {"Level "};
 
         let mut display_text = format!(
-            "{:?} ",
+            "{:?}",
             self.enchant_type,
         );
 
         if level != 160 {
-            display_text.push_str(&format!("{}{:?} ", cp_string, level));
+            display_text.push_str(&format!(" {}{:?}", cp_string, level));
         }
 
         let colored_text = foreground_rgb(&display_text, color);

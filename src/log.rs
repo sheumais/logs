@@ -4,7 +4,7 @@ pub struct Log {
     pub log_epoch: i64,
     pub players: HashMap<u32, crate::player::Player>,
     pub units: HashMap<u32, crate::unit::Unit>,
-    pub fights: HashMap<u16, crate::fight::Fight>,
+    pub fights: Vec<crate::fight::Fight>,
     pub effects: HashMap<u32, crate::effect::Effect>,
 }
 
@@ -14,7 +14,7 @@ impl Log {
             log_epoch: 0,
             players: HashMap::new(),
             units: HashMap::new(),
-            fights: HashMap::new(),
+            fights: Vec::new(),
             effects: HashMap::new(),
         };
 
@@ -48,12 +48,7 @@ impl Log {
     }
     
     fn get_current_fight(&mut self) -> Option<&mut crate::fight::Fight> {
-        if let Some(fight) = self.fights.get_mut(&(self.fights.len() as u16 - 1)) {
-            if fight.end_time == 0 {
-                return Some(fight);
-            }
-        }
-        None
+        self.fights.last_mut().filter(|fight| fight.end_time == 0)
     }
 
     fn is_true(value: &str) -> bool {
@@ -83,7 +78,7 @@ impl Log {
                     race_id: crate::player::match_race(parts[9]),
                     name: name,
                     display_name: display_name,
-                    character_id: parts[12].parse::<i128>().unwrap(),
+                    character_id: parts[12].parse::<u64>().unwrap(),
                     level: parts[13].parse::<u8>().unwrap(),
                     champion_points: parts[14].parse::<u16>().unwrap(),
                     is_grouped_with_local_player: Self::is_true(parts[17]),
@@ -143,14 +138,14 @@ impl Log {
             for player in self.players.values() {
                 new_fight.players.push(player.clone());
             }
-            self.fights.insert(self.fights.len() as u16, new_fight);
+            self.fights.push(new_fight);
         } else if parts[1] == "END_COMBAT" {
             let fight_name = {
                 let mut name = "Unknown";
                 if let Some(fight) = self.get_current_fight() {
                     let mut unit_ids = Vec::new();
                     for event in &fight.events {
-                        if crate::event::does_damage(event.result) {
+                        if crate::event::is_damage_event(event.result) {
                             unit_ids.push(event.target_unit_state.unit_id);
                         }
                     }
@@ -197,8 +192,16 @@ impl Log {
         let primary_ability_id_list: Vec<u32> = parts[parts.len() - 2].split(",").map(|x| x.parse::<u32>().unwrap_or_default()).collect();
         let backup_ability_id_list: Vec<u32> = parts[parts.len() - 1].split(",").map(|x| x.parse::<u32>().unwrap_or_default()).collect();
         if let Some(player) = self.players.get_mut(&unit_id) {
-            player.primary_abilities = primary_ability_id_list;
-            player.backup_abilities = backup_ability_id_list;
+            for id in primary_ability_id_list {
+                if let Some(effect) = self.effects.get(&id) {
+                    player.primary_abilities.push(effect.clone());
+                }
+            }
+            for id in backup_ability_id_list {
+                if let Some(effect) = self.effects.get(&id) {
+                    player.backup_abilities.push(effect.clone());
+                }
+            }
         }
     }
 
@@ -243,16 +246,25 @@ impl Log {
         let effect_id: u32 = parts[2].parse::<u32>().unwrap(); // abilityId usually unique, but can be reused for scribing abilities
         let name = parts[3].trim_matches('"').to_string();
         let effect = crate::effect::Effect {
-            id: effect_id,
-            name: name,
-            icon: parts[4].to_string(),
-            interruptible: Self::is_true(parts[5]),
-            blockable: Self::is_true(parts[6]),
-            stack_count: 0,
-            effect_type: crate::effect::EffectType::None,
-            status_effect_type: crate::effect::StatusEffectType::None,
-            synergy: None,
-        };
+                id: effect_id,
+                name: name,
+                icon: parts[4].trim_matches('"').to_string(),
+                interruptible: Self::is_true(parts[5]),
+                blockable: Self::is_true(parts[6]),
+                stack_count: 0,
+                effect_type: crate::effect::EffectType::None,
+                status_effect_type: crate::effect::StatusEffectType::None,
+                synergy: None,
+                scribing: if parts.len() == 10 {
+                    let mut scribing = Vec::new();
+                    for i in 7..10 {
+                        scribing.push(parts[i].trim_matches('"').to_owned())
+                    }
+                    Some(scribing)
+                } else {
+                    None
+                },
+            };
         self.effects.insert(effect_id, effect);
     }
 

@@ -1,4 +1,4 @@
-use crate::unit::UnitState;
+use crate::{effect::Effect, unit::UnitState};
 use std::fmt;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -10,15 +10,15 @@ pub struct Player {
     pub race_id: RaceId,
     pub name: String,
     pub display_name: String,
-    pub character_id: i128,
+    pub character_id: u64,
     pub level: u8,
     pub champion_points: u16,
     pub is_grouped_with_local_player: bool,
     pub unit_state: UnitState,
     pub effects: Vec<u32>,
     pub gear: Loadout,
-    pub primary_abilities: Vec<u32>,
-    pub backup_abilities: Vec<u32>,
+    pub primary_abilities: Vec<Effect>,
+    pub backup_abilities: Vec<Effect>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -30,7 +30,7 @@ pub struct Loadout {
     pub waist: GearPiece,
     pub legs: GearPiece,
     pub feet: GearPiece,
-    pub neck: GearPiece,
+    pub necklace: GearPiece,
     pub ring1: GearPiece,
     pub ring2: GearPiece,
     pub main_hand: GearPiece,
@@ -83,7 +83,7 @@ impl Loadout {
             GearSlot::Waist => self.waist = gear_piece,
             GearSlot::Legs => self.legs = gear_piece,
             GearSlot::Feet => self.feet = gear_piece,
-            GearSlot::Neck => self.neck = gear_piece,
+            GearSlot::Necklace => self.necklace = gear_piece,
             GearSlot::Ring1 => self.ring1 = gear_piece,
             GearSlot::Ring2 => self.ring2 = gear_piece,
             GearSlot::MainHand => self.main_hand = gear_piece,
@@ -124,7 +124,7 @@ pub fn empty_loadout() -> Loadout {
         waist: empty_gear_piece(),
         legs: empty_gear_piece(),
         feet: empty_gear_piece(),
-        neck: empty_gear_piece(),
+        necklace: empty_gear_piece(),
         ring1: empty_gear_piece(),
         ring2: empty_gear_piece(),
         main_hand: empty_gear_piece(),
@@ -200,7 +200,7 @@ pub enum GearSlot {
     Waist,
     Legs,
     Feet,
-    Neck,
+    Necklace,
     Ring1,
     Ring2,
     MainHand,
@@ -222,7 +222,7 @@ pub fn match_gear_slot(string: &str) -> GearSlot {
         "WAIST" => GearSlot::Waist,
         "LEGS" => GearSlot::Legs,
         "FEET" => GearSlot::Feet,
-        "NECK" => GearSlot::Neck,
+        "NECK" => GearSlot::Necklace,
         "RING1" => GearSlot::Ring1,
         "RING2" => GearSlot::Ring2,
         "MAIN_HAND" => GearSlot::MainHand,
@@ -423,4 +423,8 @@ pub fn veteran_level_to_cp(level: u8, is_cp: bool) -> u8 {
     } else {
         level
     }
+}
+
+pub fn maximum_item_level() -> u8 {
+    160
 }

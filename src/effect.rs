@@ -1,6 +1,16 @@
 use crate::unit::UnitState;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
+pub struct Ability {
+    pub id: u32,
+    pub name: String,
+    pub icon: String,
+    pub interruptible: bool,
+    pub blockable: bool,
+    pub scribing: Option<Vec<String>>
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Effect {
     pub id: u32,
     pub name: String,
@@ -11,6 +21,7 @@ pub struct Effect {
     pub effect_type: EffectType,
     pub status_effect_type: StatusEffectType,
     pub synergy: Option<u32>,
+    pub scribing: Option<Vec<String>>
 }
 
 #[derive(Debug, PartialEq)]
@@ -42,7 +53,7 @@ pub fn parse_effect_change_type(string: &str) -> EffectChangeType {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum EffectType {
     Buff,
     Debuff,
@@ -57,7 +68,7 @@ pub fn parse_effect_type(string: &str) -> EffectType {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum StatusEffectType {
     Magic,
     None,
