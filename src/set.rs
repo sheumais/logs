@@ -6,13 +6,13 @@ lazy_static! {
     static ref SETS: HashMap<u16, &'static str> = parse_set_data_into_hashmap(); 
     // Set data from https://github.com/Baertram/LibSets/blob/LibSets-reworked/LibSets/Data/
 
-    static ref ITEM_TYPES: HashMap<u32, &'static str> = parse_set_data_into_hashmap_item_types();
+    static ref ITEM_TYPES: HashMap<u32, &'static str> = parse_item_types_into_hashmap();
     // Item type from game using https://github.com/sheumais/ItemTypeDataExtractTool
 }
 
 pub fn parse_set_data_into_hashmap() -> HashMap<u16, &'static str> {
     let mut lookup_table = HashMap::new();
-    let data = include_str!("set_data.txt");
+    let data = include_str!("set_data.csv");
     for line in data.lines() {
         let parts: Vec<&str> = line.split(',').collect();
         if parts.len() == 2 {
@@ -60,15 +60,18 @@ pub fn is_mythic_set(id: u16) -> bool {
         694 => true,
         760 => true,
         761 => true,
-        762 => true,        
+        762 => true,
+        811 => true,
+        812 => true,
+        813 => true,
         _ => false,
     }
 }
 
 
-pub fn parse_set_data_into_hashmap_item_types() -> HashMap<u32, &'static str> {
+pub fn parse_item_types_into_hashmap() -> HashMap<u32, &'static str> {
     let mut item_type_table = HashMap::new();
-    let data = include_str!("data.csv");
+    let data = include_str!("item_data.csv");
 
     for line in data.lines() {
         let parts: Vec<&str> = line.split(',').collect();
@@ -113,6 +116,7 @@ pub fn get_item_type_name(name: &'static str) -> &'static str {
     }
 }
 
+#[allow(dead_code)]
 pub fn is_weapon_slot(slot: &GearSlot) -> bool {
     match slot {
         GearSlot::MainHand | GearSlot::MainHandBackup | GearSlot::OffHand | GearSlot::OffHandBackup => true,
@@ -120,6 +124,7 @@ pub fn is_weapon_slot(slot: &GearSlot) -> bool {
     }
 }
 
+#[allow(dead_code)]
 pub fn is_armour_slot(slot: &GearSlot) -> bool {
     match slot {
         GearSlot::Chest | GearSlot::Head | GearSlot::Shoulders | GearSlot::Hands | GearSlot::Waist | GearSlot::Legs | GearSlot::Feet => true,

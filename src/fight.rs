@@ -1,4 +1,3 @@
-use std::fmt;
 use crate::effect::EffectEvent;
 use crate::unit::Unit;
 use crate::player::Player;
@@ -15,18 +14,4 @@ pub struct Fight {
     pub events: Vec<Event>,
     pub casts: Vec<Cast>,
     pub effect_events: Vec<EffectEvent>,
-}
-
-impl fmt::Display for Fight {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{{ id: {}, players: {:?}, monsters: {:?}, start_time: {}, end_time: {} }}",
-            self.id,
-            self.players,
-            self.monsters,
-            self.start_time,
-            self.end_time,
-        )
-    }
 }

@@ -216,7 +216,7 @@ impl fmt::Display for GearPiece {
 
         display_text.push_str(&format!("{:?} ", self.slot));
 
-        if level > 0 && level <= player::maximum_item_level() {
+        if !player::is_maximum_item_level(self.level, self.is_cp) {
             display_text.push_str(&format!("{}{:?} ", cp_string, level));
         }
 
@@ -236,7 +236,7 @@ impl fmt::Display for GearPiece {
             display_text.push_str(&format!("{} ", self.enchant));
         }
 
-        display_text.push_str(&format!("({})", self.item_id));
+        // display_text.push_str(&format!("({})", self.item_id));
 
         let colored_text = foreground_rgb(&display_text, colour);
         write!(f, "{}", colored_text)
@@ -254,7 +254,7 @@ impl fmt::Display for GearEnchant {
             self.enchant_type,
         );
 
-        if level != 160 {
+        if !player::is_maximum_item_level(self.enchant_level, self.is_cp) {
             display_text.push_str(&format!(" {}{:?}", cp_string, level));
         }
 

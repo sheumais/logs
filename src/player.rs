@@ -1,5 +1,4 @@
 use crate::{effect::Effect, unit::UnitState};
-use std::fmt;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Player {
@@ -45,31 +44,6 @@ impl Player {
     pub fn insert_gear_piece(&mut self, gear_piece: GearPiece) {
         let slot = gear_piece.slot.clone();
         self.gear.insert(slot, gear_piece);
-    }
-}
-
-impl fmt::Display for Player {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Player {{ unit_id: {}, is_local_player: {}, player_per_session_id: {}, class_id: {:?}, race_id: {:?}, name: {}, display_name: {}, character_id: {}, level: {}, champion_points: {}, is_grouped_with_local_player: {}, unit_state: {:?}, effects: {:?}, gear: {}, primary_abilities: {:?}, backup_abilities: {:?} }}",
-            self.unit_id,
-            self.is_local_player,
-            self.player_per_session_id,
-            self.class_id,
-            self.race_id,
-            self.name,
-            self.display_name,
-            self.character_id,
-            self.level,
-            self.champion_points,
-            self.is_grouped_with_local_player,
-            self.unit_state,
-            self.effects,
-            self.gear,
-            self.primary_abilities,
-            self.backup_abilities
-        )
     }
 }
 
@@ -427,4 +401,14 @@ pub fn veteran_level_to_cp(level: u8, is_cp: bool) -> u8 {
 
 pub fn maximum_item_level() -> u8 {
     160
+}
+
+#[allow(dead_code)]
+pub fn is_appropriate_level(level: u8, is_cp: bool) -> bool {
+    let level = veteran_level_to_cp(level, is_cp);
+    level > 0 && level <= maximum_item_level()
+}
+
+pub fn is_maximum_item_level(level: u8, is_cp: bool) -> bool {
+    veteran_level_to_cp(level, is_cp) == maximum_item_level()
 }

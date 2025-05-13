@@ -1,5 +1,3 @@
-use std::fmt;
-
 #[derive(Debug, PartialEq)]
 pub enum UnitType {
     Monster,
@@ -77,22 +75,4 @@ pub struct Unit {
     pub owner_unit_id: u32,
     pub reaction: Reaction,
     pub unit_state: UnitState,
-}
-
-impl fmt::Display for Unit {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{{ unit_id: {}, unit_type: {:?}, monster_id: {}, is_boss: {}, name: {}, level: {}, champion_points: {}, owner_unit_id: {}, reaction: {:?} }}",
-            self.unit_id,
-            self.unit_type,
-            self.monster_id,
-            self.is_boss,
-            self.name,
-            self.level,
-            self.champion_points,
-            self.owner_unit_id,
-            self.reaction
-        )
-    }
 }
