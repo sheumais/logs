@@ -10,10 +10,7 @@ mod set;
 use std::env;
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
-use effect::EffectChangeType;
 use crate::ui::*;
-
-// use num_format::{Locale, ToFormattedString}; // todo make ui.rs for handling all console UI stuff with colours
 use crate::log::Log;
 
 fn read_file(file_path: &str) -> io::Result<Vec<Log>> {
@@ -98,45 +95,12 @@ fn main() {
                     effect_name = effect.name.clone();
                 }
             }
-    
+            
+            println!("Uptime of {}", effect_name);
             for fight in &log_analysis.fights {
-                let mut time_with_buff = 0;
-                let mut gained_buff_timestamp = 0;
-                let mut has_buff: bool = false;
-                for player in &fight.players {
-                    if player.unit_id == 1 {
-                        if player.effects.contains(&query_id) {
-                            has_buff = true;
-                            gained_buff_timestamp = fight.start_time;
-                        }
-                    }
-                }
-                for effect_event in &fight.effect_events {
-                    if effect_event.target_unit_state.unit_id == 1 && effect_event.ability_id == query_id {
-                        if effect_event.change_type == EffectChangeType::Gained && !has_buff {
-                            gained_buff_timestamp = effect_event.time;
-                            has_buff = true;
-                        } else if effect_event.change_type == EffectChangeType::Faded && has_buff {
-                            let time_difference = effect_event.time - gained_buff_timestamp;
-                            time_with_buff += time_difference;
-                            has_buff = false;
-                        }
-                    }
-                }
-                if has_buff {
-                    let time_difference = fight.end_time - gained_buff_timestamp;
-                    time_with_buff += time_difference;
-                }
-    
-                let fight_duration = fight.end_time - fight.start_time;
-                let percentage: f32 = if fight_duration > 0 {
-                    (100 * time_with_buff / fight_duration) as f32
-                } else {
-                    0.0
-                };
-    
-                println!("{}: Buff: {}, Time: {}s ({}%)", fight.name, effect_name, time_with_buff / 1000, percentage);
-            }
+                let uptime = effect::buff_uptime_over_fight(query_id, 1, fight);
+                println!("{:.2}%", 100.0 * uptime);
+            };
         } else {
             for log in logs {
                 for fight in log.fights {

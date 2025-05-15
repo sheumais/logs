@@ -316,6 +316,7 @@ pub enum EnchantType {
     HealthRegen,
     IncreaseBashDamage,
     IncreasePhysicalDamage,
+    IncreasePotionEffectiveness,
     IncreaseSpellDamage,
     Magicka,
     MagickaRegen,
@@ -347,6 +348,7 @@ pub fn match_enchant_type(string: &str) -> EnchantType {
         "REDUCE_BLOCK_AND_BASH" => EnchantType::ReduceBlockAndBash,
         "INCREASE_BASH_DAMAGE" => EnchantType::IncreaseBashDamage,
         "DISEASE_RESISTANT" => EnchantType::DiseaseResistance,
+        "INCREASE_POTION_EFFECTIVENESS" => EnchantType::IncreasePotionEffectiveness,
         
         "ABSORB_STAMINA" => EnchantType::AbsorbStamina,
         "ABSORB_MAGICKA" => EnchantType::AbsorbMagicka,

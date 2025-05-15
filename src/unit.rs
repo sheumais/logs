@@ -40,7 +40,8 @@ pub struct UnitState {
     pub shield: u32,
     pub map_x: f32,
     pub map_y: f32,
-    pub heading: f32, // Radians
+    /// Units are radians
+    pub heading: f32,
 }
 
 pub fn blank_unit_state() -> UnitState {
@@ -75,4 +76,5 @@ pub struct Unit {
     pub owner_unit_id: u32,
     pub reaction: Reaction,
     pub unit_state: UnitState,
+    pub effects: Vec<u32>,
 }

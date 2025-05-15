@@ -1,4 +1,4 @@
-use crate::unit::UnitState;
+use crate::{fight::Fight, unit::UnitState};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Ability {
@@ -82,6 +82,9 @@ pub fn parse_status_effect_type(string: &str) -> StatusEffectType {
 }
 
 #[allow(dead_code)]
+const ZEN_DEBUFF_ID: &'static u32 = &126597;
+
+#[allow(dead_code)]
 pub fn is_zen_dot(ability_id: u32, scribing: Option<Vec<String>>) -> bool {
     match ability_id {
         // class abilities
@@ -162,5 +165,53 @@ pub fn is_zen_dot(ability_id: u32, scribing: Option<Vec<String>>) -> bool {
                 false
             }
         }
+    }
+}
+
+#[allow(dead_code)]
+/// Calculate percentage of fight that unit had buff
+/// 
+/// Returns float with value 0 to 1
+pub fn buff_uptime_over_fight(buff_id: u32, unit_id: u32, fight: &Fight) -> f32{
+    let mut time_with_buff = 0;
+    let mut gained_buff_timestamp = fight.start_time;
+    let mut has_buff: bool = false;
+    for player in &fight.players {
+        if player.unit_id == unit_id {
+            if player.effects.contains(&buff_id) {
+                has_buff = true;
+            }
+        }
+    }
+    for monster in &fight.monsters {
+        if monster.unit_id == unit_id {
+            if monster.effects.contains(&buff_id) {
+                has_buff = true;
+            }
+        }
+    }
+    for effect_event in &fight.effect_events {
+        if effect_event.target_unit_state.unit_id == unit_id && effect_event.ability_id == buff_id {
+            if effect_event.change_type == EffectChangeType::Gained && !has_buff {
+                gained_buff_timestamp = effect_event.time;
+                has_buff = true;
+            } else if effect_event.change_type == EffectChangeType::Faded && has_buff {
+                let time_difference = effect_event.time - gained_buff_timestamp;
+                time_with_buff += time_difference;
+                has_buff = false;
+            }
+        }
+    }
+    if has_buff {
+        let time_difference = fight.end_time - gained_buff_timestamp;
+        time_with_buff += time_difference;
+    }
+
+    let fight_duration = fight.end_time - fight.start_time;
+    if fight_duration > 0 {
+        // println!("Time: {} / Duration {}", time_with_buff, fight_duration);
+        (time_with_buff as f32) / (fight_duration as f32)
+    } else {
+        0.0
     }
 }

@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use crate::{effect::EffectChangeType, event::CastEndReason};
+
 pub struct Log {
     pub log_epoch: i64,
     pub players: HashMap<u32, crate::player::Player>,
@@ -31,7 +33,7 @@ impl Log {
             "EFFECT_INFO" => self.handle_effect_info(parts),
             "COMBAT_EVENT" => self.handle_combat_event(parts),
             "BEGIN_CAST" => self.handle_begin_cast(parts),
-            // "END_CAST"
+            "END_CAST" => self.handle_end_cast(parts),
             // "HEALTH_REGEN"
             // "UNIT_CHANGED"
             // "UNIT_REMOVED"
@@ -103,6 +105,7 @@ impl Log {
                 owner_unit_id: parts[15].parse::<u32>().unwrap(),
                 reaction: crate::unit::match_reaction(parts[16]),
                 unit_state: crate::unit::blank_unit_state(),
+                effects: Vec::new(),
             };
             self.units.insert(unit_id, monster);
         } else if parts[3] == "OBJECT" {
@@ -117,6 +120,7 @@ impl Log {
                 owner_unit_id: parts[15].parse::<u32>().unwrap(),
                 reaction: crate::unit::match_reaction(parts[16]),
                 unit_state: crate::unit::blank_unit_state(),
+                effects: Vec::new(),
             };
             self.units.insert(unit_id, object);
         }
@@ -352,6 +356,7 @@ impl Log {
             ability_id: parts[5].parse::<u32>().unwrap(),
             source_unit_state: source_unit_state,
             target_unit_state: target_unit_state,
+            interrupt_reason: None,
         };
 
         if let Some(fight) = self.get_current_fight() {
@@ -359,11 +364,18 @@ impl Log {
         }
     }
 
-    // how do we track effects over time? 
-    // gaining and losing effects is not fight-bound like damage is.
-    // therefore a fight-based solution is perhaps not correct.
-    // a player may gain a buff shortly before combat starts, but still keep it during the fight.
-    // if we don't track out of combat buffs then we would not know the player has this buff.
+    fn handle_end_cast(&mut self, parts: Vec<&str>) {
+        if crate::event::parse_cast_end_reason(parts[2]) != Some(CastEndReason::Completed) {
+            let time = parts[0].parse::<u64>().unwrap();
+            let cast_id = parts[3].parse::<u32>().unwrap();
+            if let Some(fight) = self.get_current_fight() {
+                if let Some(cast) = fight.casts.iter_mut().rev().find(|cast| cast.cast_track_id == cast_id) {
+                    cast.duration = (time - cast.time) as u32;
+                }
+            }
+        }
+    }
+
     fn handle_effect_changed(&mut self, parts: Vec<&str>) {
         let source_unit_state = self.parse_unit_state(parts.clone(), 6);
         let target_unit_state = if parts[16] == "*" {
@@ -383,12 +395,22 @@ impl Log {
             player_initiated_remove_cast_track_id: false, // what is an example where this is true?
         };
 
-        let player_id = target_unit_state.unit_id;
+        let unit_id = target_unit_state.unit_id;
         let effect_id = effect_event.ability_id;
 
-        if let Some(player) = self.players.get_mut(&player_id) {
-            if !player.effects.contains(&effect_id) {
+        // push effects onto/off unit object so that when player/monster is instantiated in next fight, the buffs are tracked appropriately
+        if let Some(player) = self.players.get_mut(&unit_id) {
+            if !player.effects.contains(&effect_id) && crate::effect::parse_effect_change_type(parts[2]) == EffectChangeType::Gained {
                 player.effects.push(effect_id);
+            } else if player.effects.contains(&effect_id) && crate::effect::parse_effect_change_type(parts[2]) == EffectChangeType::Faded {
+                player.effects.retain(|&id| id != effect_id);
+            }
+            // ensures that buffs given to monsters before combat (instead of only players) such as via ele drain or vibrant shroud are known
+        } else if let Some(monster) = self.units.get_mut(&unit_id) { 
+            if !monster.effects.contains(&effect_id) && crate::effect::parse_effect_change_type(parts[2]) == EffectChangeType::Gained {
+                monster.effects.push(effect_id);
+            } else if monster.effects.contains(&effect_id) && crate::effect::parse_effect_change_type(parts[2]) == EffectChangeType::Faded {
+                monster.effects.retain(|&id| id != effect_id);
             }
         }
 

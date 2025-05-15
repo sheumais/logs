@@ -9,6 +9,7 @@ pub struct Cast {
     pub ability_id: u32,
     pub source_unit_state: UnitState,
     pub target_unit_state: UnitState,
+    pub interrupt_reason: Option<CastEndReason>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -23,6 +24,24 @@ pub struct Event {
     pub ability_id: u32,
     pub source_unit_state: UnitState,
     pub target_unit_state: UnitState,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum CastEndReason {
+    Completed,
+    PlayerCancelled,
+    Interrupted,
+    Failed,
+}
+
+pub fn parse_cast_end_reason(end_reason: &str) -> Option<CastEndReason> {
+    match end_reason {
+        "COMPLETED" => Some(CastEndReason::Completed),
+        "PLAYER_CANCELLED" => Some(CastEndReason::PlayerCancelled),
+        "INTERRUPTED" => Some(CastEndReason::Interrupted),
+        "FAILED" => Some(CastEndReason::Failed),
+        _ => None,
+    }
 }
 
 #[derive(Debug, PartialEq, Copy, Clone, Eq, Hash)]
