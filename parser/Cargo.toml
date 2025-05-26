@@ -1,0 +1,8 @@
+[package]
+name = "parser"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+num-format = "0.4.4"
+lazy_static = "1.5.0"

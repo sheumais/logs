@@ -1,17 +1,8 @@
-mod unit;
-mod fight;
-mod player;
-mod effect;
-mod event;
-mod log;
-mod ui;
-mod set;
-
 use std::env;
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
-use crate::ui::*;
-use crate::log::Log;
+use parser::ui::*;
+use parser::log::Log;
 
 fn read_file(file_path: &str) -> io::Result<Vec<Log>> {
     let file = File::open(file_path)?;
@@ -98,14 +89,14 @@ fn main() {
             
             println!("Uptime of {}", effect_name);
             for fight in &log_analysis.fights {
-                let uptime = effect::buff_uptime_over_fight(query_id, 1, fight);
+                let uptime = parser::effect::buff_uptime_over_fight(query_id, 1, fight);
                 println!("{:.2}%", 100.0 * uptime);
             };
         } else {
             for log in logs {
                 for fight in log.fights {
                     for player in &fight.players {
-                        if player.gear != crate::player::empty_loadout() {
+                        if player.gear != parser::player::empty_loadout() {
                             println!("-------------------");
                             let name = foreground_rgb(&player.display_name, Colour::from_class_id(player.class_id));
                             println!("{}\n{}", name, player.gear);
@@ -123,7 +114,7 @@ fn main() {
                     }
                 }
                 for (_, player) in log.players {
-                    if player.gear != crate::player::empty_loadout() {
+                    if player.gear != parser::player::empty_loadout() {
                         println!("-------------------");
                         let name = foreground_rgb(&player.display_name, Colour::from_class_id(player.class_id));
                         println!("{}\n{}", name, player.gear);
