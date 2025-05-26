@@ -260,6 +260,7 @@ pub enum GearTrait {
     Protective,
     Swift,
     Triune,
+    Intricate,
     None,
 }
 
@@ -279,7 +280,6 @@ pub fn match_gear_trait(string: &str) -> GearTrait {
         "ARMOR_IMPENETRABLE" => GearTrait::Impenetrable,
         "ARMOR_REINFORCED" => GearTrait::Reinforced,
         "ARMOR_WELL_FITTED" => GearTrait::WellFitted,
-        // "ARMOR_INVIGORATING" => GearTrait::Invigorating,
         "ARMOR_DIVINES" => GearTrait::Divines,
         "ARMOR_NIRNHONED" => GearTrait::Nirnhoned,
         "ARMOR_INFUSED" => GearTrait::Infused,
@@ -295,6 +295,10 @@ pub fn match_gear_trait(string: &str) -> GearTrait {
         "WEAPON_PRECISE" => GearTrait::Precise,
         "WEAPON_SHARPENED" => GearTrait::Sharpened,
         "WEAPON_TRAINING" => GearTrait::Training,
+
+        "ARMOR_INTRICATE" => GearTrait::Intricate,
+        "WEAPON_INTRICATE" => GearTrait::Intricate,
+        "JEWELRY_INTRICATE" => GearTrait::Intricate,
         _ => GearTrait::None,
     }
 }

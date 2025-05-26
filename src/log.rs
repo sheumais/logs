@@ -34,14 +34,17 @@ impl Log {
             "COMBAT_EVENT" => self.handle_combat_event(parts),
             "BEGIN_CAST" => self.handle_begin_cast(parts),
             "END_CAST" => self.handle_end_cast(parts),
-            // "HEALTH_REGEN"
-            // "UNIT_CHANGED"
-            // "UNIT_REMOVED"
+            "HEALTH_REGEN" => {},
+            "UNIT_CHANGED" => {},
+            "UNIT_REMOVED" => {},
             "EFFECT_CHANGED" => self.handle_effect_changed(parts),
-            // "MAP_INFO"
-            // "ZONE_INFO"
-            // "TRIAL_INIT"
-            _ => {},
+            "MAP_CHANGED" => {},
+            "ZONE_CHANGED" => {},
+            "TRIAL_INIT" => {},
+            "BEGIN_TRIAL" => {},
+            "END_TRIAL" => {},
+            "ENDLESS_DUNGEON_BEGIN" | "ENDLESS_DUNGEON_STAGE_END" | "ENDLESS_DUNGEON_BUFF_ADDED" | "ENDLESS_DUNGEON_BUFF_REMOVED" | "ENDLESS_DUNGEON_END" => {},
+            _ => println!("{}{}", "Unknown log line type: ", parts[1]),
         }
     }
 
@@ -71,8 +74,8 @@ impl Log {
             let display_name = parts[11].trim_matches('"').to_string();
             let name = parts[10].to_string();
             let player_per_session_id: u32 = parts[5].parse::<u32>().unwrap();
-            if display_name != "\"\"" {
-                let player = crate::player::Player {
+            if display_name != "" {
+                let mut player = crate::player::Player {
                     unit_id: unit_id,
                     is_local_player: Self::is_true(parts[4]),
                     player_per_session_id: player_per_session_id,
@@ -90,6 +93,7 @@ impl Log {
                     primary_abilities: Vec::new(),
                     backup_abilities: Vec::new(),
                 };
+                crate::effect::determine_icon_by_staff_type(&mut player);
                 self.players.insert(unit_id, player);
             }
         } else if parts[3] == "MONSTER" {
@@ -218,7 +222,7 @@ impl Log {
         }
         if crate::player::match_gear_trait(split[4]) == crate::player::GearTrait::None && split[4] != "NONE" {
             println!("Unknown gear trait: {}", split[4]);
-            // println!("{}", part);
+            println!("{}", part);
         }
         if crate::player::match_gear_quality(split[5]) == crate::player::GearQuality::None {
             println!("Unknown gear quality: {}", split[5]);

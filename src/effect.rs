@@ -1,4 +1,4 @@
-use crate::{fight::Fight, unit::UnitState};
+use crate::{fight::Fight, player::Player, set::get_item_type_from_hashmap, unit::UnitState};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Ability {
@@ -83,6 +83,8 @@ pub fn parse_status_effect_type(string: &str) -> StatusEffectType {
 
 #[allow(dead_code)]
 const ZEN_DEBUFF_ID: &'static u32 = &126597;
+#[allow(dead_code)]
+const CRITICAL_CHANCE_MAXIMUM: &'static f32 = &21912.00097656250181;
 
 #[allow(dead_code)]
 pub fn is_zen_dot(ability_id: u32, scribing: Option<Vec<String>>) -> bool {
@@ -213,5 +215,25 @@ pub fn buff_uptime_over_fight(buff_id: u32, unit_id: u32, fight: &Fight) -> f32{
         (time_with_buff as f32) / (fight_duration as f32)
     } else {
         0.0
+    }
+}
+
+pub fn determine_icon_by_staff_type(player: &mut Player) {
+    let item_type = get_item_type_from_hashmap(player.gear.main_hand.item_id);
+    for ability in &mut player.primary_abilities {
+        ability.icon = match item_type {
+            "Ice Staff" if ability.id == 39011 => "/esoui/art/icons/ability_destructionstaff_002b.dds".to_string(),
+            "Inferno Staff" if ability.id == 39011 => "/esoui/art/icons/ability_destructionstaff_004_b.dds".to_string(),
+            "Lightning Staff" if ability.id == 39011 => "/esoui/art/icons/ability_destructionstaff_003_b.dds".to_string(),
+            _ => ability.icon.clone(),
+        }
+    }
+    for ability in &mut player.backup_abilities {
+        ability.icon = match item_type {
+            "Ice Staff" if ability.id == 39011 => "/esoui/art/icons/ability_destructionstaff_002b.dds".to_string(),
+            "Inferno Staff" if ability.id == 39011 => "/esoui/art/icons/ability_destructionstaff_004_b.dds".to_string(),
+            "Lightning Staff" if ability.id == 39011 => "/esoui/art/icons/ability_destructionstaff_003_b.dds".to_string(),
+            _ => ability.icon.clone(),
+        }
     }
 }
