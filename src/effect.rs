@@ -228,8 +228,9 @@ pub fn determine_icon_by_staff_type(player: &mut Player) {
             _ => ability.icon.clone(),
         }
     }
+    let backup_item_type = get_item_type_from_hashmap(player.gear.main_hand_backup.item_id);
     for ability in &mut player.backup_abilities {
-        ability.icon = match item_type {
+        ability.icon = match backup_item_type {
             "Ice Staff" if ability.id == 39011 => "/esoui/art/icons/ability_destructionstaff_002b.dds".to_string(),
             "Inferno Staff" if ability.id == 39011 => "/esoui/art/icons/ability_destructionstaff_004_b.dds".to_string(),
             "Lightning Staff" if ability.id == 39011 => "/esoui/art/icons/ability_destructionstaff_003_b.dds".to_string(),

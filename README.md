@@ -1,6 +1,6 @@
 ## Unofficial encounter log version 15 documentation:
 
-All lines begin with the time in milliseconds since logging began and the line type. Every field is comma separated. All strings are annotated with "surrounding" inverted commas. All texturePaths and iconPaths are filepaths to BC3 DXT5 DirectDraw Surface files which can be extracted using [EsoExtractData](https://en.uesp.net/wiki/ESO_Mod:EsoExtractData).
+All lines begin with the time in milliseconds since logging began and the line type. Every field is comma separated. All strings are annotated with "surrounding" inverted commas. All texturePaths and iconPaths are filepaths to BC3 DXT5 DirectDraw Surface files which can be extracted using [EsoExtractData](https://en.uesp.net/wiki/ESO_Mod:EsoExtractData). Timestamps are Unix time in milliseconds. Booleans are represented using T or F characters.
 
 `<unitState>` refers to the following fields for a unit: unitId, health/max, magicka/max, stamina/max, ultimate/max, werewolf/max, shield, mapNormalisedX, mapNormalisedY, headingRadians.
 
