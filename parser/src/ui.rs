@@ -224,7 +224,7 @@ impl fmt::Display for GearPiece {
             display_text.push_str(&format!("{} ", name));
         }
 
-        if set::get_item_type_from_hashmap(self.item_id) != "UNKNOWN" {
+        if set::get_item_type_from_hashmap(self.item_id) != crate::set::ItemType::Unknown {
             display_text.push_str(&format!("{} ", set::get_item_type_name(set::get_item_type_from_hashmap(self.item_id))));
         }
 

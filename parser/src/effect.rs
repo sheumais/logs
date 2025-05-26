@@ -12,16 +12,11 @@ pub struct Ability {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Effect {
-    pub id: u32,
-    pub name: String,
-    pub icon: String,
-    pub interruptible: bool,
-    pub blockable: bool,
+    pub ability: Ability,
     pub stack_count: u16,
     pub effect_type: EffectType,
     pub status_effect_type: StatusEffectType,
     pub synergy: Option<u32>,
-    pub scribing: Option<Vec<String>>
 }
 
 #[derive(Debug, PartialEq)]
@@ -85,10 +80,14 @@ pub fn parse_status_effect_type(string: &str) -> StatusEffectType {
 const ZEN_DEBUFF_ID: &'static u32 = &126597;
 #[allow(dead_code)]
 const CRITICAL_CHANCE_MAXIMUM: &'static f32 = &21912.00097656250181;
+#[allow(dead_code)]
+const ENLIVENING_OVERFLOW: &'static u32 = &156008;
+#[allow(dead_code)]
+const FROM_THE_BRINK: &'static u32 = &156017;
 
 #[allow(dead_code)]
-pub fn is_zen_dot(ability_id: u32, scribing: Option<Vec<String>>) -> bool {
-    match ability_id {
+pub fn is_zen_dot(effect: &Effect) -> bool {
+    match effect.ability.id {
         // class abilities
         36947 => true, // debilitate
         35336 => true, // lotus fan
@@ -161,8 +160,8 @@ pub fn is_zen_dot(ability_id: u32, scribing: Option<Vec<String>>) -> bool {
         79025 => true, // ravage health 3.5s
 
         _ => {
-            if scribing.is_some() {
-                scribing.unwrap()[1] == "Lingering Torment"
+            if effect.ability.scribing.is_some() {
+                effect.ability.scribing.clone().unwrap()[1] == "Lingering Torment"
             } else {
                 false
             }
@@ -218,23 +217,35 @@ pub fn buff_uptime_over_fight(buff_id: u32, unit_id: u32, fight: &Fight) -> f32{
     }
 }
 
-pub fn determine_icon_by_staff_type(player: &mut Player) {
+fn update_blockade_ability(ability: &mut Ability, item_type: &crate::set::ItemType) {
+    match item_type {
+        crate::set::ItemType::FrostStaff => {
+            ability.icon = "/esoui/art/icons/ability_destructionstaff_002b.dds".to_string();
+            ability.name = "Blockade of Frost".to_string();
+        },
+        crate::set::ItemType::LightningStaff => {
+            ability.icon = "/esoui/art/icons/ability_destructionstaff_003_b.dds".to_string();
+            ability.name = "Blockade of Storms".to_string();
+        },
+        crate::set::ItemType::FireStaff => {
+            ability.icon = "/esoui/art/icons/ability_destructionstaff_004_b.dds".to_string();
+            ability.name = "Fiery Blockade".to_string();
+        },
+        _ => {},
+    }
+}
+
+pub fn destruction_staff_skill_convert(player: &mut Player) {
     let item_type = get_item_type_from_hashmap(player.gear.main_hand.item_id);
     for ability in &mut player.primary_abilities {
-        ability.icon = match item_type {
-            "Ice Staff" if ability.id == 39011 => "/esoui/art/icons/ability_destructionstaff_002b.dds".to_string(),
-            "Inferno Staff" if ability.id == 39011 => "/esoui/art/icons/ability_destructionstaff_004_b.dds".to_string(),
-            "Lightning Staff" if ability.id == 39011 => "/esoui/art/icons/ability_destructionstaff_003_b.dds".to_string(),
-            _ => ability.icon.clone(),
+        if ability.id == 39011 {
+            update_blockade_ability(ability, &item_type);
         }
     }
     let backup_item_type = get_item_type_from_hashmap(player.gear.main_hand_backup.item_id);
     for ability in &mut player.backup_abilities {
-        ability.icon = match backup_item_type {
-            "Ice Staff" if ability.id == 39011 => "/esoui/art/icons/ability_destructionstaff_002b.dds".to_string(),
-            "Inferno Staff" if ability.id == 39011 => "/esoui/art/icons/ability_destructionstaff_004_b.dds".to_string(),
-            "Lightning Staff" if ability.id == 39011 => "/esoui/art/icons/ability_destructionstaff_003_b.dds".to_string(),
-            _ => ability.icon.clone(),
+        if ability.id == 39011 {
+            update_blockade_ability(ability, &backup_item_type);
         }
     }
 }

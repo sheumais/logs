@@ -89,30 +89,71 @@ pub fn parse_item_types_into_hashmap() -> HashMap<u32, &'static str> {
     item_type_table
 }
 
-pub fn get_item_type_from_hashmap(id: u32) -> &'static str {
-    return ITEM_TYPES.get(&id).cloned().unwrap_or("UNKNOWN");
+#[derive(PartialEq)]
+pub enum ItemType {
+    Axe,
+    Dagger,
+    Mace,
+    Sword,
+    TwoHandedAxe,
+    TwoHandedMace,
+    TwoHandedSword,
+    FrostStaff,
+    FireStaff,
+    LightningStaff,
+    HealingStaff,
+    Shield,
+    Bow,
+    Light,
+    Medium,
+    Heavy,
+    Mara,
+    Unknown,
 }
 
-pub fn get_item_type_name(name: &'static str) -> &'static str {
-    match name {
-        "AXE" => "Axe",
-        "DAGGER" => "Dagger",
-        "MACE" => "Mace",
-        "SWORD" => "Sword",
-        "TWO_HANDED_AXE" => "2H Axe",
-        "TWO_HANDED_MACE" => "2H Maul",
-        "TWO_HANDED_SWORD" => "2H Sword",
-        "FROST_STAFF" => "Ice Staff",
-        "FIRE_STAFF" => "Inferno Staff",
-        "LIGHTNING_STAFF" => "Lightning Staff",
-        "HEALING_STAFF" => "Restoration Staff",
-        "SHIELD" => "Shield",
-        "BOW" => "Bow",
-        "LIGHT" => "Light",
-        "MEDIUM" => "Medium",
-        "HEAVY" => "Heavy",
-        "MARA" => "Ring of Mara",
-        _ => "Unknown",
+pub fn get_item_type_from_hashmap(id: u32) -> ItemType {
+    match ITEM_TYPES.get(&id).map(|s| *s) {
+        Some("AXE") => ItemType::Axe,
+        Some("DAGGER") => ItemType::Dagger,
+        Some("MACE") => ItemType::Mace,
+        Some("SWORD") => ItemType::Sword,
+        Some("TWO_HANDED_AXE") => ItemType::TwoHandedAxe,
+        Some("TWO_HANDED_MACE") => ItemType::TwoHandedMace,
+        Some("TWO_HANDED_SWORD") => ItemType::TwoHandedSword,
+        Some("FROST_STAFF") => ItemType::FrostStaff,
+        Some("FIRE_STAFF") => ItemType::FireStaff,
+        Some("LIGHTNING_STAFF") => ItemType::LightningStaff,
+        Some("HEALING_STAFF") => ItemType::HealingStaff,
+        Some("SHIELD") => ItemType::Shield,
+        Some("BOW") => ItemType::Bow,
+        Some("LIGHT") => ItemType::Light,
+        Some("MEDIUM") => ItemType::Medium,
+        Some("HEAVY") => ItemType::Heavy,
+        Some("MARA") => ItemType::Mara,
+        _ => ItemType::Unknown,
+    }
+}
+
+pub fn get_item_type_name(item_type: ItemType) -> &'static str {
+    match item_type {
+        ItemType::Axe => "Axe",
+        ItemType::Dagger => "Dagger",
+        ItemType::Mace => "Mace",
+        ItemType::Sword => "Sword",
+        ItemType::TwoHandedAxe => "2H Axe",
+        ItemType::TwoHandedMace => "2H Maul",
+        ItemType::TwoHandedSword => "2H Sword",
+        ItemType::FrostStaff => "Ice Staff",
+        ItemType::FireStaff => "Inferno Staff",
+        ItemType::LightningStaff => "Lightning Staff",
+        ItemType::HealingStaff => "Restoration Staff",
+        ItemType::Shield => "Shield",
+        ItemType::Bow => "Bow",
+        ItemType::Light => "Light",
+        ItemType::Medium => "Medium",
+        ItemType::Heavy => "Heavy",
+        ItemType::Mara => "Ring of Mara",
+        ItemType::Unknown => "Unknown",
     }
 }
 

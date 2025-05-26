@@ -7,6 +7,7 @@ pub struct Log {
     pub players: HashMap<u32, crate::player::Player>,
     pub units: HashMap<u32, crate::unit::Unit>,
     pub fights: Vec<crate::fight::Fight>,
+    pub abilities: HashMap<u32, crate::effect::Ability>,
     pub effects: HashMap<u32, crate::effect::Effect>,
 }
 
@@ -17,6 +18,7 @@ impl Log {
             players: HashMap::new(),
             units: HashMap::new(),
             fights: Vec::new(),
+            abilities: HashMap::new(),
             effects: HashMap::new(),
         };
 
@@ -48,6 +50,18 @@ impl Log {
         }
     }
 
+    pub fn get_player_by_id(&mut self, id: u32) -> Option<&mut crate::player::Player> {
+        self.players.get_mut(&id)
+    }
+
+    pub fn get_unit_by_id(&mut self, id: u32) -> Option<&mut crate::unit::Unit> {
+        self.units.get_mut(&id)
+    }
+
+    pub fn get_ability_by_id(&mut self, id: u32) -> Option<&mut crate::effect::Ability> {
+        self.abilities.get_mut(&id)
+    }
+
     pub fn is_empty(&mut self) -> bool {
         self.fights.is_empty()
     }
@@ -64,7 +78,7 @@ impl Log {
         self.log_epoch = parts[2].parse::<i64>().unwrap();
         let log_version = parts[3];
         if log_version != "15" {
-            panic!("Unknown log version: {} (Expected 15)", log_version);
+            println!("Unknown log version: {} (Expected 15)", log_version);
         }
     }
 
@@ -75,7 +89,7 @@ impl Log {
             let name = parts[10].to_string();
             let player_per_session_id: u32 = parts[5].parse::<u32>().unwrap();
             if display_name != "" {
-                let mut player = crate::player::Player {
+                let player = crate::player::Player {
                     unit_id: unit_id,
                     is_local_player: Self::is_true(parts[4]),
                     player_per_session_id: player_per_session_id,
@@ -93,7 +107,6 @@ impl Log {
                     primary_abilities: Vec::new(),
                     backup_abilities: Vec::new(),
                 };
-                crate::effect::determine_icon_by_staff_type(&mut player);
                 self.players.insert(unit_id, player);
             }
         } else if parts[3] == "MONSTER" {
@@ -179,41 +192,72 @@ impl Log {
     // 3597,PLAYER_INFO,1,[142079,78219,72824,150054,147459,46751,39248,35770,46041,33090,70390,117848,45301,63802,13984,34741,61930,135397,203342,215493,122586,120017,61685,120023,61662,120028,61691,120029,61666,120008,61744,120015,109966,177885,147417,93109,120020,88490,120021,120025,120013,61747,177886,120024,120026],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[[HEAD,185032,T,8,ARMOR_PROSPEROUS,ARCANE,640,INVALID,F,0,NORMAL],[NECK,171437,T,16,JEWELRY_ARCANE,LEGENDARY,576,INCREASE_BASH_DAMAGE,F,35,ARCANE],[CHEST,45095,T,16,ARMOR_REINFORCED,LEGENDARY,0,PRISMATIC_DEFENSE,F,5,LEGENDARY],[SHOULDERS,56058,F,12,ARMOR_NIRNHONED,MAGIC,0,INVALID,F,0,NORMAL],[OFF_HAND,184873,T,6,ARMOR_DIVINES,ARCANE,640,INVALID,F,0,NORMAL],[WAIST,184888,F,1,ARMOR_DIVINES,NORMAL,640,INVALID,F,0,NORMAL],[LEGS,45169,T,1,ARMOR_TRAINING,ARCANE,0,MAGICKA,F,35,MAGIC],[FEET,45061,F,50,ARMOR_IMPENETRABLE,ARTIFACT,0,MAGICKA,F,35,ARCANE],[COSTUME,55262,F,1,NONE,ARCANE,0,INVALID,F,0,NORMAL],[RING1,139657,F,1,JEWELRY_BLOODTHIRSTY,ARTIFACT,0,INVALID,F,0,NORMAL],[RING2,44904,F,0,NONE,LEGENDARY,0,INVALID,F,0,NORMAL],[BACKUP_POISON,79690,F,1,NONE,LEGENDARY,0,INVALID,F,0,NORMAL],[HAND,185058,F,28,ARMOR_STURDY,NORMAL,640,HEALTH,F,30,NORMAL],[BACKUP_MAIN,185007,T,12,WEAPON_CHARGED,MAGIC,640,DAMAGE_SHIELD,F,35,ARTIFACT],[BACKUP_OFF,184897,T,12,WEAPON_PRECISE,NORMAL,640,FROZEN_WEAPON,F,35,ARCANE]],[25267,61919,34843,36901,25380,113105],[36935,35419,61507,34727,36028]
     fn handle_player_info(&mut self, parts: Vec<&str>) {
         let unit_id: u32 = parts[2].parse::<u32>().unwrap();
-        let effect_id_list: Vec<u32> = parts[3].split(",").map(|x| x.parse::<u32>().unwrap()).collect();
-        for (_i, effect_id) in effect_id_list.iter().enumerate() {
-            if let Some(player) = self.players.get_mut(&unit_id) {
-                // check if player has effect already
-                if !player.effects.contains(effect_id) {
-                    player.effects.push(*effect_id);
+        let primary_ability_id_list: Vec<u32> = parts[parts.len() - 2].split(',').map(|x| x.parse::<u32>().unwrap_or_default()).collect();
+        let backup_ability_id_list: Vec<u32> = parts[parts.len() - 1].split(',').map(|x| x.parse::<u32>().unwrap_or_default()).collect();
+        let primary_abilities_to_add: Vec<_> = primary_ability_id_list.iter().filter_map(|id| self.abilities.get(id).cloned()).collect();
+        let backup_abilities_to_add: Vec<_> = backup_ability_id_list.iter().filter_map(|id| self.abilities.get(id).cloned()).collect();
+
+        if let Some(player) = self.get_player_by_id(unit_id) {
+            for ability in primary_abilities_to_add {
+                if !player.primary_abilities.iter().any(|a| a.id == ability.id) {
+                    player.primary_abilities.push(ability);
+                }
+            }
+            for ability in backup_abilities_to_add {
+                if !player.primary_abilities.iter().any(|a| a.id == ability.id) {
+                    player.primary_abilities.push(ability);
                 }
             }
         }
 
-        let gear_parts = parts.len() - 2;
-        for i in 5..gear_parts {
-            let gear_piece = self.handle_equipment_info(parts[i]);
-            if let Some(player) = self.players.get_mut(&unit_id) {
-                player.insert_gear_piece(gear_piece);
-            }
-        }
+        let get_ability_from_player = |id: &u32, player: &crate::player::Player| {
+            player.primary_abilities.iter()
+                .find(|a| a.id == *id)
+                .cloned()
+                .or_else(|| self.abilities.get(id).cloned())
+        };
 
-        let primary_ability_id_list: Vec<u32> = parts[parts.len() - 2].split(",").map(|x| x.parse::<u32>().unwrap_or_default()).collect();
-        let backup_ability_id_list: Vec<u32> = parts[parts.len() - 1].split(",").map(|x| x.parse::<u32>().unwrap_or_default()).collect();
-        if let Some(player) = self.players.get_mut(&unit_id) {
-            for id in primary_ability_id_list {
-                if let Some(effect) = self.effects.get(&id) {
-                    player.primary_abilities.push(effect.clone());
+        // Get ability from global player to keep scribing scripts
+        let (primary_abilities_to_add, backup_abilities_to_add) = if let Some(global_player) = self.players.get(&unit_id) {(
+                primary_ability_id_list.iter().filter_map(|id| get_ability_from_player(id, global_player)).collect::<Vec<_>>(),
+                backup_ability_id_list.iter().filter_map(|id| get_ability_from_player(id, global_player)).collect::<Vec<_>>()
+            )} else {( // else grab it from global ability table if it doesn't exist there
+                primary_ability_id_list.iter().filter_map(|id| self.abilities.get(id).cloned()).collect::<Vec<_>>(),
+                backup_ability_id_list.iter().filter_map(|id| self.abilities.get(id).cloned()).collect::<Vec<_>>()
+            )
+        };
+
+        if let Some(fight) = self.get_current_fight() {
+            let effect_id_list: Vec<u32> = parts[3].split(',').map(|x| x.parse::<u32>().unwrap()).collect();
+            if let Some(player) = fight.players.iter_mut().find(|p| p.unit_id == unit_id) {
+                // Add effects if not already present
+                for effect_id in &effect_id_list {
+                    if !player.effects.contains(effect_id) {
+                        player.effects.push(*effect_id);
+                    }
                 }
-            }
-            for id in backup_ability_id_list {
-                if let Some(effect) = self.effects.get(&id) {
-                    player.backup_abilities.push(effect.clone());
+
+                let gear_parts = parts.len() - 2;
+                for i in 5..gear_parts {
+                    let gear_piece = Self::handle_equipment_info(parts[i]);
+                    player.insert_gear_piece(gear_piece);
                 }
+
+                player.primary_abilities.clear();
+                player.backup_abilities.clear();
+
+                for ability in primary_abilities_to_add {
+                    player.primary_abilities.push(ability);
+                }
+                for ability in backup_abilities_to_add {
+                    player.backup_abilities.push(ability);
+                }
+                crate::effect::destruction_staff_skill_convert(player);
             }
         }
     }
 
-    fn handle_equipment_info(&mut self, part: &str) -> crate::player::GearPiece {
+    fn handle_equipment_info(part: &str) -> crate::player::GearPiece {
         let split: Vec<&str> = part.split(",").collect();
         // check all enums for none values, and print what they are
         if crate::player::match_gear_slot(split[0]) == crate::player::GearSlot::None {
@@ -222,7 +266,7 @@ impl Log {
         }
         if crate::player::match_gear_trait(split[4]) == crate::player::GearTrait::None && split[4] != "NONE" {
             println!("Unknown gear trait: {}", split[4]);
-            println!("{}", part);
+            // println!("{}", part);
         }
         if crate::player::match_gear_quality(split[5]) == crate::player::GearQuality::None {
             println!("Unknown gear quality: {}", split[5]);
@@ -253,16 +297,12 @@ impl Log {
     fn handle_ability_info(&mut self, parts: Vec<&str>) {
         let effect_id: u32 = parts[2].parse::<u32>().unwrap(); // abilityId usually unique, but can be reused for scribing abilities
         let name = parts[3].trim_matches('"').to_string();
-        let effect = crate::effect::Effect {
+        let ability = crate::effect::Ability {
                 id: effect_id,
                 name: name,
                 icon: parts[4].trim_matches('"').to_string(),
                 interruptible: Self::is_true(parts[5]),
                 blockable: Self::is_true(parts[6]),
-                stack_count: 0,
-                effect_type: crate::effect::EffectType::None,
-                status_effect_type: crate::effect::StatusEffectType::None,
-                synergy: None,
                 scribing: if parts.len() == 10 {
                     let mut scribing = Vec::new();
                     for i in 7..10 {
@@ -273,17 +313,22 @@ impl Log {
                     None
                 },
             };
-        self.effects.insert(effect_id, effect);
+        self.abilities.insert(effect_id, ability);
     }
 
+    //360508,ABILITY_INFO,26874,"Blazing Spear","/esoui/art/icons/ability_templar_sun_strike.dds",F,T
+    //360508,EFFECT_INFO,26874,BUFF,NONE,NEVER,26832
     fn handle_effect_info(&mut self, parts: Vec<&str>) {
         let effect_id: u32 = parts[2].parse::<u32>().unwrap();
-        let effect = self.effects.get_mut(&effect_id).unwrap();
-        effect.effect_type = crate::effect::parse_effect_type(parts[3]);
-        effect.status_effect_type = crate::effect::parse_status_effect_type(parts[4]);
-        if parts.len() > 6 {
-            effect.synergy = parts[6].parse::<u32>().ok();
-        }
+        let ability = self.abilities.get(&effect_id).unwrap().clone();
+        let effect = crate::effect::Effect {
+            ability: ability,
+            stack_count: 0,
+            effect_type: crate::effect::parse_effect_type(parts[3]),
+            status_effect_type: crate::effect::parse_status_effect_type(parts[4]),
+            synergy: if parts.len() > 6 {parts[6].parse::<u32>().ok()} else {None},
+        };
+        self.effects.insert(effect_id, effect);
     }
     
     fn parse_unit_state(&mut self, parts: Vec<&str>, start_index: usize) -> crate::unit::UnitState {

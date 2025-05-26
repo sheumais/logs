@@ -1,4 +1,4 @@
-use crate::{effect::Effect, unit::UnitState};
+use crate::{effect::Ability, unit::UnitState};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Player {
@@ -16,8 +16,8 @@ pub struct Player {
     pub unit_state: UnitState,
     pub effects: Vec<u32>,
     pub gear: Loadout,
-    pub primary_abilities: Vec<Effect>,
-    pub backup_abilities: Vec<Effect>,
+    pub primary_abilities: Vec<Ability>,
+    pub backup_abilities: Vec<Ability>,
 }
 
 #[derive(Debug, PartialEq, Clone)]

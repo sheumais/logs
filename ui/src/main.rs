@@ -81,7 +81,7 @@ fn main() {
         let log_analysis = &logs[0];
 
         if query_id != 0 {
-            for (_index, effect) in &log_analysis.effects {
+            for (_index, effect) in &log_analysis.abilities {
                 if effect.id == query_id {
                     effect_name = effect.name.clone();
                 }
@@ -100,36 +100,36 @@ fn main() {
                             println!("-------------------");
                             let name = foreground_rgb(&player.display_name, Colour::from_class_id(player.class_id));
                             println!("{}\n{}", name, player.gear);
-                            // for skill in &player.primary_abilities {
-                            //     if skill.scribing.is_some() {
-                            //         println!("{:?}", skill);
-                            //     }
-                            // }
-                            // for skill in &player.backup_abilities {
-                            //     if skill.scribing.is_some() {
-                            //         println!("{:?}", skill);
-                            //     }
-                            // }
+                            for skill in &player.primary_abilities {
+                                // if skill.scribing.is_some() {
+                                    println!("{:?}", skill);
+                                // }
+                            }
+                            for skill in &player.backup_abilities {
+                                // if skill.scribing.is_some() {
+                                    println!("{:?}", skill);
+                                // }
+                            }
                         }
                     }
                 }
-                for (_, player) in log.players {
-                    if player.gear != parser::player::empty_loadout() {
-                        println!("-------------------");
-                        let name = foreground_rgb(&player.display_name, Colour::from_class_id(player.class_id));
-                        println!("{}\n{}", name, player.gear);
-                        // for skill in &player.primary_abilities {
-                        //     if skill.scribing.is_some() {
-                        //         println!("{:?}", skill);
-                        //     }
-                        // }
-                        // for skill in &player.backup_abilities {
-                        //     if skill.scribing.is_some() {
-                        //         println!("{:?}", skill);
-                        //     }
-                        // }
-                    }
-                }
+                // for (_, player) in log.players {
+                //     if player.gear != parser::player::empty_loadout() {
+                //         println!("-------------------");
+                //         let name = foreground_rgb(&player.display_name, Colour::from_class_id(player.class_id));
+                //         println!("{}\n{}", name, player.gear);
+                //         for skill in &player.primary_abilities {
+                //             // if skill.scribing.is_some() {
+                //                 println!("{:?}", skill);
+                //             // }
+                //         }
+                //         for skill in &player.backup_abilities {
+                //             // if skill.scribing.is_some() {
+                //                 println!("{:?}", skill);
+                //             // }
+                //         }
+                //     }
+                // }
             }
         }
     } 
