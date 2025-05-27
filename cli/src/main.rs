@@ -1,10 +1,11 @@
 use std::env;
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
+use std::path::Path;
 use parser::ui::*;
 use parser::log::Log;
 
-fn read_file(file_path: &str) -> io::Result<Vec<Log>> {
+pub fn read_file(file_path: &Path) -> io::Result<Vec<Log>> {
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);
     let mut lines = reader.lines().peekable();
@@ -75,7 +76,7 @@ fn main() {
     if query == "colours" {
         print_colour_test();
     } else {
-        let logs = read_file(file_path).unwrap();
+        let logs = read_file(Path::new(file_path)).unwrap();
         if query == "fights" {
             for log in logs {
                 for fight in log.fights {
