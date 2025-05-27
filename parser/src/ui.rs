@@ -1,4 +1,4 @@
-use crate::{event::DamageType, player::{self, ClassId, EnchantType, GearEnchant, GearPiece, GearQuality, GearSlot, GearTrait, Loadout}};
+use crate::{event::DamageType, player::{self, ClassId, EnchantType, GearEnchant, GearPiece, GearQuality, GearTrait, Loadout}};
 use std::fmt;
 use crate::set;
 
@@ -152,23 +152,6 @@ pub fn print_colour_test() {
         let output = foreground_rgb(&colour_name, colour);
         println!("{}", output);
     }
-
-    let gear_piece = GearPiece {
-        slot: GearSlot::Necklace,
-        item_id: 123456,
-        is_cp: true,
-        level: 14,
-        gear_trait: GearTrait::Bloodthirsty,
-        quality: GearQuality::Artifact,
-        set_id: 650,
-        enchant: GearEnchant {
-            enchant_type: EnchantType::IncreasePhysicalDamage,
-            is_cp: false,
-            enchant_level: 50,
-            enchant_quality: GearQuality::Legendary,
-        },
-    };
-    println!("{}", gear_piece);
 }
 
 

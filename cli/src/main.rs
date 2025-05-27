@@ -76,23 +76,25 @@ fn main() {
         print_colour_test();
     } else {
         let logs = read_file(file_path).unwrap();
-        let query_id: u32 = query.parse::<u32>().unwrap_or(0);
-        let mut effect_name = "Unknown".to_string();
-        let log_analysis = &logs[0];
-
-        if query_id != 0 {
-            for (_index, effect) in &log_analysis.abilities {
-                if effect.id == query_id {
-                    effect_name = effect.name.clone();
+        if query == "fights" {
+            for log in logs {
+                for fight in log.fights {
+                    let duration_secs = (fight.end_time - fight.start_time) / 1000;
+                    let minutes = duration_secs / 60;
+                    let seconds = duration_secs % 60;
+                    let boss_health_opt = fight.get_average_boss_health_percentage();
+                    if let Some(boss_health) = boss_health_opt {
+                        if boss_health == 0.0 {
+                            println!("{:2} - {} ({}:{:02}) KILL", fight.id, fight.name, minutes, seconds);
+                        } else {
+                            println!("{:2} - {} ({}:{:02}) {:.0}%", fight.id, fight.name, minutes, seconds, boss_health);
+                        }
+                    } else {
+                        println!("{:2} - {} ({}:{:02})", fight.id, fight.name, minutes, seconds);
+                    }
                 }
             }
-            
-            println!("Uptime of {}", effect_name);
-            for fight in &log_analysis.fights {
-                let uptime = parser::effect::buff_uptime_over_fight(query_id, 1, fight);
-                println!("{:.2}%", 100.0 * uptime);
-            };
-        } else {
+        } else if query == "gear" {
             for log in logs {
                 for fight in log.fights {
                     for player in &fight.players {
@@ -100,36 +102,32 @@ fn main() {
                             println!("-------------------");
                             let name = foreground_rgb(&player.display_name, Colour::from_class_id(player.class_id));
                             println!("{}\n{}", name, player.gear);
-                            for skill in &player.primary_abilities {
-                                // if skill.scribing.is_some() {
-                                    println!("{:?}", skill);
-                                // }
-                            }
-                            for skill in &player.backup_abilities {
-                                // if skill.scribing.is_some() {
-                                    println!("{:?}", skill);
-                                // }
+                            for skill_set in [&player.primary_abilities, &player.backup_abilities] {
+                                for ability in skill_set {
+                                    println!("{:?}", ability);
+                                }
                             }
                         }
                     }
                 }
-                // for (_, player) in log.players {
-                //     if player.gear != parser::player::empty_loadout() {
-                //         println!("-------------------");
-                //         let name = foreground_rgb(&player.display_name, Colour::from_class_id(player.class_id));
-                //         println!("{}\n{}", name, player.gear);
-                //         for skill in &player.primary_abilities {
-                //             // if skill.scribing.is_some() {
-                //                 println!("{:?}", skill);
-                //             // }
-                //         }
-                //         for skill in &player.backup_abilities {
-                //             // if skill.scribing.is_some() {
-                //                 println!("{:?}", skill);
-                //             // }
-                //         }
-                //     }
-                // }
+            }
+        } else {
+            let query_id: u32 = query.parse::<u32>().unwrap_or(0);
+            let mut effect_name = "Unknown".to_string();
+            let log_analysis = &logs[0];
+
+            if query_id != 0 {
+                for (_index, effect) in &log_analysis.abilities {
+                    if effect.id == query_id {
+                        effect_name = effect.name.clone();
+                    }
+                }
+                
+                println!("Uptime of {}", effect_name);
+                for fight in &log_analysis.fights {
+                    let uptime = parser::effect::buff_uptime_over_fight(query_id, 1, fight);
+                    println!("{:.2}%", 100.0 * uptime);
+                };
             }
         }
     } 

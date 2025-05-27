@@ -1,11 +1,11 @@
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum UnitType {
     Monster,
     Object,
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Reaction {
     PlayerAlly,
     NpcAlly,
@@ -64,7 +64,7 @@ pub fn blank_unit_state() -> UnitState {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Unit {
     pub unit_id: u32,
     pub unit_type: UnitType,

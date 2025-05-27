@@ -62,10 +62,18 @@ impl Log {
         self.abilities.get_mut(&id)
     }
 
+    pub fn get_readonly_unit_by_id(&self, id: u32) -> Option<&crate::unit::Unit> {
+        self.units.get(&id)
+    }
+
     pub fn is_empty(&mut self) -> bool {
         self.fights.is_empty()
     }
     
+    fn get_current_fight_readonly(&self) -> Option<&crate::fight::Fight> {
+        self.fights.last().filter(|fight| fight.end_time == 0)
+    }
+
     fn get_current_fight(&mut self) -> Option<&mut crate::fight::Fight> {
         self.fights.last_mut().filter(|fight| fight.end_time == 0)
     }
@@ -147,7 +155,7 @@ impl Log {
         if parts[1] == "BEGIN_COMBAT" {
             let mut new_fight = crate::fight::Fight {
                 id: self.fights.len() as u16,
-                name: String::new(),
+                name: "Unknown".to_string(),
                 players: Vec::new(),
                 monsters: Vec::new(),
                 start_time: parts[0].parse::<u64>().unwrap(),
@@ -161,30 +169,46 @@ impl Log {
             }
             self.fights.push(new_fight);
         } else if parts[1] == "END_COMBAT" {
-            let fight_name = {
-                let mut name = "Unknown";
-                if let Some(fight) = self.get_current_fight() {
-                    let mut unit_ids = Vec::new();
-                    for event in &fight.events {
-                        if crate::event::is_damage_event(event.result) {
-                            unit_ids.push(event.target_unit_state.unit_id);
-                        }
+            if let Some(fight) = self.get_current_fight_readonly() {
+                let mut candidate_ids = Vec::new();
+                let mut max_hp_seen: u32 = 0;
+                let mut max_hp_id: u32 = 0;
+                for event in &fight.events {
+                    let unit_id = event.target_unit_state.unit_id;
+                    if !candidate_ids.contains(&unit_id) {
+                        candidate_ids.push(unit_id);
                     }
-                    for unit_id in unit_ids {
-                        if let Some(unit) = self.units.get(&unit_id) {
-                            if unit.unit_type == crate::unit::UnitType::Monster {
-                                name = &unit.name;
-                                break;
-                            }
-                        }
+                    if event.target_unit_state.max_health > max_hp_seen {
+                        max_hp_seen = event.target_unit_state.max_health;
+                        max_hp_id = unit_id;
                     }
                 }
-                name.to_string()
-            };
-        
+                // Move candidate_ids and max_hp_id out of the mutable borrow scope
+                let candidate_ids_cloned = candidate_ids.clone();
+                let max_hp_id_cloned = max_hp_id;
+
+                // Now borrow self.units
+                let candidate_units: Vec<_> = candidate_ids_cloned.iter()
+                    .filter_map(|id| self.units.get(id))
+                    .collect();
+                let boss_name = candidate_units.iter()
+                    .find(|unit| unit.is_boss)
+                    .map(|boss| boss.name.to_string());
+                let unit_name = self
+                    .get_readonly_unit_by_id(max_hp_id_cloned)
+                    .map(|unit| unit.name.to_string())
+                    .unwrap_or_else(|| "Default".to_string());
+                // Re-borrow fight as mutable to set the name
+                if let Some(fight) = self.get_current_fight() {
+                    fight.name = if let Some(name) = boss_name {
+                        name
+                    } else {
+                        unit_name
+                    }
+                }
+            }
             if let Some(fight) = self.get_current_fight() {
                 fight.end_time = parts[0].parse::<u64>().unwrap();
-                fight.name = fight_name;
             }
         }
     }
@@ -221,7 +245,7 @@ impl Log {
         let (primary_abilities_to_add, backup_abilities_to_add) = if let Some(global_player) = self.players.get(&unit_id) {(
                 primary_ability_id_list.iter().filter_map(|id| get_ability_from_player(id, global_player)).collect::<Vec<_>>(),
                 backup_ability_id_list.iter().filter_map(|id| get_ability_from_player(id, global_player)).collect::<Vec<_>>()
-            )} else {( // else grab it from global ability table if it doesn't exist there
+            )} else {( // else grab it from global ability table
                 primary_ability_id_list.iter().filter_map(|id| self.abilities.get(id).cloned()).collect::<Vec<_>>(),
                 backup_ability_id_list.iter().filter_map(|id| self.abilities.get(id).cloned()).collect::<Vec<_>>()
             )
@@ -384,8 +408,22 @@ impl Log {
             target_unit_state: target_unit_state,
         };
 
+        let mut monster_units = Vec::new();
+        for unit_state in [&source_unit_state, &target_unit_state] {
+            if let Some(unit) = self.units.get(&unit_state.unit_id) {
+                if unit.unit_type == crate::unit::UnitType::Monster {
+                    monster_units.push(unit.clone());
+                }
+            }
+        }
+
         if let Some(fight) = self.get_current_fight() {
             fight.events.push(event);
+            for unit in monster_units {
+                if !fight.monsters.iter().any(|m| m.unit_id == unit.unit_id) {
+                    fight.monsters.push(unit);
+                }
+            }
         }
     }
 

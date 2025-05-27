@@ -173,7 +173,7 @@ pub fn is_zen_dot(effect: &Effect) -> bool {
 /// Calculate percentage of fight that unit had buff
 /// 
 /// Returns float with value 0 to 1
-pub fn buff_uptime_over_fight(buff_id: u32, unit_id: u32, fight: &Fight) -> f32{
+pub fn buff_uptime_over_fight(buff_id: u32, unit_id: u32, fight: &Fight) -> f32 {
     let mut time_with_buff = 0;
     let mut gained_buff_timestamp = fight.start_time;
     let mut has_buff: bool = false;
