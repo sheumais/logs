@@ -324,7 +324,7 @@ impl Log {
         let ability = crate::effect::Ability {
                 id: effect_id,
                 name: name,
-                icon: parts[4].trim_matches('"').to_string(),
+                icon: parts[4].trim_matches('"').split('/').last().unwrap().replace(".dds", ".png").to_string(),
                 interruptible: Self::is_true(parts[5]),
                 blockable: Self::is_true(parts[6]),
                 scribing: if parts.len() == 10 {

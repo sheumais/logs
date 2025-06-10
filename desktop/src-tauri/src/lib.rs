@@ -1,7 +1,7 @@
 use std::{fs::File, io::{self, BufRead, BufReader}, path::{Path, PathBuf}};
-use parser::log::Log;
+use parser::{effect::Effect, log::Log};
 use state::AppState;
-use tauri::{Manager, State};
+use tauri::{path::BaseDirectory, Manager, State};
 mod state;
 
 
@@ -69,8 +69,8 @@ pub fn read_file(file_path: &Path) -> io::Result<Vec<Log>> {
     Ok(logs)
 }
 
-pub fn load_file(path: String, state: State<'_, AppState>) -> Result<(), String> {
-    let logs = crate::read_file(&PathBuf::from(path)).map_err(|e| e.to_string())?;
+pub fn load_file(path: PathBuf, state: State<'_, AppState>) -> Result<(), String> {
+    let logs = crate::read_file(&path).map_err(|e| e.to_string())?;
 
     let mut stored_logs = state.logs.write().map_err(|e| e.to_string())?;
     *stored_logs = Some(logs);
@@ -105,6 +105,21 @@ fn query_fights(state: State<'_, AppState>) -> Result<Vec<String>, String> {
     Ok(output)
 }
 
+#[tauri::command]
+fn query_effects(state: State<'_, AppState>) -> Result<Vec<Effect>, String> {
+    let stored_logs = state.logs.read().map_err(|e| e.to_string())?;
+    let logs = stored_logs.as_ref().ok_or("No logs loaded")?;
+
+    let mut effects = Vec::new();
+    for log in logs {
+        for (_, effect) in &log.effects {
+            effects.push(effect.clone());
+        }
+    }
+
+    Ok(effects)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -112,11 +127,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let state: State<AppState> = app.state::<AppState>();
-
-            // Provide the path to your file here
-            let default_path = "C:/Users/H/Documents/Elder Scrolls Online/live/Logs/Encounter.log".to_string();
-
-            // Try loading the file into state
+            let default_path = app.path().resolve("Elder Scrolls Online/live/logs/Encounter.log", BaseDirectory::Document).unwrap();
             if let Err(e) = load_file(default_path, state) {
                 println!("Failed to load log file on startup: {}", e);
             }
@@ -125,6 +136,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             query_fights,
+            query_effects,
             ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 use crate::{fight::Fight, player::Player, set::get_item_type_from_hashmap, unit::UnitState};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Ability {
     pub id: u32,
     pub name: String,
@@ -10,7 +12,7 @@ pub struct Ability {
     pub scribing: Option<Vec<String>>
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Effect {
     pub ability: Ability,
     pub stack_count: u16,
@@ -48,7 +50,7 @@ pub fn parse_effect_change_type(string: &str) -> EffectChangeType {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum EffectType {
     Buff,
     Debuff,
@@ -63,7 +65,7 @@ pub fn parse_effect_type(string: &str) -> EffectType {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub enum StatusEffectType {
     Magic,
     None,
