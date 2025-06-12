@@ -5,6 +5,9 @@ use std::path::Path;
 use parser::ui::*;
 use parser::log::Log;
 
+use crate::log_edit::modify_log_file;
+pub mod log_edit;
+
 pub fn read_file(file_path: &Path) -> io::Result<Vec<Log>> {
     let file = File::open(file_path)?;
     let reader = BufReader::new(file);
@@ -73,11 +76,17 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let (file_path, query) = parse_config(&args);
 
-    if query == "colours" {
-        print_colour_test();
-    } else {
-        let logs = read_file(Path::new(file_path)).unwrap();
-        if query == "fights" {
+    match query {
+        "colours" => {
+            print_colour_test();
+        }
+        "modify" => {
+            if let Err(e) = modify_log_file(Path::new(file_path)) {
+                eprintln!("Error modifying log file: {}", e);
+            }
+        }
+        "fights" => {
+            let logs = read_file(Path::new(file_path)).unwrap();
             for log in logs {
                 for fight in log.fights {
                     let duration_secs = (fight.end_time - fight.start_time) / 1000;
@@ -95,7 +104,9 @@ fn main() {
                     }
                 }
             }
-        } else if query == "gear" {
+        }
+        "gear" => {
+            let logs = read_file(Path::new(file_path)).unwrap();
             for log in logs {
                 for fight in log.fights {
                     for player in &fight.players {
@@ -112,7 +123,9 @@ fn main() {
                     }
                 }
             }
-        } else {
+        }
+        _ => {
+            let logs = read_file(Path::new(file_path)).unwrap();
             let query_id: u32 = query.parse::<u32>().unwrap_or(0);
             let mut effect_name = "Unknown".to_string();
             let log_analysis = &logs[0];
@@ -131,7 +144,7 @@ fn main() {
                 };
             }
         }
-    } 
+    }
 }
 
 fn parse_config(args: &[String]) -> (&str, &str) {
