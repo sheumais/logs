@@ -80,7 +80,7 @@ pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn check_line_for_edits(parts: Vec<&str>) -> Option<Vec<String>> {
+pub fn check_line_for_edits(parts: Vec<&str>) -> Option<Vec<String>> {
     match parts[1] {
         "EFFECT_CHANGED" => add_arcanist_beam_cast(parts),
         "ABILITY_INFO" => add_arcanist_beam_information(parts),
@@ -118,10 +118,10 @@ fn add_arcanist_beam_cast(parts: Vec<&str>) -> Option<Vec<String>> {
 fn add_arcanist_beam_information(parts: Vec<&str>) -> Option<Vec<String>> {
     let mut lines = Vec::new();
     if parts[2] == PRAGMATIC {
-        lines.push(format!("{},{},{},{},{},{},{}", parts[0], parts[1], PRAGMATIC, "\"Pragmatic Fatecarver\"", "/esoui/art/icons/ability_arcanist_002_b.dds", "F", "T"));
+        lines.push(format!("{},{},{},{},{},{},{}", parts[0], parts[1], PRAGMATIC, parts[3], "\"/esoui/art/icons/ability_arcanist_002_b.dds\"", "F", "T"));
         return Some(lines);
     } else if parts[2] == EXHAUSTING {
-        lines.push(format!("{},{},{},{},{},{},{}", parts[0], parts[1], EXHAUSTING, "\"Exhausting Fatecarver\"", "\"/esoui/art/icons/ability_arcanist_002_a.dds\"", "F", "T"));
+        lines.push(format!("{},{},{},{},{},{},{}", parts[0], parts[1], EXHAUSTING, parts[3], "\"/esoui/art/icons/ability_arcanist_002_a.dds\"", "F", "T"));
         return Some(lines);
     }
     return None;

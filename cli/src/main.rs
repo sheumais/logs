@@ -1,76 +1,8 @@
 use std::env;
-use std::fs::File;
-use std::io::{self, prelude::*, BufReader};
 use std::path::Path;
+use cli::log_edit::modify_log_file;
+use cli::read_file;
 use parser::ui::*;
-use parser::log::Log;
-
-use crate::log_edit::modify_log_file;
-pub mod log_edit;
-
-pub fn read_file(file_path: &Path) -> io::Result<Vec<Log>> {
-    let file = File::open(file_path)?;
-    let reader = BufReader::new(file);
-    let mut lines = reader.lines().peekable();
-
-    let mut logs = Vec::new();
-    let mut current_log = Log::new();
-
-    while let Some(line) = lines.next() {
-        let line = line?;
-        let mut in_brackets = false;
-        let mut current_segment_start = 0;
-        let mut parts = Vec::new();
-    
-        for (i, char) in line.char_indices() {
-            match char {
-                '[' => {
-                    in_brackets = true;
-                    current_segment_start = i + 1;
-                }
-                ']' => {
-                    in_brackets = false;
-                    parts.push(&line[current_segment_start..i]);
-                    current_segment_start = i + 1;
-                }
-                ',' if !in_brackets => {
-                    parts.push(&line[current_segment_start..i]);
-                    current_segment_start = i + 1; 
-                }
-                _ => {}
-            }
-        }
-    
-        if current_segment_start < line.len() {
-            parts.push(&line[current_segment_start..]);
-        }
-        parts.retain(|part| !part.is_empty());
-        let second_value = parts[1];
-
-        match second_value {
-            "BEGIN_LOG" => {
-                if !current_log.is_empty() {
-                    logs.push(current_log);
-                }
-                current_log = Log::new();
-                current_log.parse_line(parts);
-            }
-            "END_LOG" => {
-                logs.push(current_log);
-                current_log = Log::new();
-            }
-            _ => {
-                current_log.parse_line(parts);
-            }
-        }
-    }
-
-    if !current_log.is_empty() {
-        logs.push(current_log);
-    }
-
-    Ok(logs)
-}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -128,7 +60,7 @@ fn main() {
             let logs = read_file(Path::new(file_path)).unwrap();
             let query_id: u32 = query.parse::<u32>().unwrap_or(0);
             let mut effect_name = "Unknown".to_string();
-            let log_analysis = &logs[0];
+            let log_analysis = &logs[2];
 
             if query_id != 0 {
                 for (_index, effect) in &log_analysis.abilities {
@@ -139,8 +71,10 @@ fn main() {
                 
                 println!("Uptime of {}", effect_name);
                 for fight in &log_analysis.fights {
-                    let uptime = parser::effect::buff_uptime_over_fight(query_id, 1, fight);
-                    println!("{:.2}%", 100.0 * uptime);
+                    for player in fight.players.iter() {
+                        let uptime = parser::effect::buff_uptime_over_fight(query_id, player.unit_id, fight);
+                        println!("{} {} {:.2}%", fight.name, player.display_name, 100.0 * uptime);
+                    }
                 };
             }
         }

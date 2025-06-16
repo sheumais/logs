@@ -5,7 +5,7 @@
   "identifier": "com.esologtool.app",
   "build": {
     "beforeDevCommand": "trunk serve",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:8080",
     "beforeBuildCommand": "trunk build",
     "frontendDist": "../dist"
   },
@@ -14,8 +14,8 @@
     "windows": [
       {
         "title": "ESO Log Tool",
-        "width": 800,
-        "height": 600
+        "width": 960,
+        "height": 540
       }
     ],
     "security": {

@@ -65,10 +65,6 @@ impl Log {
     pub fn get_readonly_unit_by_id(&self, id: u32) -> Option<&crate::unit::Unit> {
         self.units.get(&id)
     }
-
-    pub fn is_empty(&mut self) -> bool {
-        self.fights.is_empty()
-    }
     
     fn get_current_fight_readonly(&self) -> Option<&crate::fight::Fight> {
         self.fights.last().filter(|fight| fight.end_time == 0)
@@ -183,11 +179,11 @@ impl Log {
                         max_hp_id = unit_id;
                     }
                 }
-                // Move candidate_ids and max_hp_id out of the mutable borrow scope
+
                 let candidate_ids_cloned = candidate_ids.clone();
                 let max_hp_id_cloned = max_hp_id;
 
-                // Now borrow self.units
+
                 let candidate_units: Vec<_> = candidate_ids_cloned.iter()
                     .filter_map(|id| self.units.get(id))
                     .collect();
@@ -197,8 +193,8 @@ impl Log {
                 let unit_name = self
                     .get_readonly_unit_by_id(max_hp_id_cloned)
                     .map(|unit| unit.name.to_string())
-                    .unwrap_or_else(|| "Default".to_string());
-                // Re-borrow fight as mutable to set the name
+                    .unwrap_or_else(|| "Unknown".to_string());
+
                 if let Some(fight) = self.get_current_fight() {
                     fight.name = if let Some(name) = boss_name {
                         name
@@ -254,7 +250,6 @@ impl Log {
         if let Some(fight) = self.get_current_fight() {
             let effect_id_list: Vec<u32> = parts[3].split(',').map(|x| x.parse::<u32>().unwrap()).collect();
             if let Some(player) = fight.players.iter_mut().find(|p| p.unit_id == unit_id) {
-                // Add effects if not already present
                 for effect_id in &effect_id_list {
                     if !player.effects.contains(effect_id) {
                         player.effects.push(*effect_id);

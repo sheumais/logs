@@ -5,5 +5,5 @@ target = "./index.html"
 ignore = ["./src-tauri"]
 
 [serve]
-port = 1420
+port = 8080
 open = false

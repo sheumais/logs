@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 yew = { version = "0.21", features = ["csr"] }
+yew-router = "0.18"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 web-sys = "0.3"
@@ -14,4 +15,8 @@ serde-wasm-bindgen = "0.6"
 console_error_panic_hook = "0.1.7"
 gloo-utils = "0.2.0"
 parser = { path = "../parser" }
-
+cli = { path = "../cli" }
+yew_icons = {version = "0.8", features = ["LucideArrowLeftCircle", "LucideUpload", "BootstrapFileEarmarkBreak", "BootstrapGithub", "BootstrapClipboardData"]}
+stylist = {version = "0.13", features = ["yew_integration"]}
+tauri-sys = { git = "https://github.com/JonasKruckenberg/tauri-sys", branch = "v2", features = ["all"] }
+futures = "0.3.29"

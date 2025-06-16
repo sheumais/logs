@@ -1,11 +1,3 @@
-## Roadmap:
-- Select log file UI
-- Modify log file to add stuff into new copy for esologs.com upload
-- Live-logging with modifications
-- Auto-updating via Tauri & Github releases
-- Github Actions to automate releases
-- Bunch of extra analysis stuff that is more streamlined/precise than esologs.com (long term goal)
-
 ## Unofficial encounter log version 15 documentation:
 
 All lines begin with the time in milliseconds since logging began and the line type. Every field is comma separated. All strings are annotated with "surrounding" inverted commas. All texturePaths and iconPaths are filepaths to BC3 DXT5 DirectDraw Surface files which can be extracted using [EsoExtractData](https://en.uesp.net/wiki/ESO_Mod:EsoExtractData). Timestamps are Unix time in milliseconds. Booleans are represented using T or F characters.
