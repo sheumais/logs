@@ -47,7 +47,7 @@
         "windows": {
           "installMode": "passive"
         },
-        "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDREMTU2NTNDMzQ3MUJDODcKUldTSHZIRTBQR1VWVFVCV1JVbHJZWVhHaXJVNUxJbTRWWW0zQlFYWDVTY2ZKeDdhZUo3Q3BhM1oK",
+        "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlDNERFMUJGNDg2NDQ4OTIKUldTU1NHUkl2K0ZObk9nQnpFbTY4SHdwMFFITVJzc2pYRTd3U0RMTWhoTjErbGUwTmtYbXFhNnIK",
         "endpoints": [
           "https://github.com/sheumais/logs/releases/latest/download/latest.json"
         ]
