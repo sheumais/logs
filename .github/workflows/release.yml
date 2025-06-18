@@ -25,7 +25,6 @@ jobs:
           projectPath: desktop
           distPath: dist
           tauriScript: ""
-          args: "--target ${{ matrix.platform == 'windows-latest' && 'x86_64-pc-windows-msvc' || '' }}"
           tagName: v__VERSION__
           releaseName: 'v__VERSION__'
           releaseBody: 'See the assets to download this version and install.'
