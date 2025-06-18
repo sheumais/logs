@@ -22,6 +22,9 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Add wasm target for Yew
+        run: rustup target add wasm32-unknown-unknown
+
       - name: Install Trunk
         run: cargo install trunk
 
