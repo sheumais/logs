@@ -18,6 +18,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Trunk
+        run: cargo install trunk
 
       - name: Tauri Build
         uses: tauri-apps/tauri-action@v0
