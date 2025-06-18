@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "esologtool",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.esologtool.app",
   "build": {
     "beforeDevCommand": "trunk serve",
     "devUrl": "http://localhost:8080",
-    "beforeBuildCommand": "trunk build",
+    "beforeBuildCommand": "trunk build --release",
     "frontendDist": "../dist"
   },
   "app": {
@@ -15,7 +15,15 @@
       {
         "title": "ESO Log Tool",
         "width": 960,
-        "height": 540
+        "height": 540,
+        "minHeight": 540,
+        "minWidth": 960,
+        "hiddenTitle": true,
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "windowEffects": {
+          "effects": ["acrylic"]
+        }
       }
     ],
     "security": {
@@ -25,6 +33,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -32,5 +41,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
-  }
+  },
+      "plugins": {
+      "updater": {
+        "windows": {
+          "installMode": "passive"
+        },
+        "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDREMTU2NTNDMzQ3MUJDODcKUldTSHZIRTBQR1VWVFVCV1JVbHJZWVhHaXJVNUxJbTRWWW0zQlFYWDVTY2ZKeDdhZUo3Q3BhM1oK",
+        "endpoints": [
+          "https://github.com/sheumais/logs/releases/latest/download/latest.json"
+        ]
+      }
+    }
 }

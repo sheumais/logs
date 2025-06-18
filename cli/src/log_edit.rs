@@ -2,6 +2,9 @@ use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Write, BufRead};
 use std::path::Path;
+use parser::log::Log;
+use parser::player::GearSlot;
+use parser::set::{get_item_type_from_hashmap, ItemType};
 
 pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
     let file = File::open(file_path)?;
@@ -49,7 +52,7 @@ pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
         let new_addition = check_line_for_edits(parts);
         if let Some(new_lines) = new_addition {
             modified_lines.extend(new_lines);
-            if parts_clone.get(1) != Some(&"ABILITY_INFO") && parts_clone.get(1) != Some(&"EFFECT_INFO") {
+            if parts_clone.get(1) != Some(&"ABILITY_INFO") && parts_clone.get(1) != Some(&"EFFECT_INFO")  && parts_clone.get(1) != Some(&"PLAYER_INFO") {
                 modified_lines.push(line.clone());
             }
         } else {
@@ -83,8 +86,9 @@ pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
 pub fn check_line_for_edits(parts: Vec<&str>) -> Option<Vec<String>> {
     match parts[1] {
         "EFFECT_CHANGED" => add_arcanist_beam_cast(parts),
-        "ABILITY_INFO" => add_arcanist_beam_information(parts),
+        "ABILITY_INFO" => check_ability_info(parts),
         "EFFECT_INFO" => add_arcanist_beam_effect_information(parts),
+        "PLAYER_INFO" => modify_player_data(parts),
         _ => None,
     }
 }
@@ -115,6 +119,16 @@ fn add_arcanist_beam_cast(parts: Vec<&str>) -> Option<Vec<String>> {
     return None;
 }
 
+fn check_ability_info(parts: Vec<&str>) -> Option<Vec<String>> {
+    if parts[2] == PRAGMATIC || parts[2] == EXHAUSTING {
+        add_arcanist_beam_information(parts)
+    } else if parts[2].parse::<u32>().ok() == Some(BLOCKADE_DEFAULT) {
+        add_blockade_versions(parts)     
+    } else {
+        return None
+    }
+}
+
 fn add_arcanist_beam_information(parts: Vec<&str>) -> Option<Vec<String>> {
     let mut lines = Vec::new();
     if parts[2] == PRAGMATIC {
@@ -137,4 +151,94 @@ fn add_arcanist_beam_effect_information(parts: Vec<&str>) -> Option<Vec<String>>
         return Some(lines);
     }
     return None;
+}
+
+const BLOCKADE_FIRE: u32 = 39012;
+const BLOCKADE_STORMS: u32 = 39018;
+const BLOCKADE_FROST: u32 = 39028;
+const BLOCKADE_DEFAULT: u32 = 39011;
+
+fn add_blockade_versions(parts: Vec<&str>) -> Option<Vec<String>> {
+    let mut lines = Vec::new();
+    // ABILITY_INFO,39011,"Elemental Blockade","/esoui/art/icons/ability_destructionstaff_002a.dds",T,T
+    // ABILITY_INFO,39028,"Blockade of Frost","/esoui/art/icons/ability_destructionstaff_002b.dds",F,T
+	// ABILITY_INFO,39012,"Blockade of Fire","/esoui/art/icons/ability_destructionstaff_004_b.dds",F,T
+    // ABILITY_INFO,39018,"Blockade of Storms","/esoui/art/icons/ability_destructionstaff_003_b.dds",F,T
+	// ABILITY_INFO,62951,"Blockade of Frost","/esoui/art/icons/ability_destructionstaff_002b.dds",F,F
+	// ABILITY_INFO,62912,"Blockade of Fire","/esoui/art/icons/ability_destructionstaff_004_b.dds",F,F
+	// ABILITY_INFO,62990,"Blockade of Storms","/esoui/art/icons/ability_destructionstaff_003_b.dds",F,F
+    lines.push(format!("{},{},{},\"{}\",\"{}\",{},{}", parts[0], "ABILITY_INFO", BLOCKADE_FIRE, "Blockade of Fire", "/esoui/art/icons/ability_destructionstaff_004_b.dds", "F", "T"));
+    lines.push(format!("{},{},{},\"{}\",\"{}\",{},{}", parts[0], "ABILITY_INFO", BLOCKADE_STORMS, "Blockade of Storms", "/esoui/art/icons/ability_destructionstaff_003_b.dds", "F", "T"));
+    lines.push(format!("{},{},{},\"{}\",\"{}\",{},{}", parts[0], "ABILITY_INFO", BLOCKADE_FROST, "Blockade of Frost", "/esoui/art/icons/ability_destructionstaff_002b.dds", "F", "T"));
+    return Some(lines);
+}
+
+fn modify_player_data(parts: Vec<&str>) -> Option<Vec<String>> {
+    
+    if parts.len() < 7 { // this can occur if either the player is wearing nothing and has no skills, or they're not in the trial.
+        return None;
+    }
+
+    let mut primary_ability_id_list: Vec<u32> = parts[parts.len() - 2].split(',').map(|x| x.parse::<u32>().unwrap_or_default()).collect();
+    let mut backup_ability_id_list: Vec<u32> = parts[parts.len() - 1].split(',').map(|x| x.parse::<u32>().unwrap_or_default()).collect();
+
+    let gear_parts = parts.len() - 2;
+    let mut frontbar_type = ItemType::Unknown;
+    let mut backbar_type = ItemType::Unknown;
+    for i in 5..gear_parts {
+        let gear_piece = Log::handle_equipment_info(parts[i]);
+        let item_slot = gear_piece.slot;
+        let item_type = get_item_type_from_hashmap(gear_piece.item_id);
+        if item_slot == GearSlot::MainHand {
+            frontbar_type = item_type;
+        } else if item_slot == GearSlot::MainHandBackup {
+            backbar_type = item_type;
+        }
+    }
+
+    for id in &mut primary_ability_id_list {
+        if *id == BLOCKADE_DEFAULT || *id == BLOCKADE_FIRE || *id == BLOCKADE_FROST || *id == BLOCKADE_STORMS {
+            *id = match frontbar_type {
+                ItemType::FrostStaff => BLOCKADE_FROST,
+                ItemType::FireStaff => BLOCKADE_FIRE,
+                ItemType::LightningStaff => BLOCKADE_STORMS,
+                _ => BLOCKADE_DEFAULT,
+            };
+        }
+    }
+
+    for id in &mut backup_ability_id_list {
+        if *id == BLOCKADE_DEFAULT || *id == BLOCKADE_FIRE || *id == BLOCKADE_FROST || *id == BLOCKADE_STORMS {
+            *id = match backbar_type {
+                ItemType::FrostStaff => BLOCKADE_FROST,
+                ItemType::FireStaff => BLOCKADE_FIRE,
+                ItemType::LightningStaff => BLOCKADE_STORMS,
+                _ => BLOCKADE_DEFAULT,
+            };
+        }
+    }
+    
+    let mut new_parts: Vec<String> = vec![
+        format!("{}", parts[0]),
+        format!("{}", parts[1]),
+        format!("{}", parts[2]),
+        format!("[{}]", parts[3]),
+        format!("[{}]", parts[4]),
+    ];
+    let gear_start = 5;
+    let gear_end = parts.len().saturating_sub(2);
+    let gear: Vec<String> = if parts.len() > gear_start && gear_end > gear_start {
+        parts[gear_start..gear_end]
+            .iter()
+            .map(|p| format!("[{}]", p))
+            .collect()
+    } else {
+        vec![]
+    };
+    new_parts.push(format!("[{}]", gear.join(",")));
+    new_parts.push(format!("[{}]", primary_ability_id_list.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",")));
+    new_parts.push(format!("[{}]", backup_ability_id_list.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",")));
+
+
+    Some(vec![new_parts.join(",")])
 }

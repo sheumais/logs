@@ -6,4 +6,6 @@ pub enum Route {
     Home,
     #[at("/modify")]
     Modify,
+    #[at("/split")]
+    Split,
 }

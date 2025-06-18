@@ -1,6 +1,6 @@
 [package]
 name = "esologtool"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [lib]
@@ -18,4 +18,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 parser = { path = "../../parser" }
 cli = { path = "../../cli" }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"
 

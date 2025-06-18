@@ -1,6 +1,7 @@
 use std::{fs::File, io::{self, BufRead, BufReader}, path::Path};
 use parser::log::Log;
 pub mod log_edit;
+pub mod split_log;
 
 pub fn read_file(file_path: &Path) -> io::Result<Vec<Log>> {
     let file = File::open(file_path)?;

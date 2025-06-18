@@ -276,7 +276,7 @@ impl Log {
         }
     }
 
-    fn handle_equipment_info(part: &str) -> crate::player::GearPiece {
+    pub fn handle_equipment_info(part: &str) -> crate::player::GearPiece {
         let split: Vec<&str> = part.split(",").collect();
         // check all enums for none values, and print what they are
         if crate::player::match_gear_slot(split[0]) == crate::player::GearSlot::None {

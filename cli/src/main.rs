@@ -2,6 +2,7 @@ use std::env;
 use std::path::Path;
 use cli::log_edit::modify_log_file;
 use cli::read_file;
+use cli::split_log::split_encounter_file_into_log_files;
 use parser::ui::*;
 
 fn main() {
@@ -15,6 +16,11 @@ fn main() {
         "modify" => {
             if let Err(e) = modify_log_file(Path::new(file_path)) {
                 eprintln!("Error modifying log file: {}", e);
+            }
+        }
+        "split" => {
+            if let Err(e) = split_encounter_file_into_log_files(Path::new(file_path)) {
+                eprintln!("Error splitting log file: {}", e);
             }
         }
         "fights" => {

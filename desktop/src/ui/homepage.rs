@@ -1,8 +1,8 @@
-use stylist::{css, yew::styled_component};
+use stylist::yew::styled_component;
 use yew::prelude::*;
 use yew_router::hooks::use_navigator;
 use yew_icons::{Icon, IconId};
-use crate::{routes::Route, ui::logo::logo};
+use crate::{routes::Route, ui::{logo::logo, style::{container_style, header_style, icon_description, icon_description_visible, icon_style, icon_style_inactive, icon_wrapper_style, logo_style, subheader_style}}};
 
 #[derive(Properties, PartialEq)]
 pub struct HomepageContainerProps {
@@ -12,67 +12,21 @@ pub struct HomepageContainerProps {
 
 #[styled_component(HomepageContainer)]
 fn homepage_container(props: &HomepageContainerProps) -> Html {
-    let container_style = css!(
-        r#"
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 10px;
-        left: 50%;
-		min-width: 30%;
-		padding-top: 1rem;
-		position: absolute;
-		top: 5%;
-		transform: translate(-50%, 0);
-		width: min-content;
-		text-align: center;
-    "#
-    );
-    let logo_style = css!(
-        r#"
-        width: 60%;
-        "#
-    );
-    let header_style = css!(
-        r#"
-        position: relative;
-        display: inline-block;
-        font-size: 24px;
-        color: white;
-        font-weight: bold;
-        margin: 0;
-        text-align: center;
-        user-select: none;
-        margin-bottom: 30px;
-        "#
-    );
-
-    let subheader_style = css!(
-        r#"
-        position: absolute;
-        top: 2px;
-        right: -2em;
-        font-size: 16px;
-        color: #777;
-        font-weight: normal;
-        "#
-    );
-
 
     html!{
-        <div class={container_style}>
+        <div class={container_style().clone()}>
             <a
                 href={"https://github.com/sheumais/logs/"}
-                class={logo_style}
+                class={logo_style().clone()}
                 target="_blank"
                 rel="noopener noreferrer"
             >
                 {logo()}
             </a>
-            <div class={header_style}>
+            <div class={header_style().clone()}>
                 {"ESO Log Tool"}
-                <div class={subheader_style}>
-                    {"v0.1"}
+                <div class={subheader_style().clone()}>
+                    {format!("v{}", env!("CARGO_PKG_VERSION"))}
                 </div>
             </div>
             {for props.children.iter()}
@@ -89,95 +43,45 @@ pub fn homepage() -> Html {
             navigator.push(&Route::Modify);
         })
     };
+    let split_log = {
+        let navigator = navigator.clone();
+        Callback::from(move |_| {
+            navigator.push(&Route::Split);
+        })
+    };
     let hovered = use_state(|| None::<usize>);
     
-    let icon_wrapper_style = css!(
-        r#"
-        display: inline-block;
-        position: relative;
-        "#,
-    );
-
-    let icon_style = css!(
-        r#"
-        display: inline-block;
-        position: relative;
-        margin: 0 1em;
-        cursor: pointer;
-        "#,
-    );
-
-    let icon_style_inactive = css!(
-        r#"
-        display: inline-block;
-        position: relative;
-        margin: 0 1em;
-        opacity: 0.5;
-        cursor: not-allowed;
-        "#,
-    );
-
-    let icon_description = css!(
-        r#"
-        visibility: hidden;
-        opacity: 0;
-        background: #222;
-        color: #fff;
-        text-align: center;
-        border-radius: 6px;
-        padding: 0.5em 1em;
-        position: absolute;
-        left: 50%;
-        top: 110%;
-        transform: translateX(-50%);
-        transition: opacity 0.3s;
-        pointer-events: none;
-        white-space: nowrap;
-        font-size: 1em;
-        user-select: none;
-        "#,
-    );
-
-    let icon_description_visible = css!(
-        r#"
-        visibility: visible;
-        opacity: 1;
-        background: #222;
-        color: #fff;
-        text-align: center;
-        border-radius: 6px;
-        padding: 0.5em 1em;
-        position: absolute;
-        left: 50%;
-        top: 110%;
-        transform: translateX(-50%);
-        transition: opacity 0.3s;
-        pointer-events: none;
-        white-space: nowrap;
-        font-size: 1em;
-        user-select: none;
-        "#,
-    );
-
     let buttons = vec![
         (
             IconId::BootstrapFileEarmarkBreak,
-            icon_style.clone(),
+            icon_style().clone(),
             Some(modify_log.clone()),
             "Scan encounter log",
         ),
         (
-            IconId::BootstrapClipboardData,
-            icon_style_inactive.clone(),
-            None,
+            IconId::BootstrapFileEarmarkBarGraph,
+            icon_style_inactive().clone(),
+            Some(Callback::noop()),
             "Log analysis (coming soon)",
+        ),
+        (
+            IconId::BootstrapFiles,
+            icon_style().clone(),
+            Some(split_log.clone()),
+            "Split/Combine logs",
+        ),
+        (
+            IconId::BootstrapFolderSymlink,
+            icon_style_inactive().clone(),
+            Some(Callback::noop()),
+            "Live log with scan (coming soon)",
         ),
     ];
 
     html! {
         <>
             <HomepageContainer>
-                <div class={icon_wrapper_style}>
+                <div class={icon_wrapper_style().clone()}>
                     { for buttons.iter().enumerate().map(|(i, (icon_id, style, onclick, desc))| {
                         let hovered = hovered.clone();
                         let onmouseover = {
@@ -194,7 +98,7 @@ pub fn homepage() -> Html {
                                 {onmouseout}
                             >
                                 <Icon width={"5em".to_owned()} height={"5em".to_owned()} class={style.clone()} icon_id={icon_id.clone()} onclick={onclick.clone()} />
-                                <div class={if hovered.as_ref() == Some(&i) { icon_description_visible.clone() } else { icon_description.clone() }}>
+                                <div class={if hovered.as_ref() == Some(&i) { icon_description_visible().clone() } else { icon_description().clone() }}>
                                     {desc}
                                 </div>
                             </div>
