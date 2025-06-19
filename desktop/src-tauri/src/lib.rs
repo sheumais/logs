@@ -22,17 +22,21 @@ fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), Str
     let reader = BufReader::new(&file);
     let total_lines = reader.lines().count();
     let file = File::open(path_ref).map_err(|e| format!("Failed to reopen file: {}", e))?;
-    let reader = BufReader::new(file);
+    let mut reader = BufReader::new(file);
 
-    let mut new_path = path_ref.to_path_buf();
-    new_path.set_extension("");
-    if let Some(stem) = new_path.file_stem() {
-        let mut new_file_name = stem.to_os_string();
-        new_file_name.push("-MODIFIED.log");
-        new_path.set_file_name(new_file_name);
-    } else {
-        return Err("Failed to get file stem".into());
-    }
+    let mut first_line = String::new();
+    reader.read_line(&mut first_line).map_err(|e| format!("Failed to read first line: {}", e))?;
+    let timestamp = first_line
+        .splitn(4, ',')
+        .nth(2)
+        .unwrap_or("unknown")
+        .trim();
+
+    let parent = path_ref.parent().unwrap_or_else(|| Path::new("."));
+    let new_file_name = format!("Encounter-{}-MODIFIED.log", timestamp);
+    let new_path = parent.join(new_file_name);
+    let file = File::open(path_ref).map_err(|e| format!("Failed to reopen file: {}", e))?;
+    let reader = BufReader::new(file);
 
     let file = OpenOptions::new()
         .write(true)
@@ -106,10 +110,7 @@ fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), Str
 }
 
 #[tauri::command]
-fn split_encounter_file_into_log_files(
-    window: Window,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+fn split_encounter_file_into_log_files(window: Window, state: State<'_, AppState>) -> Result<(), String> {
     let paths_guard = state.log_files.read().map_err(|e| e.to_string())?;
     let file_paths = paths_guard.as_ref().ok_or("No file paths set")?;
     let file_path = file_paths.get(0).ok_or("No file path in vector")?;
@@ -131,7 +132,7 @@ fn split_encounter_file_into_log_files(
         let timestamp = parts.next();
 
         if let (Some("BEGIN_LOG"), Some(time)) = (linetype, timestamp) {
-            let out_name = format!("Split-encounter-{}.log", time);
+            let out_name = format!("Split-Encounter-{}.log", time);
             let parent = file_path
                 .as_path()
                 .ok_or("Invalid file path")?
@@ -210,7 +211,7 @@ fn combine_encounter_log_files(window: Window, state: State<'_, AppState>) -> Re
         .trim();
 
     let out_name = format!(
-        "Combined-encounter-{}-{}.log",
+        "Combined-Encounter-{}-{}.log",
         start_timestamp, end_timestamp
     );
     let parent = file_paths[0]

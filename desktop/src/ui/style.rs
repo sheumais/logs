@@ -141,9 +141,9 @@ pub fn header_style() -> Style {
 pub fn subheader_style() -> Style {
     Style::new(css!(r#"
         position: absolute;
-        margin-left: 1vw;
+        margin-left: 5%;
         font-size: 2vh;
-        top: 0.6vh;
+        top: 0.32em;
         left: 100%;
         color: #777;
         font-weight: normal;

@@ -16,7 +16,7 @@ struct SplitCombineState {
 #[function_component(SplitCombineScreen)]
 pub fn split_combine_screen() -> Html {
     let navigator = use_navigator().unwrap();
-    let hovered = use_state(|| Some(0usize));
+    let hovered = use_state(|| None::<usize>);
     let is_splitting = use_state(|| false);
     let is_combining = use_state(|| false);
     let progress = use_state(|| 0);
