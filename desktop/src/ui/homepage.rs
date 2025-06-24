@@ -2,7 +2,7 @@ use stylist::yew::styled_component;
 use yew::prelude::*;
 use yew_router::hooks::use_navigator;
 use yew_icons::{Icon, IconId};
-use crate::{routes::Route, ui::{logo::logo, style::{container_style, header_style, icon_description, icon_description_visible, icon_style, icon_style_inactive, icon_wrapper_style, logo_style, subheader_style}}};
+use crate::{routes::Route, ui::{logo::logo, style::*}};
 
 #[derive(Properties, PartialEq)]
 pub struct HomepageContainerProps {
@@ -49,6 +49,13 @@ pub fn homepage() -> Html {
             navigator.push(&Route::Split);
         })
     };
+    let live_log = {
+        let navigator = navigator.clone();
+        Callback::from(move |_| {
+            navigator.push(&Route::LiveLog);
+        })
+    };
+
     let hovered = use_state(|| None::<usize>);
     
     let buttons = vec![
@@ -72,9 +79,9 @@ pub fn homepage() -> Html {
         ),
         (
             IconId::BootstrapFolderSymlink,
-            icon_style_inactive().clone(),
-            Some(Callback::noop()),
-            "Live log with scan (coming soon)",
+            icon_style().clone(),
+            Some(live_log.clone()),
+            "Live log with scan",
         ),
     ];
 

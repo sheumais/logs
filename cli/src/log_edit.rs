@@ -1,16 +1,26 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Write, BufRead};
 use std::path::Path;
+use parser::effect::{is_zen_dot, ZEN_DEBUFF_ID};
 use parser::log::Log;
 use parser::player::GearSlot;
 use parser::set::{get_item_type_from_hashmap, ItemType};
 
+pub struct ZenDebuffState {
+    active: bool,
+    source_id: u32,
+    contributing_ability_ids: Vec<u32>,
+}
+
+
 pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
-    let file = File::open(file_path)?;
+    let file: File = File::open(file_path)?;
     let reader = BufReader::new(file);
 
     let mut modified_lines: Vec<String> = Vec::new();
+    let mut zen_status: HashMap<u32, ZenDebuffState> = HashMap::new();
 
     for line_result in reader.lines() {
         let line = match line_result {
@@ -20,44 +30,7 @@ pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
                 continue;
             }
         };
-        let mut in_brackets = false;
-        let mut current_segment_start = 0;
-        let mut parts = Vec::new();
-
-        for (i, char) in line.char_indices() {
-            match char {
-                '[' => {
-                    in_brackets = true;
-                    current_segment_start = i + 1;
-                }
-                ']' => {
-                    in_brackets = false;
-                    parts.push(&line[current_segment_start..i]);
-                    current_segment_start = i + 1;
-                }
-                ',' if !in_brackets => {
-                    parts.push(&line[current_segment_start..i]);
-                    current_segment_start = i + 1; 
-                }
-                _ => {}
-            }
-        }
-
-        if current_segment_start < line.len() {
-            parts.push(&line[current_segment_start..]);
-        }
-        parts.retain(|part| !part.is_empty());
-
-        let parts_clone = parts.clone();
-        let new_addition = check_line_for_edits(parts);
-        if let Some(new_lines) = new_addition {
-            modified_lines.extend(new_lines);
-            if parts_clone.get(1) != Some(&"ABILITY_INFO") && parts_clone.get(1) != Some(&"EFFECT_INFO")  && parts_clone.get(1) != Some(&"PLAYER_INFO") {
-                modified_lines.push(line.clone());
-            }
-        } else {
-            modified_lines.push(line.clone());
-        }
+        modified_lines.extend(handle_line(line, &mut zen_status));
     }
 
     let mut new_path = file_path.with_extension("");
@@ -83,9 +56,62 @@ pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn check_line_for_edits(parts: Vec<&str>) -> Option<Vec<String>> {
+pub fn handle_line(line: String, mut zen_hashmap: &mut HashMap<u32, ZenDebuffState>) -> Vec<String> {
+    let mut modified_lines: Vec<String> = Vec::new();
+    let mut in_brackets = false;
+    let mut current_segment_start = 0;
+    let mut parts = Vec::new();
+
+    for (i, char) in line.char_indices() {
+        match char {
+            '[' => {
+                in_brackets = true;
+                current_segment_start = i + 1;
+            }
+            ']' => {
+                in_brackets = false;
+                parts.push(&line[current_segment_start..i]);
+                current_segment_start = i + 1;
+            }
+            ',' if !in_brackets => {
+                parts.push(&line[current_segment_start..i]);
+                current_segment_start = i + 1; 
+            }
+            _ => {}
+        }
+    }
+
+    if current_segment_start < line.len() {
+        parts.push(&line[current_segment_start..]);
+    }
+    parts.retain(|part| !part.is_empty());
+
+    let parts_clone = parts.clone();
+    if parts_clone.get(1) == Some(&"BEGIN_COMBAT") {
+        zen_hashmap.clear();
+    }
+    let new_addition = check_line_for_edits(parts, &mut zen_hashmap);
+    if let Some(new_lines) = new_addition {
+        if parts_clone.get(1) != Some(&"ABILITY_INFO")
+            && parts_clone.get(1) != Some(&"EFFECT_INFO")
+            && parts_clone.get(1) != Some(&"PLAYER_INFO")
+            && parts_clone.get(5) != Some(&ZEN_DEBUFF_ID.to_string().as_str())
+        {
+            modified_lines.push(line.clone());
+        }
+        modified_lines.extend(new_lines);
+    } else {
+        modified_lines.push(line.clone());
+    }
+    return modified_lines
+}
+
+pub fn check_line_for_edits(parts: Vec<&str>, zen_hashmap: &mut HashMap<u32, ZenDebuffState>) -> Option<Vec<String>> {
+    if parts.len() < 2 {
+        return None;
+    }
     match parts[1] {
-        "EFFECT_CHANGED" => add_arcanist_beam_cast(parts),
+        "EFFECT_CHANGED" => check_effect_changed(parts, zen_hashmap),
         "ABILITY_INFO" => check_ability_info(parts),
         "EFFECT_INFO" => add_arcanist_beam_effect_information(parts),
         "PLAYER_INFO" => modify_player_data(parts),
@@ -96,10 +122,109 @@ pub fn check_line_for_edits(parts: Vec<&str>) -> Option<Vec<String>> {
 const PRAGMATIC: &str = "186369";
 const EXHAUSTING: &str = "186780";
 
-fn add_arcanist_beam_cast(parts: Vec<&str>) -> Option<Vec<String>> {
+fn check_effect_changed(parts: Vec<&str>, zen_hashmap: &mut HashMap<u32, ZenDebuffState>) -> Option<Vec<String>> {
     if parts.len() < 17 {
         return None;
     }
+    match parts[5] {
+        PRAGMATIC | EXHAUSTING => return add_arcanist_beam_cast(parts),
+        id if id == ZEN_DEBUFF_ID.to_string() => return add_zen_stacks(parts, zen_hashmap),
+        id if is_zen_dot(id.parse::<u32>().unwrap_or(0)) => return add_zen_stacks(parts, zen_hashmap),
+        _ => return None,
+    }
+}
+
+const MAX_ZEN_STACKS: u8 = 5;
+
+fn add_zen_stacks(parts: Vec<&str>, zen_status: &mut HashMap<u32, ZenDebuffState>) -> Option<Vec<String>> {
+    let source_unit_state = parser::log::Log::parse_unit_state(parts.clone(), 6);
+    let target_unit_state = if parts[16] == "*" {
+        source_unit_state.clone()
+    } else {
+        parser::log::Log::parse_unit_state(parts.clone(), 16)
+    };
+
+    let source_unit_id = source_unit_state.unit_id;
+    let target_unit_id = target_unit_state.unit_id;
+
+    let is_zen_debuff = parts[5] == ZEN_DEBUFF_ID.to_string();
+    let event_type = parts[2];
+    let ability_id = parts[5].parse::<u32>().unwrap_or(0);
+
+    let entry = zen_status.entry(target_unit_id).or_insert_with(|| ZenDebuffState {
+        active: false,
+        source_id: source_unit_id,
+        contributing_ability_ids: Vec::new(),
+    });
+
+    if is_zen_debuff {
+        match event_type {
+            "GAINED" => {
+                entry.active = true;
+                entry.source_id = source_unit_id;
+            }
+            "FADED" => {
+                if source_unit_id == entry.source_id || source_unit_id == target_unit_id {
+                    entry.active = false;
+                }
+            }
+            "UPDATED" => {
+                if source_unit_id == entry.source_id || source_unit_id == target_unit_id {
+                    entry.active = true;
+                }
+            }
+            _ => {}
+        }
+
+        let stacks = entry.contributing_ability_ids.len().min(MAX_ZEN_STACKS as usize);
+        let mut line = format!(
+            "{},{},{},{},{},{},",
+            parts[0], parts[1], event_type, stacks, parts[4], ZEN_DEBUFF_ID.to_string()
+        );
+        let rest = parts[6..].join(",");
+        line.push_str(&rest);
+        return Some(vec![line]);
+    } else {
+        if source_unit_id == entry.source_id || source_unit_id == target_unit_id {
+            match event_type {
+                "GAINED" => {
+                    if !entry.contributing_ability_ids.contains(&ability_id) {
+                        entry.contributing_ability_ids.push(ability_id);
+                        if entry.active {
+                            let stacks = entry.contributing_ability_ids.len().min(MAX_ZEN_STACKS as usize);
+                            let mut line = format!(
+                                "{},{},{},{},{},{},",
+                                parts[0], parts[1], "UPDATED", stacks, parts[4], ZEN_DEBUFF_ID.to_string()
+                            );
+                            let rest = parts[6..].join(",");
+                            line.push_str(&rest);
+                            return Some(vec![line]);
+                        }
+                    }
+                }
+                "FADED" => {
+                    if entry.contributing_ability_ids.contains(&ability_id) {
+                        entry.contributing_ability_ids.retain(|&id| id != ability_id);
+                        if entry.active {
+                            let stacks = entry.contributing_ability_ids.len().min(MAX_ZEN_STACKS as usize);
+                            let mut line = format!(
+                                "{},{},{},{},{},{},",
+                                parts[0], parts[1], "UPDATED", stacks, parts[4], ZEN_DEBUFF_ID.to_string()
+                            );
+                            let rest = parts[6..].join(",");
+                            line.push_str(&rest);
+                            return Some(vec![line]);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    None
+}
+
+fn add_arcanist_beam_cast(parts: Vec<&str>) -> Option<Vec<String>> {
     if parts[5] == PRAGMATIC || parts[5] == EXHAUSTING {
         if parts[2] == "GAINED" {
             let duration = 4500 + if parts[5] == EXHAUSTING { 1000 } else { 0 };

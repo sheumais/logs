@@ -8,4 +8,6 @@ pub enum Route {
     Modify,
     #[at("/split")]
     Split,
+    #[at("/live")]
+    LiveLog,
 }

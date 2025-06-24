@@ -1,10 +1,8 @@
-use cli::log_edit::check_line_for_edits;
+use cli::log_edit::{handle_line, ZenDebuffState};
 use state::AppState;
 use tauri_plugin_updater::UpdaterExt;
 use std::{
-    fs::{File, OpenOptions},
-    io::{BufRead, BufReader, BufWriter, Write},
-    path::Path,
+    collections::HashMap, fs::{File, OpenOptions}, io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write}, path::Path, thread, time::Duration
 };
 use tauri::{path::BaseDirectory, Emitter, Manager, State, Window};
 use tauri_plugin_dialog::DialogExt;
@@ -21,19 +19,10 @@ fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), Str
     let file = File::open(path_ref).map_err(|e| format!("Failed to open file: {}", e))?;
     let reader = BufReader::new(&file);
     let total_lines = reader.lines().count();
-    let file = File::open(path_ref).map_err(|e| format!("Failed to reopen file: {}", e))?;
-    let mut reader = BufReader::new(file);
-
-    let mut first_line = String::new();
-    reader.read_line(&mut first_line).map_err(|e| format!("Failed to read first line: {}", e))?;
-    let timestamp = first_line
-        .splitn(4, ',')
-        .nth(2)
-        .unwrap_or("unknown")
-        .trim();
 
     let parent = path_ref.parent().unwrap_or_else(|| Path::new("."));
-    let new_file_name = format!("Encounter-{}-MODIFIED.log", timestamp);
+    let orig_file_name = path_ref.file_stem().and_then(|s| s.to_str()).unwrap_or("Encounter");
+    let new_file_name = format!("{}-MODIFIED.log", orig_file_name);
     let new_path = parent.join(new_file_name);
     let file = File::open(path_ref).map_err(|e| format!("Failed to reopen file: {}", e))?;
     let reader = BufReader::new(file);
@@ -45,59 +34,23 @@ fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), Str
         .open(&new_path)
         .map_err(|e| format!("Failed to create output file: {}", e))?;
     let mut writer = BufWriter::new(file);
+    let mut zen_status: HashMap<u32, ZenDebuffState> = HashMap::new();
 
     let mut processed = 0;
     for line_result in reader.lines() {
-        let line = line_result.map_err(|e| format!("Error reading line: {}", e))?;
-
-        let mut in_brackets = false;
-        let mut current_segment_start = 0;
-        let mut parts = Vec::new();
-
-        for (i, char) in line.char_indices() {
-            match char {
-                '[' => {
-                    in_brackets = true;
-                    current_segment_start = i + 1;
-                }
-                ']' => {
-                    in_brackets = false;
-                    parts.push(&line[current_segment_start..i]);
-                    current_segment_start = i + 1;
-                }
-                ',' if !in_brackets => {
-                    parts.push(&line[current_segment_start..i]);
-                    current_segment_start = i + 1;
-                }
-                _ => {}
+        let line = match line_result {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("Error reading line: {}", e);
+                continue;
             }
+        };
+        let modified_line = handle_line(line, &mut zen_status);
+        for entry in modified_line {
+            writeln!(writer, "{entry}").ok();
         }
-
-        if current_segment_start < line.len() {
-            parts.push(&line[current_segment_start..]);
-        }
-        parts.retain(|part| !part.is_empty());
-
-        let parts_clone = parts.clone();
-        let new_addition = check_line_for_edits(parts);
-        if let Some(new_lines) = new_addition {
-            for new_line in new_lines {
-                writeln!(writer, "{}", new_line)
-                    .map_err(|e| format!("Failed to write new modified line: {}", e))?;
-            }
-            if parts_clone.get(1) != Some(&"ABILITY_INFO")
-                && parts_clone.get(1) != Some(&"EFFECT_INFO")
-                && parts_clone.get(1) != Some(&"PLAYER_INFO")
-            {
-                writeln!(writer, "{}", line)
-                    .map_err(|e| format!("Failed to write original line: {}", e))?;
-            }
-        } else {
-            writeln!(writer, "{}", line)
-                .map_err(|e| format!("Failed to write original line: {}", e))?;
-        }
-
         processed += 1;
+
         if processed % LINE_COUNT_FOR_PROGRESS == 0 || processed == total_lines {
             let progress = (processed * 100 / total_lines).min(100);
             window
@@ -252,9 +205,93 @@ fn combine_encounter_log_files(window: Window, state: State<'_, AppState>) -> Re
     Ok(())
 }
 
+#[tauri::command]
+fn live_log_from_folder(window: Window, app_state: State<'_, AppState>) -> Result<(), String> {
+    let folder_guard = app_state.live_log_folder.read().map_err(|e| e.to_string())?;
+    let folder = folder_guard.as_ref().ok_or("No folder selected")?.clone();
+
+    let folder_pathbuf = folder.as_path().unwrap().to_path_buf();
+    let input_path = folder_pathbuf.join("Encounter.log");
+
+    let mut output_folder_pathbuf = folder.as_path().unwrap().to_path_buf();
+    output_folder_pathbuf.push("LogToolLive");
+    std::fs::create_dir_all(&output_folder_pathbuf)
+        .map_err(|e| format!("Failed to create output folder: {}", e))?;
+    let output_path = output_folder_pathbuf.join("Encounter.log");
+
+    let window = window.clone();
+    thread::spawn(move || {
+        let mut input_file = loop {
+            match OpenOptions::new().read(true).open(&input_path) {
+                Ok(f) => break f,
+                Err(_) => {
+                    thread::sleep(Duration::from_secs(1));
+                    continue;
+                }
+            }
+        };
+        let output_file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&output_path)
+            .expect("Failed to open output file");
+        let mut writer = BufWriter::new(&output_file);
+        let mut pos = 0u64;
+        let mut buffer = Vec::new();
+
+        loop {
+            input_file
+                .seek(SeekFrom::Start(pos))
+                .expect("Failed to seek input file");
+
+            buffer.clear();
+            let mut reader = BufReader::new(&input_file);
+            let bytes_read = reader.read_to_end(&mut buffer).expect("Failed to read input file");
+
+            if bytes_read == 0 {
+                thread::sleep(Duration::from_secs(5));
+                continue;
+            }
+
+            if let Some(last_newline_offset) = buffer.iter().rposition(|&b| b == b'\n') {
+                let complete_data = &buffer[..=last_newline_offset];
+                let text = String::from_utf8_lossy(complete_data);
+                let mut zen_status: HashMap<u32, ZenDebuffState> = HashMap::new();
+                let mut new_lines = 0;
+
+                for line in text.lines() {
+                    let line = handle_line(line.to_string(), &mut zen_status);
+                    for entry in line {
+                        writeln!(writer, "{entry}").ok();
+                        new_lines += 1;
+                    }
+                }
+                pos += (last_newline_offset + 1) as u64;
+
+                if new_lines > 0 {
+                    let _ = window.emit("live_log_progress", new_lines);
+                }
+            }
+
+            thread::sleep(Duration::from_secs(5));
+        }
+    });
+
+    Ok(())
+}
+
+#[derive(PartialEq, Eq)]
+enum PickerType {
+    SingleFile,
+    MultipleFiles,
+    Folder,
+    #[allow(dead_code)]
+    MultipleFolders,
+}
+
 fn pick_files_internal(
     window: &Window,
-    allow_multiple: bool,
+    picker_type: PickerType,
     state: &State<'_, AppState>,
 ) -> Result<(), String> {
     let default_path = window
@@ -275,31 +312,65 @@ fn pick_files_internal(
         .add_filter("Encounter logs", &["log"])
         .set_directory(default_dir);
 
-    let picked_files = if allow_multiple {
-        dialog.blocking_pick_files()
-    } else {
-        dialog.blocking_pick_file().map(|f| vec![f])
+    let folder_dialog = window
+        .dialog()
+        .file()
+        .set_directory(default_dir);
+
+    if picker_type == PickerType::Folder {
+        let log_tool_live = default_dir.join("LogToolLive");
+        if log_tool_live.exists() {
+            if let Err(e) = std::fs::remove_dir_all(&log_tool_live) {
+                return Err(format!("Failed to delete LogToolLive folder: {}", e));
+            }
+        }
+    }
+
+
+    let picked_files = match picker_type {
+        PickerType::SingleFile => dialog.blocking_pick_files(),
+        PickerType::MultipleFiles => dialog.blocking_pick_file().map(|f| vec![f]),
+        PickerType::Folder => folder_dialog.blocking_pick_folder().map(|f| vec![f]),
+        PickerType::MultipleFolders => folder_dialog.blocking_pick_folders(),
     };
 
-    if let Some(file_paths) = picked_files {
-        let mut log_files_lock = state.log_files.write().map_err(|e| e.to_string())?;
-        *log_files_lock = Some(file_paths.clone());
-        Ok(())
-    } else {
-        let mut log_files_lock = state.log_files.write().map_err(|e| e.to_string())?;
-        *log_files_lock = None;
-        Err("No file(s) selected".to_string())
+    match picker_type {
+        PickerType::SingleFile | PickerType::MultipleFiles =>     
+            if let Some(file_paths) = picked_files {
+                let mut log_files_lock = state.log_files.write().map_err(|e| e.to_string())?;
+                *log_files_lock = Some(file_paths.clone());
+                Ok(())
+            } else {
+                let mut log_files_lock = state.log_files.write().map_err(|e| e.to_string())?;
+                *log_files_lock = None;
+                Err("No file(s) selected".to_string())
+            },
+        PickerType::Folder => if let Some(file_path) = picked_files {
+                let mut log_files_lock = state.live_log_folder.write().map_err(|e| e.to_string())?;
+                *log_files_lock = Some(file_path[0].clone());
+                Ok(())
+            } else {
+                let mut log_files_lock = state.log_files.write().map_err(|e| e.to_string())?;
+                *log_files_lock = None;
+                Err("No folder selected".to_string())
+            },
+        _ => Ok(()),
     }
 }
 
 #[tauri::command]
 fn pick_and_load_file(window: Window, state: State<'_, AppState>) -> Result<(), String> {
-    pick_files_internal(&window, false, &state)
+    pick_files_internal(&window, PickerType::SingleFile, &state)
 }
 
 #[tauri::command]
 fn pick_and_load_files(window: Window, state: State<'_, AppState>) -> Result<(), String> {
-    pick_files_internal(&window, true, &state)
+    pick_files_internal(&window, PickerType::MultipleFiles, &state)
+}
+
+#[tauri::command]
+fn pick_and_load_folder(window: Window, state: State<'_, AppState>) -> Result<(), String> {
+    pick_files_internal(&window, PickerType::Folder, &state)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -319,9 +390,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             pick_and_load_file,
             pick_and_load_files,
+            pick_and_load_folder,
             modify_log_file,
             split_encounter_file_into_log_files,
-            combine_encounter_log_files
+            combine_encounter_log_files,
+            live_log_from_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

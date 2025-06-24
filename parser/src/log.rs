@@ -350,7 +350,7 @@ impl Log {
         self.effects.insert(effect_id, effect);
     }
     
-    fn parse_unit_state(&mut self, parts: Vec<&str>, start_index: usize) -> crate::unit::UnitState {
+    pub fn parse_unit_state(parts: Vec<&str>, start_index: usize) -> crate::unit::UnitState {
         let parse_value = |s: &str| s.parse::<u32>().unwrap_or(0);
         let parse_pair = |s: &str| {
             let mut split = s.split('/');
@@ -380,11 +380,11 @@ impl Log {
     }
 
     fn handle_combat_event(&mut self, parts: Vec<&str>) {
-        let source_unit_state = self.parse_unit_state(parts.clone(), 9);
+        let source_unit_state = Self::parse_unit_state(parts.clone(), 9);
         let target_unit_state = if parts[19] == "*" {
             source_unit_state.clone()
         } else {
-            self.parse_unit_state(parts.clone(), 19)
+            Self::parse_unit_state(parts.clone(), 19)
         };
 
         if crate::event::parse_event_result(parts[2]).is_none() {
@@ -423,11 +423,11 @@ impl Log {
     }
 
     fn handle_begin_cast(&mut self, parts: Vec<&str>) {
-        let source_unit_state = self.parse_unit_state(parts.clone(), 6);
+        let source_unit_state = Self::parse_unit_state(parts.clone(), 6);
         let target_unit_state = if parts[16] == "*" {
             source_unit_state.clone()
         } else {
-            self.parse_unit_state(parts.clone(), 16)
+            Self::parse_unit_state(parts.clone(), 16)
         };
 
         let cast = crate::event::Cast {
@@ -459,11 +459,11 @@ impl Log {
     }
 
     fn handle_effect_changed(&mut self, parts: Vec<&str>) {
-        let source_unit_state = self.parse_unit_state(parts.clone(), 6);
+        let source_unit_state = Self::parse_unit_state(parts.clone(), 6);
         let target_unit_state = if parts[16] == "*" {
             source_unit_state.clone()
         } else {
-            self.parse_unit_state(parts.clone(), 16)
+            Self::parse_unit_state(parts.clone(), 16)
         };
 
         let effect_event = crate::effect::EffectEvent {

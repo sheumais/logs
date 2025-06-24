@@ -2,6 +2,7 @@ use yew::prelude::*;
 use yew_router::prelude::*;
 use crate::routes::Route;
 use crate::ui::homepage::Homepage;
+use crate::ui::live_log::LiveLog;
 use crate::ui::modify::ModifyScreen;
 use crate::ui::split::SplitCombineScreen;
 
@@ -16,8 +17,9 @@ pub fn app() -> Html {
 
 fn switch(routes: Route) -> Html {
     match routes {
-        Route::Home => html! { <Homepage /> },
         Route::Modify => html! { <ModifyScreen /> },
         Route::Split => html! { <SplitCombineScreen /> },
+        Route::LiveLog => html! { <LiveLog/> },
+        _ => html! {<Homepage />}
     }
 }

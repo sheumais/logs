@@ -102,7 +102,7 @@ pub fn container_style() -> Style {
         align-items: center;
         gap: 10px;
         left: 50%;
-        min-width: 30%;
+        min-width: 60%;
         padding-top: 1rem;
         position: absolute;
         transform: translate(-50%, 0);
@@ -113,14 +113,14 @@ pub fn container_style() -> Style {
 pub fn hide_style() -> Style {
     Style::new(css!(r#"
         opacity: 0;
-        visibility: none;
+        visibility: hidden;
         user-select: none;
     "#)).expect("Error creating style")
 }
 
 pub fn logo_style() -> Style {
     Style::new(css!(r#"
-        width: 60%;
+        width: 40%;
     "#)).expect("Error creating style")
 }
 
@@ -128,13 +128,14 @@ pub fn header_style() -> Style {
     Style::new(css!(r#"
         position: relative;
         display: block;
-        font-size: 4vh;
+        font-size: 6vh;
         color: white;
         font-weight: bold;
         margin: 0;
         text-align: center;
         user-select: none;
-        margin: 3vw;
+        margin: 1.5vw;
+        margin-bottom: 3vw;
     "#)).expect("Error creating style")
 }
 
@@ -142,11 +143,17 @@ pub fn subheader_style() -> Style {
     Style::new(css!(r#"
         position: absolute;
         margin-left: 5%;
-        font-size: 2vh;
+        font-size: 3vh;
         top: 0.32em;
         left: 100%;
         color: #777;
-        font-weight: normal;
+    "#)).expect("Error creating style")
+}
+
+pub fn paragraph_style() -> Style {
+    Style::new(css!(r#"
+        margin-bottom: 1em;
+        margin-top: 1em;
     "#)).expect("Error creating style")
 }
 

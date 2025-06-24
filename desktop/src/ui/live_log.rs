@@ -1,30 +1,26 @@
 use futures::StreamExt;
-use stylist::css;
 use tauri_sys::{core::invoke, event};
-use yew::prelude::*;
-use yew_router::hooks::use_navigator;
+use yew::{classes, function_component, html, use_effect, use_state, Callback, Html, UseStateHandle};
 use yew_icons::{Icon, IconId};
+use yew_router::hooks::use_navigator;
+use crate::ui::style::*;
+use crate::routes::Route;
 
-use crate::{routes::Route, ui::style::*};
-
-struct SplitCombineState {
+struct LiveLogState {
     hovered: UseStateHandle<Option<usize>>,
-    is_splitting: UseStateHandle<bool>,
-    is_combining: UseStateHandle<bool>,
+    live_logging: UseStateHandle<bool>,
     progress: UseStateHandle<u32>,
 }
 
-#[function_component(SplitCombineScreen)]
-pub fn split_combine_screen() -> Html {
+#[function_component(LiveLog)]
+pub fn live_log() -> Html {
     let navigator = use_navigator().unwrap();
     let hovered = use_state(|| None::<usize>);
-    let is_splitting = use_state(|| false);
-    let is_combining = use_state(|| false);
+    let live_logging = use_state(|| false);
     let progress = use_state(|| 0);
-    let state = SplitCombineState {
+    let state = LiveLogState {
         hovered,
-        is_splitting,
-        is_combining,
+        live_logging,
         progress,
     };
 
@@ -33,59 +29,26 @@ pub fn split_combine_screen() -> Html {
         Callback::from(move |_| navigator.push(&Route::Home))
     };
 
-    let split_log = {
-        let state = state.is_splitting.clone();
+    let live_log = {
+        let state = state.live_logging.clone();
         Callback::from(move |_| {
             let state = state.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                invoke::<()>("pick_and_load_file", &()).await;
+                invoke::<()>("pick_and_load_folder", &()).await;
                 state.set(true);
-                invoke::<()>("split_encounter_file_into_log_files", &()).await;
+                invoke::<()>("live_log_from_folder", &()).await;
             });
         })
     };
 
-    let combine_log = {
-        let state = state.is_combining.clone();
-        Callback::from(move |_| {
-            let state = state.clone();
-            wasm_bindgen_futures::spawn_local(async move {
-                invoke::<()>("pick_and_load_files", &()).await;
-                state.set(true);
-                invoke::<()>("combine_encounter_log_files", &()).await;
-            });
-        })
-    };
 
     {
         let progress = state.progress.clone();
-        let is_splitting = state.is_splitting.clone();
         use_effect(move || {
             wasm_bindgen_futures::spawn_local(async move {
-                if let Ok(mut events) = event::listen::<u32>("log_split_progress").await {
+                if let Ok(mut events) = event::listen::<u32>("live_log_progress").await {
                     while let Some(e) = events.next().await {
                         progress.set(e.payload);
-                        if e.payload >= 100 {
-                            is_splitting.set(false);
-                        }
-                    }
-                }
-            });
-            || ()
-        });
-    }
-
-    {
-        let progress = state.progress.clone();
-        let state = state.is_combining.clone();
-        use_effect(move || {
-            wasm_bindgen_futures::spawn_local(async move {
-                if let Ok(mut events) = event::listen::<u32>("log_combine_progress").await {
-                    while let Some(e) = events.next().await {
-                        progress.set(e.payload);
-                        if e.payload >= 100 {
-                            state.set(false);
-                        }
                     }
                 }
             });
@@ -94,26 +57,21 @@ pub fn split_combine_screen() -> Html {
     }
 
     let buttons = vec![
-        (IconId::BootstrapFileEarmarkArrowUp, icon_style().clone(), Some(split_log.clone()), "Split log"),
-        (IconId::BootstrapFolder, icon_style().clone(), Some(combine_log.clone()), "Combine logs"),
+        (IconId::BootstrapFolderSymlink, icon_border_style().clone(), Some(live_log.clone()), "Live log"),
     ];
 
     html! {
         <>
             <Icon
-                class={classes!(
-                    if *state.is_combining || *state.is_splitting { hide_style().clone() } else { none_style().clone() },
-                    back_arrow_style()
-                )}
+                class={back_arrow_style().clone()}
                 icon_id={IconId::LucideArrowLeftCircle}
                 onclick={go_home}
             />
-            <div class={container_style().clone()}>
+            <div class={classes!(container_style().clone())}>
                 <div class={classes!(
-                    css!(r#"margin-top: 2em;"#),
-                    if *state.is_combining || *state.is_splitting { none_style().clone() } else { hide_style().clone() }
+                    if *state.live_logging { none_style().clone() } else { hide_style().clone() }
                 )}>
-                    {format!("{}%", *state.progress)}
+                    {format!("{} new lines written", *state.progress)}
                 </div>
                 <div class={icon_wrapper_style().clone()}>
                     {
@@ -135,7 +93,6 @@ pub fn split_combine_screen() -> Html {
                                     <Icon
                                         width={"5em".to_owned()}
                                         height={"5em".to_owned()}
-                                        class={style.clone()}
                                         icon_id={icon_id.clone()}
                                         onclick={onclick.clone()}
                                     />
@@ -148,6 +105,11 @@ pub fn split_combine_screen() -> Html {
                             }
                         })
                     }
+                </div>
+                <div class={paragraph_style().clone()}>
+                    <div class={paragraph_style().clone()}>{"This will create the logs/LogToolLive subfolder in the selected destination. After creation, the contents of Encounter.log will be copied into it with modifications periodically."}</div>
+                    <div class={paragraph_style().clone()}>{"To live log with the esologs.com uploader, select the LogToolLive subfolder as the live-logging folder on the uploader."}</div>
+                    <div class={paragraph_style().clone()}>{"Do not store anything important in the LogToolLive subfolder. It is deleted regularly."}</div>
                 </div>
             </div>
         </>

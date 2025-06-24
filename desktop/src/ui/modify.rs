@@ -3,7 +3,7 @@ use yew::prelude::*;
 use yew_router::hooks::use_navigator;
 use yew_icons::{Icon, IconId};
 use futures::StreamExt;
-use crate::{routes::Route, ui::style::{back_arrow_style, container_style, header_style, hide_style, icon_border_style, icon_description, icon_wrapper_style, none_style}};
+use crate::{routes::Route, ui::style::*};
 
 #[function_component(ModifyScreen)]
 pub fn modify_screen() -> Html {

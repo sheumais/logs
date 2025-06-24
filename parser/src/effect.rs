@@ -79,18 +79,14 @@ pub fn parse_status_effect_type(string: &str) -> StatusEffectType {
 }
 
 #[allow(dead_code)]
-const ZEN_DEBUFF_ID: &'static u32 = &126597;
+pub const ZEN_DEBUFF_ID: &'static u32 = &126597;
 #[allow(dead_code)]
 const CRITICAL_CHANCE_MAXIMUM: &'static f32 = &21912.00097656250181;
-#[allow(dead_code)]
-const ENLIVENING_OVERFLOW: &'static u32 = &156008;
-#[allow(dead_code)]
-const FROM_THE_BRINK: &'static u32 = &156017;
 
 #[allow(dead_code)]
-pub fn is_zen_dot(effect: &Effect) -> bool {
-    match effect.ability.id {
-        // class abilities
+pub fn is_zen_dot(effect_id: u32) -> bool {
+    match effect_id {
+            // class abilities
         36947 => true, // debilitate
         35336 => true, // lotus fan
         36960 => true, // crippling grasp
@@ -109,65 +105,61 @@ pub fn is_zen_dot(effect: &Effect) -> bool {
         44369 => true, // venomous claw
         44373 => true, // burning embers
 
-        // pure agony synergy
-        // ghostly embrace (2nd circle)
+        118618 => true, // pure agony synergy
+        143944 => true, // ghostly embrace (2nd circle)
 
         182989 => true, // fulminating rune
         185840 => true, // rune of displacement
 
-        // weapon abilities
+            // weapon abilities
         204009 => true, // tri focus (fire staff)
         38747 => true, // carve
         62712 => true, // frost reach
+        62682 => true, // flame reach
+        62745 => true, // shock reach
         38703 => true, // acid spray
         44549 => true, // poison injection 
         85261 => true, // toxic barrage
         44545 => true, // venom arrow
-        38841 => true, // rending slashes
         85182 => true, // thrive in chaos
-        // rend
-        // blood craze
+        // rend ultimate
+        38848 => true, // rending slashes
+        38845 => true, // blood craze
 
 
-        // world abilities
-        137259 => true, // exhilarating drain
-        // drain vigor
-        // soul splitting trap
-        // consuming trap
+            // world abilities
+        137259 => true, // exhilarating drain (vamp)
+        // drain vigor (vamp)
+        126895 => true, // soul splitting trap
+        126897 => true, // consuming trap
         // soul assault
         // shatter soul
 
 
-        // armor sets
-        75753 => true, // alkosh (line-breaker)
+            // gear sets
+        76667 => true, // alkosh (line-breaker)
         97743 => true, // pillar of nirn
         172671 => true, // whorl of the depths
         107203 => true, // arms of relequen
 
-        // guild abilities
+            // guild abilities
         40468 => true, // scalding rune
         40385 => true, // barbed trap
-        // lightweight barbed trap
+        40375 => true, // lightweight barbed trap
         126374 => true, // degeneration
         126371 => true, // structured entropy
         62314 => true, // dawnbreaker of smiting
         62310 => true, // flawless dawnbreaker
 
-        // other
+            // other
         18084 => true, // burning
         21929 => true, // poisoned
         148801 => true, // hemorrhaging
         41838 => true, // radiate synergy
         113627 => true, // virulent shot (brp bow)
         79025 => true, // ravage health 3.5s
-
-        _ => {
-            if effect.ability.scribing.is_some() {
-                effect.ability.scribing.clone().unwrap()[1] == "Lingering Torment"
-            } else {
-                false
-            }
-        }
+        219720 => true, // travelling knife lingering torment
+        _ => false
     }
 }
 
