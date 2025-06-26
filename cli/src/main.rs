@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::env;
 use std::path::Path;
+use cli::esologs_convert::ESOLogProcessor;
 use cli::log_edit::modify_log_file;
 use cli::read_file;
 use cli::split_log::split_encounter_file_into_log_files;
@@ -22,6 +24,65 @@ fn main() {
             if let Err(e) = split_encounter_file_into_log_files(Path::new(file_path)) {
                 eprintln!("Error splitting log file: {}", e);
             }
+        }
+        "esolog" => {
+            let mut eso_log_processor = ESOLogProcessor::new();
+            if let Err(e) = eso_log_processor.convert_log_file_to_esolog_format(Path::new(file_path)) {
+                eprintln!("Error splitting log file: {}", e);
+            }
+            use std::fs::File;
+            use std::io::Write;
+            let mut file = match File::create("C:/Users/H/Downloads/esolog_output.txt") {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("Error creating output file: {}", e);
+                    return;
+                }
+            };
+            println!("{}", eso_log_processor.eso_logs_log.units.len());
+            for unit in eso_log_processor.eso_logs_log.units {
+                if let Err(e) = writeln!(file, "{unit}") {
+                    eprintln!("Error writing to file: {}", e);
+                }
+            }
+            { // Fix stuff for some buffs
+                let default_icon = "ability_mage_065";
+                let mut icon_by_name = HashMap::<String, String>::new();
+                for buff in eso_log_processor.eso_logs_log.buffs.iter() {
+                    if buff.icon != default_icon {
+                        icon_by_name.insert(buff.name.clone(), buff.icon.clone());
+                    }
+                }
+                println!("{}", eso_log_processor.eso_logs_log.buffs.len());
+                for buff in eso_log_processor.eso_logs_log.buffs.iter_mut() {
+                    if buff.icon == default_icon {
+                        if let Some(icon) = icon_by_name.get(&buff.name) {
+                            buff.icon = icon.clone();
+                        }
+                    }
+                    if let Err(e) = writeln!(file, "{buff}") {
+                        eprintln!("Error writing to file: {e}");
+                    }
+                }
+            }
+            println!("{}", eso_log_processor.eso_logs_log.effects.len());
+            for event in eso_log_processor.eso_logs_log.effects {
+                if let Err(e) = writeln!(file, "{event}") {
+                    eprintln!("Error writing to file: {}", e);
+                }
+            }
+            // let mut file = match File::create("C:/Users/H/Downloads/esolog_output2.txt") {
+            //     Ok(f) => f,
+            //     Err(e) => {
+            //         eprintln!("Error creating output file: {}", e);
+            //         return;
+            //     }
+            // };
+            // for line in eso_log_processor.eso_logs_log.events.iter() {
+            //     if let Err(e) = writeln!(file, "{line}") {
+            //         eprintln!("Error writing to file: {}", e);
+            //     }
+            // }
         }
         "fights" => {
             let logs = read_file(Path::new(file_path)).unwrap();

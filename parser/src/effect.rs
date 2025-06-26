@@ -33,7 +33,7 @@ pub struct EffectEvent {
     pub player_initiated_remove_cast_track_id: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum EffectChangeType {
     Faded,
     Gained,

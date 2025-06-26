@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{effect::Ability, unit::UnitState};
 
 #[derive(Debug, PartialEq, Clone)]
@@ -5,8 +7,8 @@ pub struct Player {
     pub unit_id: u32,
     pub is_local_player: bool,
     pub player_per_session_id: u32,
-    pub class_id: ClassId,
-    pub race_id: RaceId,
+    pub class_id: Class,
+    pub race_id: Race,
     pub name: String,
     pub display_name: String,
     pub character_id: u64,
@@ -111,7 +113,7 @@ pub fn empty_loadout() -> Loadout {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum ClassId {
+pub enum Class {
     Dragonknight,
     Sorcerer,
     Nightblade,
@@ -119,49 +121,85 @@ pub enum ClassId {
     Warden,
     Necromancer,
     Arcanist,
+    None,
 }
 
-pub fn match_class(string: &str) -> ClassId {
+impl fmt::Display for Class {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Class::None => "0",
+            Class::Dragonknight => "1",
+            Class::Sorcerer => "2",
+            Class::Nightblade => "3",
+            Class::Warden => "4",
+            Class::Necromancer => "5",
+            Class::Templar => "6",
+            Class::Arcanist => "117",
+        };
+        write!(f, "{s}")
+    }
+}
+
+pub fn match_class(string: &str) -> Class {
     match string {
-        "1" => ClassId::Dragonknight,
-        "2" => ClassId::Sorcerer,
-        "3" => ClassId::Nightblade,
-        "4" => ClassId::Warden,
-        "5" => ClassId::Necromancer,
-        "6" => ClassId::Templar,
-        "117" => ClassId::Arcanist,
-        _ => ClassId::Nightblade,
+        "1" => Class::Dragonknight,
+        "2" => Class::Sorcerer,
+        "3" => Class::Nightblade,
+        "4" => Class::Warden,
+        "5" => Class::Necromancer,
+        "6" => Class::Templar,
+        "117" => Class::Arcanist,
+        _ => Class::None,
     }
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum RaceId {
-    Argonian,
-    Breton,
-    DarkElf,
-    HighElf,
-    Imperial,
-    Khajiit,
-    Nord,
-    Orc,
-    Redguard,
-    WoodElf,
+pub enum Race {
     None,
+    Breton,
+    Redguard,
+    Orc,
+    DarkElf,
+    Nord,
+    Argonian,
+    HighElf,
+    WoodElf,
+    Khajiit,
+    Imperial,
 }
 
-pub fn match_race(string: &str) -> RaceId {
+impl fmt::Display for Race {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Race::Breton => "1",
+            Race::Redguard => "2",
+            Race::Orc => "3",
+            Race::DarkElf => "4",
+            Race::Nord => "5",
+            Race::Argonian => "6",
+            Race::HighElf => "7",
+            Race::WoodElf => "8",
+            Race::Khajiit => "9",
+            Race::Imperial => "10",
+            Race::None => "0",
+        };
+        write!(f, "{s}")
+    }
+}
+
+pub fn match_race(string: &str) -> Race {
     match string {
-        "1" => RaceId::Breton,
-        "2" => RaceId::Redguard, // ???
-        "3" => RaceId::Orc,
-        "4" => RaceId::DarkElf,
-        "5" => RaceId::Nord,
-        "6" => RaceId::Argonian, // ???
-        "7" => RaceId::HighElf,
-        "8" => RaceId::WoodElf, // ???
-        "9" => RaceId::Khajiit,
-        "10" => RaceId::Imperial, // ???
-        _ => RaceId::None,
+        "1" => Race::Breton,
+        "2" => Race::Redguard, // ???
+        "3" => Race::Orc,
+        "4" => Race::DarkElf,
+        "5" => Race::Nord,
+        "6" => Race::Argonian, // ???
+        "7" => Race::HighElf,
+        "8" => Race::WoodElf, // ???
+        "9" => Race::Khajiit,
+        "10" => Race::Imperial, // ???
+        _ => Race::None,
     }
 }
 

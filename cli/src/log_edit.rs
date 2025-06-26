@@ -4,7 +4,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Write, BufRead};
 use std::path::Path;
 use parser::effect::{is_zen_dot, ZEN_DEBUFF_ID};
-use parser::log::Log;
+use parser::parse::{gear_piece, unit_state};
 use parser::player::GearSlot;
 use parser::set::{get_item_type_from_hashmap, ItemType};
 
@@ -57,34 +57,57 @@ pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 pub fn handle_line(line: String, mut zen_hashmap: &mut HashMap<u32, ZenDebuffState>) -> Vec<String> {
-    let mut modified_lines: Vec<String> = Vec::new();
     let mut in_brackets = false;
-    let mut current_segment_start = 0;
-    let mut parts = Vec::new();
+    let mut in_quotes = false;
+    let mut start = 0;
+    let mut just_closed_quote = false; 
+    let mut parts: Vec<&str> = Vec::new();
+    let mut modified_lines = Vec::new();
 
-    for (i, char) in line.char_indices() {
-        match char {
-            '[' => {
-                in_brackets = true;
-                current_segment_start = i + 1;
-            }
-            ']' => {
+    let mut iter = line.char_indices().peekable();
+    while let Some((i, ch)) = iter.next() {
+        match ch {
+            '[' if !in_quotes => { in_brackets = true;  start = i + 1; }
+            ']' if !in_quotes => {
                 in_brackets = false;
-                parts.push(&line[current_segment_start..i]);
-                current_segment_start = i + 1;
+                parts.push(&line[start..i]);
+                start = i + 1;
             }
-            ',' if !in_brackets => {
-                parts.push(&line[current_segment_start..i]);
-                current_segment_start = i + 1; 
+
+            '"' => {
+                if in_quotes && iter.peek().map(|(_,c)| *c) == Some('"') {
+                    iter.next();
+                    continue;
+                }
+
+                if in_quotes {
+                    parts.push(&line[start..i]);
+                    in_quotes = false;
+                    just_closed_quote = true;
+                    start = i + 1;
+                } else {
+                    in_quotes = true;
+                    start = i + 1;
+                }
             }
+
+            ',' if !in_brackets && !in_quotes => {
+                if just_closed_quote {
+                    just_closed_quote = false;
+                    start = i + 1;
+                } else {
+                    parts.push(&line[start..i]);
+                    start = i + 1;
+                }
+            }
+
             _ => {}
         }
     }
 
-    if current_segment_start < line.len() {
-        parts.push(&line[current_segment_start..]);
+    if start < line.len() || just_closed_quote {
+        parts.push(&line[start..]);
     }
-    parts.retain(|part| !part.is_empty());
 
     let parts_clone = parts.clone();
     if parts_clone.get(1) == Some(&"BEGIN_COMBAT") {
@@ -137,11 +160,11 @@ fn check_effect_changed(parts: Vec<&str>, zen_hashmap: &mut HashMap<u32, ZenDebu
 const MAX_ZEN_STACKS: u8 = 5;
 
 fn add_zen_stacks(parts: Vec<&str>, zen_status: &mut HashMap<u32, ZenDebuffState>) -> Option<Vec<String>> {
-    let source_unit_state = parser::log::Log::parse_unit_state(parts.clone(), 6);
+    let source_unit_state = unit_state(&parts, 6);
     let target_unit_state = if parts[16] == "*" {
         source_unit_state.clone()
     } else {
-        parser::log::Log::parse_unit_state(parts.clone(), 16)
+        unit_state(&parts, 16)
     };
 
     let source_unit_id = source_unit_state.unit_id;
@@ -311,7 +334,7 @@ fn modify_player_data(parts: Vec<&str>) -> Option<Vec<String>> {
     let mut frontbar_type = ItemType::Unknown;
     let mut backbar_type = ItemType::Unknown;
     for i in 5..gear_parts {
-        let gear_piece = Log::handle_equipment_info(parts[i]);
+        let gear_piece = gear_piece(parts[i]);
         let item_slot = gear_piece.slot;
         let item_type = get_item_type_from_hashmap(gear_piece.item_id);
         if item_slot == GearSlot::MainHand {
