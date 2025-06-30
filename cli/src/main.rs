@@ -71,18 +71,18 @@ fn main() {
                     eprintln!("Error writing to file: {}", e);
                 }
             }
-            // let mut file = match File::create("C:/Users/H/Downloads/esolog_output2.txt") {
-            //     Ok(f) => f,
-            //     Err(e) => {
-            //         eprintln!("Error creating output file: {}", e);
-            //         return;
-            //     }
-            // };
-            // for line in eso_log_processor.eso_logs_log.events.iter() {
-            //     if let Err(e) = writeln!(file, "{line}") {
-            //         eprintln!("Error writing to file: {}", e);
-            //     }
-            // }
+            let mut file = match File::create("C:/Users/H/Downloads/esolog_output2.txt") {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("Error creating output file: {}", e);
+                    return;
+                }
+            };
+            for line in eso_log_processor.eso_logs_log.events.iter() {
+                if let Err(e) = writeln!(file, "{line}") {
+                    eprintln!("Error writing to file: {}", e);
+                }
+            }
         }
         "fights" => {
             let logs = read_file(Path::new(file_path)).unwrap();

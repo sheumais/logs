@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{effect::{self, Ability, Effect}, player::{self, GearPiece, Player}, unit::{self, Unit, UnitType}};
 
-fn is_true(value: &str) -> bool {
+pub fn is_true(value: &str) -> bool {
     value == "T"
 }
 

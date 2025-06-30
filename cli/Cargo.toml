@@ -5,4 +5,3 @@ edition = "2024"
 
 [dependencies]
 parser = { path = "../parser" }
-indexmap = "2.9.0"

@@ -127,6 +127,15 @@ impl ESOLogsLog {
         }
         "nil".to_string()
     }
+
+    pub fn get_cp_for_unit(&self, unit_id: u32) -> u16 {
+        if let Some(&session_id) = self.unit_id_to_session_id.get(&unit_id) {
+            if let Some(unit) = self.units_hashmap.get(&session_id) {
+                return self.units[*unit - 1].champion_points;
+            }
+        }
+        0
+    }
 }
 
 pub enum ESOLogsEvent {
@@ -135,18 +144,17 @@ pub enum ESOLogsEvent {
     CastLine(ESOLogsCastLine),
     PowerEnergize(ESOLogsPowerEnergize),
     ZoneInfo(ESOLogsZoneInfo),
+    PlayerInfo(ESOLogsPlayerBuild),
     MapInfo(ESOLogsMapInfo),
+    EndCombat(ESOLogsCombatEvent),
+    BeginCombat(ESOLogsCombatEvent),
+    EndTrial(ESOLogsEndTrial),
 }
 
 impl Display for ESOLogsEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ESOLogsEvent::Buff(e)           => write!(f, "{e}"),
-            ESOLogsEvent::BuffLine(e)       => write!(f, "{e}"),
-            ESOLogsEvent::CastLine(e)       => write!(f, "{e}"),
-            ESOLogsEvent::PowerEnergize(e)  => write!(f, "{e}"),
-            ESOLogsEvent::ZoneInfo(e)       => write!(f, "{e}"),
-            ESOLogsEvent::MapInfo(e)        => write!(f, "{e}"),
+            e => write!(f, "{e}"),
         }
     }
 }
@@ -192,7 +200,7 @@ impl Display for ESOLogsUnit {
 // 612,ABILITY_INFO,45509,"Penetrating Magic","/esoui/art/icons/ability_weapon_008.dds",T,T          3
 // 612,ABILITY_INFO,30959,"Ancient Knowledge","/esoui/art/icons/ability_weapon_003.dds",F,T          1
 // 1913,ABILITY_INFO,61506,"Echoing Vigor","/esoui/art/icons/ability_ava_echoing_vigor.dds",F,F      0
-
+#[derive(Clone)]
 pub struct ESOLogsBuff {
     pub name: String,
     pub damage_type: DamageType,
@@ -219,7 +227,7 @@ impl Display for ESOLogsBuff {
     }
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct ESOLogsBuffEventKey {
     source_unit_index: u16,
     target_unit_index: u16,
@@ -242,14 +250,23 @@ impl Display for ESOLogsBuffEvent {
 
 #[derive(Copy, Clone)]
 pub enum ESOLogsLineType {
+    CriticalDamage = 1,
+    DotTickCritical = 2,
+    CriticalHeal = 3,
     CastOnOthers = 4,
-    BuffFaded = 5,
-    BuffGained = 7,
+    BuffFaded = 7,
+    EffectStacksUpdated = 6, // stacks after buff table reference (52438|6|37|16|16|3)
+    BuffGained = 5,
+    FadedOnOthers = 12,
+    CastWithCastTime = 15,
     CastOnSelf = 16,
     PowerEnergize = 26,
     ZoneInfo = 41,
+    PlayerInfo = 44,
     MapInfo = 51,
+    BeginCombat = 52,
     EndCombat = 53,
+    EndTrial = 55,
 }
 
 impl Display for ESOLogsLineType {
@@ -264,17 +281,21 @@ pub struct ESOLogsBuffLine {
     pub buff_event: ESOLogsBuffEvent, // print only the index
     pub magic_number_1: u8, // often 16, sometimes 32, maybe some other stuff
     pub magic_number_2: u8, // always 16?
-    pub magic_entry: Option<u16>, // A(number) or smthn. idk why this appears sometimes
-    pub magic_entry_2: Option<u16>, // Sometimes after the A()| there will be another number
+    pub source_cast_index: Option<usize>, // A(number), index of the cast in the cast table that caused this buff change
+    pub source_shield: u32, // shield amount
+    pub target_shield: u32,
 }
 
 impl Display for ESOLogsBuffLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.magic_entry.is_some() {
-            if self.magic_entry_2.is_some() {
-                return write!(f, "{}|{}|{}|{}|{}|A{}|{}", self.timestamp, self.line_type, self.buff_event.unique_index, self.magic_number_1, self.magic_number_2, self.magic_entry.unwrap(), self.magic_entry_2.unwrap());
+        if self.source_cast_index.is_some() {
+            if self.source_shield != 0 {
+                if self.target_shield != 0 {
+                    return write!(f, "{}|{}|{}|{}|{}|A{}|{}|{}", self.timestamp, self.line_type, self.buff_event.unique_index, self.magic_number_1, self.magic_number_2, self.source_cast_index.unwrap(), self.source_shield, self.target_shield);
+                }
+                return write!(f, "{}|{}|{}|{}|{}|A{}|{}", self.timestamp, self.line_type, self.buff_event.unique_index, self.magic_number_1, self.magic_number_2, self.source_cast_index.unwrap(), self.source_shield);
             }
-            return write!(f, "{}|{}|{}|{}|{}|A{}", self.timestamp, self.line_type, self.buff_event.unique_index, self.magic_number_1, self.magic_number_2, self.magic_entry.unwrap());
+            return write!(f, "{}|{}|{}|{}|{}|A{}", self.timestamp, self.line_type, self.buff_event.unique_index, self.magic_number_1, self.magic_number_2, self.source_cast_index.unwrap());
         } else {
             write!(f, "{}|{}|{}|{}|{}", self.timestamp, self.line_type, self.buff_event.unique_index, self.magic_number_1, self.magic_number_2)
         }
@@ -283,7 +304,7 @@ impl Display for ESOLogsBuffLine {
 
 pub struct ESOLogsUnitState {
     pub unit_state: UnitState,
-    pub magic_index: u16, // no idea.
+    pub champion_points: u16, // fucking champion points. why the fuck ?????
 }
 
 impl Display for ESOLogsUnitState {
@@ -291,7 +312,7 @@ impl Display for ESOLogsUnitState {
             let map_x_int = (self.unit_state.map_x * 10_000.0).round() as u32;
             let map_y_int = (self.unit_state.map_y * 10_000.0).round() as u32;
             let heading_int = (self.unit_state.heading * 100.0).round() as u32;
-            write!(f, "{}/{}|{}/{}|{}/{}|{}/{}|{}/{}|{}|{}|{}|{}",
+            write!(f, "{}/{}|{}/{}|{}/{}|{}/{}|{}/{}|{}|{}|{}|{}|{}",
             self.unit_state.health,
             self.unit_state.max_health,
             self.unit_state.magicka,
@@ -303,6 +324,7 @@ impl Display for ESOLogsUnitState {
             self.unit_state.werewolf,
             self.unit_state.werewolf_max,
             self.unit_state.shield,
+            self.champion_points,
             map_x_int,
             map_y_int,
             heading_int
@@ -374,10 +396,6 @@ impl Display for ESOLogsResourceType {
     }
 }
 
-//4282,COMBAT_EVENT,POWER_ENERGIZE,GENERIC,1,224,0,20091228,131489,36,22394/22394,25108/32968,9601/12770,500/500,1000/1000,0,0.6116,0.3636,4.5066,*
-//4282,COMBAT_EVENT,POWER_ENERGIZE,GENERIC,4,224,0,20091228,99781,36,22394/22394,25108/32968,9825/12770,500/500,1000/1000,0,0.6116,0.3636,4.5066,*
-//4270|26|85|16|16|C20091228|S22394/22394|25108/32968|9601/12770|500/500|1000/1000|0|2195|6116|6364|450|T22394/22394|25108/32968|9601/12770|500/500|1000/1000|0|2195|6116|6364|450|224|0|0|32968
-//4270|26|84|16|16|C20091228|S22394/22394|25108/32968|9825/12770|500/500|1000/1000|0|2195|6116|6364|450|T22394/22394|25108/32968|9825/12770|500/500|1000/1000|0|2195|6116|6364|450|224|0|1|12770
 pub struct ESOLogsPowerEnergize {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType, // PowerEnergize
@@ -406,7 +424,7 @@ pub struct ESOLogsZoneInfo {
     pub line_type: ESOLogsLineType, // ZoneInfo
     pub zone_id: u16,
     pub zone_name: String,
-    pub zone_difficulty: u8, // 2 = veteran
+    pub zone_difficulty: u8, // 0 none, 1 = normal, 2 = veteran
 }
 
 impl Display for ESOLogsZoneInfo {
@@ -428,4 +446,116 @@ impl Display for ESOLogsMapInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}|{}|{}|{}|{}", self.timestamp, self.line_type, self.map_id, self.map_name, self.map_image_url)
     }
+}
+
+pub struct ESOLogsPlayerBuild {
+    pub timestamp: u64,
+    pub line_type: ESOLogsLineType,
+    pub unit_id: u32,
+    pub permanent_buffs: String,
+    pub buff_stacks: String,
+    pub gear: Vec<String>,
+    pub primary_abilities: String,
+    pub backup_abilities: String,
+}
+
+impl Display for ESOLogsPlayerBuild {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let gear = self.gear.join("],[");
+        write!(f, "{}|{}|{}|[{}],[{}],[[{}]],[{}],[{}]", self.timestamp, self.line_type, self.unit_id, self.permanent_buffs, self.buff_stacks, gear, self.primary_abilities, self.backup_abilities)
+    }
+}
+
+pub struct ESOLogsCombatEvent {
+    pub timestamp: u64,
+    pub line_type: ESOLogsLineType,
+}
+
+impl Display for ESOLogsCombatEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}|{}|", self.timestamp, self.line_type)
+    }
+}
+
+pub struct ESOLogsEndTrial {
+    pub timestamp: u64,
+    pub line_type: ESOLogsLineType,
+    pub trial_id: u8,
+    pub duration: u64,
+    pub success: u8, // 1 = success, 0 = fail
+    pub final_score: u32,
+    // pub vitality_bonus: u16, not used
+}
+
+impl Display for ESOLogsEndTrial {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}|{}|{}|{}|{}|{}", self.timestamp, self.line_type, self.trial_id, self.duration, self.success, self.final_score)
+    }
+}
+
+pub struct UserInfo {
+    id: u32,
+    username: String,
+    email_address: Option<String>,
+    is_admin: bool,
+    guilds: Option<Vec<GuildInfo>>,
+    characters: Option<Vec<CharacterInfo>>,
+    enabled_features: Vec<bool>,
+    guild_items: Vec<GuildSelectInfo>,
+    report_visibility_items: Vec<LabelValue>,
+    report_tag_items: Option<Vec<String>>,
+    region_select_items: Vec<LabelValue>,
+    last_character_import: Option<CharacterInfo>,
+    character_import_url: Option<String>,
+    is_on_tooltip_addon_waiting_list: bool,
+}
+struct GuildInfo {
+    id: u16,
+    name: String,
+    rank: u8,
+    guild_logo: GuildLogo,
+    faction: u8,
+    is_recruit: bool,
+    is_officer: bool,
+    is_guild_master: bool,
+    server: Server,
+    region: Region,
+}
+struct GuildSelectInfo {
+    value: u16,
+    label: String,
+    logo: GuildLogo,
+    css_class_name: String,
+    region_id: u8,
+}
+
+struct GuildLogo {
+    url: String,
+    is_custom: bool,
+    fallback_url: String,
+}
+
+struct CharacterInfo {
+    id: u32,
+    name: String,
+    class_name: String,
+    thumbnail: String,
+    server: Server,
+    region: Region,
+}
+
+struct Server {
+    id: u8,
+    name: String,
+}
+
+struct Region {
+    id: u8,
+    name: String,
+    short_name: String,
+}
+
+struct LabelValue {
+    label: String,
+    value: u8,
 }
