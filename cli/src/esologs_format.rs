@@ -23,6 +23,7 @@
 
 use std::{collections::HashMap, fmt::{self, Display}, hash::Hash};
 use parser::{event::DamageType, player::Race, unit::{Reaction, UnitState}};
+use serde::{Deserialize, Serialize};
 
 #[derive(Default)]
 pub struct ESOLogsLog {
@@ -493,71 +494,133 @@ impl Display for ESOLogsEndTrial {
     }
 }
 
-// pub struct UserInfo {
-//     id: u32,
-//     username: String,
-//     email_address: Option<String>,
-//     is_admin: bool,
-//     guilds: Option<Vec<GuildInfo>>,
-//     characters: Option<Vec<CharacterInfo>>,
-//     enabled_features: Vec<bool>,
-//     guild_items: Vec<GuildSelectInfo>,
-//     report_visibility_items: Vec<LabelValue>,
-//     report_tag_items: Option<Vec<String>>,
-//     region_select_items: Vec<LabelValue>,
-//     last_character_import: Option<CharacterInfo>,
-//     character_import_url: Option<String>,
-//     is_on_tooltip_addon_waiting_list: bool,
-// }
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LoginResponse {
+    pub user: UserInfo,
+    pub enabled_features: EnabledFeatures,
+    #[serde(rename = "guildSelectItems")]
+    pub guild_select_items: Vec<GuildSelectInfo>,
+    #[serde(rename = "reportVisibilitySelectItems")]
+    pub report_visibility_select_items: Vec<LabelValue>,
+    #[serde(rename = "regionOrServerSelectItems")]
+    pub region_or_server_select_items: Vec<ValueLabel>,
+}
 
-// struct GuildInfo {
-//     id: u16,
-//     name: String,
-//     rank: u8,
-//     guild_logo: GuildLogo,
-//     faction: u8,
-//     is_recruit: bool,
-//     is_officer: bool,
-//     is_guild_master: bool,
-//     server: Server,
-//     region: Region,
-// }
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UserInfo {
+    pub id: u32,
+    #[serde(rename = "userName")]
+    pub username: String,
+    #[serde(rename = "emailAddress")]
+    pub email_address: Option<String>,
+    #[serde(rename = "isAdmin")]
+    pub is_admin: bool,
+    pub guilds: Vec<GuildInfo>,
+    #[serde(default)]
+    pub characters: Vec<CharacterInfo>,
+    pub thumbnail: String,
+}
 
-// struct GuildSelectInfo {
-//     value: u16,
-//     label: String,
-//     logo: GuildLogo,
-//     css_class_name: String,
-//     region_id: u8,
-// }
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct EnabledFeatures {
+    #[serde(rename = "noAds")]
+    pub no_ads: bool,
+    #[serde(rename = "realTimeLiveLogging")]
+    pub real_time_live_logging: bool,
+    pub meters: bool,
+    #[serde(rename = "liveFightData")]
+    pub live_fight_data: bool,
+    #[serde(rename = "tooltipAddon")]
+    pub tooltip_addon: bool,
+    #[serde(rename = "tooltipAddonTierTwoData")]
+    pub tooltip_addon_tier_two_data: bool,
+    #[serde(rename = "autoLog")]
+    pub auto_log: bool,
+    #[serde(rename = "metersLiveParse")]
+    pub meters_live_parse: bool,
+    #[serde(rename = "metersRaceTheGhost")]
+    pub meters_race_the_ghost: bool,
+}
 
-// struct GuildLogo {
-//     url: String,
-//     is_custom: bool,
-//     fallback_url: String,
-// }
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GuildInfo {
+    pub id: u16,
+    pub name: String,
+    pub rank: u8,
+    pub guild_logo: GuildLogo,
+    pub faction: u8,
+    #[serde(rename = "isRecruit")]
+    pub is_recruit: bool,
+    #[serde(rename = "isOfficer")]
+    pub is_officer: bool,
+    #[serde(rename = "isGuildMaster")]
+    pub is_guild_master: bool,
+    pub server: Server,
+    pub region: Region,
+}
 
-// struct CharacterInfo {
-//     id: u32,
-//     name: String,
-//     class_name: String,
-//     thumbnail: String,
-//     server: Server,
-//     region: Region,
-// }
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GuildSelectInfo {
+    pub value: i32, // -1 for personal logs
+    pub label: String,
+    pub logo: GuildLogo,
+    #[serde(rename = "cssClassName")]
+    pub css_class_name: String,
+    #[serde(rename = "regionId")]
+    pub region_id: Option<u8>,
+}
 
-// struct Server {
-//     id: u8,
-//     name: String,
-// }
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GuildLogo {
+    pub url: String,
+    #[serde(rename = "isCustom")]
+    pub is_custom: bool,
+    #[serde(rename = "fallbackUrl")]
+    pub fallback_url: String,
+}
 
-// struct Region {
-//     id: u8,
-//     name: String,
-//     short_name: String,
-// }
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CharacterInfo {
+    pub id: u32,
+    pub name: String,
+    #[serde(rename = "cssClassName")]
+    pub class_name: String,
+    pub thumbnail: String,
+    pub server: Server,
+    pub region: Region,
+}
 
-// struct LabelValue {
-//     label: String,
-//     value: u8,
-// }
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Server {
+    pub id: u8,
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Region {
+    pub id: u8,
+    pub name: String,
+    #[serde(rename = "shortName")]
+    pub short_name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct LabelValue {
+    pub label: String,
+    pub value: u8,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct ValueLabel {
+    pub label: String,
+    pub value: u8,
+}

@@ -1,4 +1,4 @@
-use cli::log_edit::{handle_line, CustomLogData};
+use cli::{esologs_format::LoginResponse, log_edit::{handle_line, CustomLogData}};
 use state::AppState;
 use tauri_plugin_updater::UpdaterExt;
 use std::{
@@ -373,6 +373,33 @@ fn pick_and_load_folder(window: Window, state: State<'_, AppState>) -> Result<()
     pick_files_internal(&window, PickerType::Folder, &state)
 }
 
+#[tauri::command]
+async fn login(
+    state: tauri::State<'_, AppState>,
+    username: String,
+    password: String,
+) -> Result<LoginResponse, String> {
+    let payload = serde_json::json!({ "email": username, "password": password, "version": "8.17.18" });
+
+    let client = {
+        let client_guard = state.http.read().map_err(|e| e.to_string())?;
+        client_guard.client.clone()
+    };
+    let resp = client
+        .post("https://www.esologs.com/desktop-client/log-in")
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Err(format!("Server returned {}", resp.status()));
+    }
+    let text = resp.text().await.map_err(|e| format!("Failed to read response text: {e}"))?;
+    let body: LoginResponse = serde_json::from_str(&text).map_err(|e| format!("Invalid JSON: {e}"))?;
+    Ok(body)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -394,7 +421,8 @@ pub fn run() {
             modify_log_file,
             split_encounter_file_into_log_files,
             combine_encounter_log_files,
-            live_log_from_folder
+            live_log_from_folder,
+            login
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

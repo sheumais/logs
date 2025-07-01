@@ -2,7 +2,7 @@ use stylist::yew::styled_component;
 use yew::prelude::*;
 use yew_router::hooks::use_navigator;
 use yew_icons::{Icon, IconId};
-use crate::{routes::Route, ui::{logo::logo, style::*}};
+use crate::{routes::Route, ui::{logo::logo, style::*, login::LoginBox}};
 
 #[derive(Properties, PartialEq)]
 pub struct HomepageContainerProps {
@@ -65,12 +65,12 @@ pub fn homepage() -> Html {
             Some(modify_log.clone()),
             "Scan encounter log",
         ),
-        (
-            IconId::BootstrapFileEarmarkBarGraph,
-            icon_style_inactive().clone(),
-            Some(Callback::noop()),
-            "Log analysis (coming soon)",
-        ),
+        // (
+        //     IconId::BootstrapFileEarmarkBarGraph,
+        //     icon_style_inactive().clone(),
+        //     Some(Callback::noop()),
+        //     "Log analysis (coming soon)",
+        // ),
         (
             IconId::BootstrapFiles,
             icon_style().clone(),
@@ -83,10 +83,17 @@ pub fn homepage() -> Html {
             Some(live_log.clone()),
             "Live log with scan",
         ),
+        // (
+        //     IconId::LucideUpload,
+        //     icon_style().clone(),
+        //     Some(login.clone()),
+        //     "Login using esologs.com",
+        // ),
     ];
 
     html! {
         <>
+            <LoginBox/>
             <HomepageContainer>
                 <div class={icon_wrapper_style().clone()}>
                     { for buttons.iter().enumerate().map(|(i, (icon_id, style, onclick, desc))| {

@@ -58,7 +58,7 @@ pub fn modify_screen() -> Html {
 
     html! {
         <>
-            <div class={classes!(if *is_modifying {hide_style().clone()} else {none_style().clone()}, "back-arrow-hover")}>
+            <div class={classes!(if *is_modifying {hide_style().clone()} else {none_style().clone()})}>
                 <Icon class={back_arrow_style().clone()} icon_id={IconId::LucideArrowLeftCircle} onclick={go_home} />
             </div>
             <div class={container_style().clone()}>
