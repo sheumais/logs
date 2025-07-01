@@ -19,6 +19,7 @@ While it doesn’t handle uploading, it makes file handling faster and fixes you
 - [x] Shows casts of Fatecarver
 - [x] Blockade of Elements shows correct icon
 - [x] Touch of Z'en stacks
+- [x] Scribing skills show their scripts
 - [ ] Kills showing as 0.0% wipes where possible
 
 The Easy Stalking AddOn is recommended for automatically logging trials.

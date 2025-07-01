@@ -136,6 +136,7 @@ pub fn header_style() -> Style {
         user-select: none;
         margin: 1.5vw;
         margin-bottom: 3vw;
+        text-shadow: 2px 2px 2px black;
     "#)).expect("Error creating style")
 }
 
@@ -147,6 +148,7 @@ pub fn subheader_style() -> Style {
         top: 0.32em;
         left: 100%;
         color: #777;
+        text-shadow: 1px 1px 1px black;
     "#)).expect("Error creating style")
 }
 
@@ -154,6 +156,7 @@ pub fn paragraph_style() -> Style {
     Style::new(css!(r#"
         margin-bottom: 1em;
         margin-top: 1em;
+        text-shadow: 1px 1px 1px black;
     "#)).expect("Error creating style")
 }
 

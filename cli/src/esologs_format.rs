@@ -493,69 +493,71 @@ impl Display for ESOLogsEndTrial {
     }
 }
 
-pub struct UserInfo {
-    id: u32,
-    username: String,
-    email_address: Option<String>,
-    is_admin: bool,
-    guilds: Option<Vec<GuildInfo>>,
-    characters: Option<Vec<CharacterInfo>>,
-    enabled_features: Vec<bool>,
-    guild_items: Vec<GuildSelectInfo>,
-    report_visibility_items: Vec<LabelValue>,
-    report_tag_items: Option<Vec<String>>,
-    region_select_items: Vec<LabelValue>,
-    last_character_import: Option<CharacterInfo>,
-    character_import_url: Option<String>,
-    is_on_tooltip_addon_waiting_list: bool,
-}
-struct GuildInfo {
-    id: u16,
-    name: String,
-    rank: u8,
-    guild_logo: GuildLogo,
-    faction: u8,
-    is_recruit: bool,
-    is_officer: bool,
-    is_guild_master: bool,
-    server: Server,
-    region: Region,
-}
-struct GuildSelectInfo {
-    value: u16,
-    label: String,
-    logo: GuildLogo,
-    css_class_name: String,
-    region_id: u8,
-}
+// pub struct UserInfo {
+//     id: u32,
+//     username: String,
+//     email_address: Option<String>,
+//     is_admin: bool,
+//     guilds: Option<Vec<GuildInfo>>,
+//     characters: Option<Vec<CharacterInfo>>,
+//     enabled_features: Vec<bool>,
+//     guild_items: Vec<GuildSelectInfo>,
+//     report_visibility_items: Vec<LabelValue>,
+//     report_tag_items: Option<Vec<String>>,
+//     region_select_items: Vec<LabelValue>,
+//     last_character_import: Option<CharacterInfo>,
+//     character_import_url: Option<String>,
+//     is_on_tooltip_addon_waiting_list: bool,
+// }
 
-struct GuildLogo {
-    url: String,
-    is_custom: bool,
-    fallback_url: String,
-}
+// struct GuildInfo {
+//     id: u16,
+//     name: String,
+//     rank: u8,
+//     guild_logo: GuildLogo,
+//     faction: u8,
+//     is_recruit: bool,
+//     is_officer: bool,
+//     is_guild_master: bool,
+//     server: Server,
+//     region: Region,
+// }
 
-struct CharacterInfo {
-    id: u32,
-    name: String,
-    class_name: String,
-    thumbnail: String,
-    server: Server,
-    region: Region,
-}
+// struct GuildSelectInfo {
+//     value: u16,
+//     label: String,
+//     logo: GuildLogo,
+//     css_class_name: String,
+//     region_id: u8,
+// }
 
-struct Server {
-    id: u8,
-    name: String,
-}
+// struct GuildLogo {
+//     url: String,
+//     is_custom: bool,
+//     fallback_url: String,
+// }
 
-struct Region {
-    id: u8,
-    name: String,
-    short_name: String,
-}
+// struct CharacterInfo {
+//     id: u32,
+//     name: String,
+//     class_name: String,
+//     thumbnail: String,
+//     server: Server,
+//     region: Region,
+// }
 
-struct LabelValue {
-    label: String,
-    value: u8,
-}
+// struct Server {
+//     id: u8,
+//     name: String,
+// }
+
+// struct Region {
+//     id: u8,
+//     name: String,
+//     short_name: String,
+// }
+
+// struct LabelValue {
+//     label: String,
+//     value: u8,
+// }

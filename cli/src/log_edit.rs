@@ -4,9 +4,25 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Write, BufRead};
 use std::path::Path;
 use parser::effect::{is_zen_dot, ZEN_DEBUFF_ID};
-use parser::parse::{gear_piece, unit_state};
+use parser::parse::{self, gear_piece, unit_state};
 use parser::player::GearSlot;
 use parser::set::{get_item_type_from_hashmap, ItemType};
+
+pub struct CustomLogData {
+    pub zen_stacks: HashMap<u32, ZenDebuffState>,
+    pub scribing_abilities: Vec<ScribingAbility>,
+    pub scribing_map: HashMap<u32, usize>,
+}
+
+impl CustomLogData {
+    pub fn new() -> Self {
+        CustomLogData {
+            zen_stacks: HashMap::new(),
+            scribing_abilities: Vec::new(),
+            scribing_map: HashMap::new(),
+        }
+    }
+}
 
 pub struct ZenDebuffState {
     active: bool,
@@ -14,13 +30,22 @@ pub struct ZenDebuffState {
     contributing_ability_ids: Vec<u32>,
 }
 
+const BEGIN_SCRIBING_ABILITIES: u32 = 1000;
+
+#[derive(Debug, Clone)]
+pub struct ScribingAbility {
+    pub id: u32,
+    pub name: String,
+    pub icon: String,
+    pub scribing: Option<Vec<String>>,
+}
 
 pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
     let file: File = File::open(file_path)?;
     let reader = BufReader::new(file);
 
     let mut modified_lines: Vec<String> = Vec::new();
-    let mut zen_status: HashMap<u32, ZenDebuffState> = HashMap::new();
+    let mut custom_log_data = CustomLogData::new();
 
     for line_result in reader.lines() {
         let line = match line_result {
@@ -30,7 +55,7 @@ pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
                 continue;
             }
         };
-        modified_lines.extend(handle_line(line, &mut zen_status));
+        modified_lines.extend(handle_line(line, &mut custom_log_data));
     }
 
     let mut new_path = file_path.with_extension("");
@@ -56,64 +81,56 @@ pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn handle_line(line: String, mut zen_hashmap: &mut HashMap<u32, ZenDebuffState>) -> Vec<String> {
-    let mut in_brackets = false;
-    let mut in_quotes = false;
-    let mut start = 0;
-    let mut just_closed_quote = false; 
+pub fn handle_line(line: String, mut custom_log_data: &mut CustomLogData) -> Vec<String> {
     let mut parts: Vec<&str> = Vec::new();
-    let mut modified_lines = Vec::new();
+    let mut start = 0usize;
+    let mut bracket_level = 0u32;
+    let bytes = line.as_bytes();
 
-    let mut iter = line.char_indices().peekable();
-    while let Some((i, ch)) = iter.next() {
-        match ch {
-            '[' if !in_quotes => { in_brackets = true;  start = i + 1; }
-            ']' if !in_quotes => {
-                in_brackets = false;
-                parts.push(&line[start..i]);
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'[' => {
+                bracket_level += 1;
+                if i + 1 < bytes.len() && bytes[i + 1] == b'[' {
+                    i += 1;
+                }
+            }
+            b']' => {
+                if bracket_level > 0 {
+                    bracket_level -= 1;
+                }
+                if i + 1 < bytes.len() && bytes[i + 1] == b']' {
+                    i += 1;
+                }
+            }
+            b',' if bracket_level == 0 => {
+                let field = line[start..i].trim_matches(&['[', ']'][..]).trim();
+                if !field.is_empty() {
+                    parts.push(field);
+                }
                 start = i + 1;
             }
-
-            '"' => {
-                if in_quotes && iter.peek().map(|(_,c)| *c) == Some('"') {
-                    iter.next();
-                    continue;
-                }
-
-                if in_quotes {
-                    parts.push(&line[start..i]);
-                    in_quotes = false;
-                    just_closed_quote = true;
-                    start = i + 1;
-                } else {
-                    in_quotes = true;
-                    start = i + 1;
-                }
-            }
-
-            ',' if !in_brackets && !in_quotes => {
-                if just_closed_quote {
-                    just_closed_quote = false;
-                    start = i + 1;
-                } else {
-                    parts.push(&line[start..i]);
-                    start = i + 1;
-                }
-            }
-
             _ => {}
         }
+        i += 1;
     }
 
-    if start < line.len() || just_closed_quote {
-        parts.push(&line[start..]);
+    if start < line.len() {
+        let field = line[start..].trim_matches(&['[', ']'][..]).trim();
+        if !field.is_empty() {
+            parts.push(field);
+        }
     }
 
     let parts_clone = parts.clone();
     if parts_clone.get(1) == Some(&"BEGIN_COMBAT") {
-        zen_hashmap.clear();
+        custom_log_data.zen_stacks.clear();
     }
-    let new_addition = check_line_for_edits(parts, &mut zen_hashmap);
+    let new_addition = check_line_for_edits(parts, &mut custom_log_data);
+
+    let mut modified_lines = Vec::new();
+
     if let Some(new_lines) = new_addition {
         if parts_clone.get(1) != Some(&"ABILITY_INFO")
             && parts_clone.get(1) != Some(&"EFFECT_INFO")
@@ -122,6 +139,7 @@ pub fn handle_line(line: String, mut zen_hashmap: &mut HashMap<u32, ZenDebuffSta
         {
             modified_lines.push(line.clone());
         }
+
         modified_lines.extend(new_lines);
     } else {
         modified_lines.push(line.clone());
@@ -129,15 +147,15 @@ pub fn handle_line(line: String, mut zen_hashmap: &mut HashMap<u32, ZenDebuffSta
     return modified_lines
 }
 
-pub fn check_line_for_edits(parts: Vec<&str>, zen_hashmap: &mut HashMap<u32, ZenDebuffState>) -> Option<Vec<String>> {
+pub fn check_line_for_edits(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
     if parts.len() < 2 {
         return None;
     }
     match parts[1] {
-        "EFFECT_CHANGED" => check_effect_changed(parts, zen_hashmap),
-        "ABILITY_INFO" => check_ability_info(parts),
+        "EFFECT_CHANGED" => check_effect_changed(parts, &mut custom_log_data.zen_stacks),
+        "ABILITY_INFO" => check_ability_info(parts, custom_log_data),
         "EFFECT_INFO" => add_arcanist_beam_effect_information(parts),
-        "PLAYER_INFO" => modify_player_data(parts),
+        "PLAYER_INFO" => modify_player_data(parts, custom_log_data),
         _ => None,
     }
 }
@@ -267,8 +285,28 @@ fn add_arcanist_beam_cast(parts: Vec<&str>) -> Option<Vec<String>> {
     return None;
 }
 
-fn check_ability_info(parts: Vec<&str>) -> Option<Vec<String>> {
-    if parts[2] == PRAGMATIC || parts[2] == EXHAUSTING {
+fn check_ability_info(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
+    let ability = parse::ability(&parts);
+    if ability.scribing.is_some() {
+        let ability_name_clone = ability.name.clone();
+        let ability_id_clone = ability.id;
+        let scribing_ability = ScribingAbility {
+            id: BEGIN_SCRIBING_ABILITIES + custom_log_data.scribing_abilities.len() as u32,
+            name: ability.name,
+            icon: ability.icon,
+            scribing: ability.scribing,
+        };
+        custom_log_data.scribing_abilities.push(scribing_ability);
+        let index = custom_log_data.scribing_abilities.len() - 1;
+        let scribing_ability = &custom_log_data.scribing_abilities[index];
+        custom_log_data.scribing_map.insert(ability.id, index);
+        let focus_script = &scribing_ability.scribing.as_ref().unwrap()[0];
+        let signature_script = &scribing_ability.scribing.as_ref().unwrap()[1];
+        let affix_script = &scribing_ability.scribing.as_ref().unwrap()[2];
+        let new_name = format!("{} ({} / {})", &scribing_ability.name, signature_script, affix_script);
+        return Some(vec![format!("{},{},{},\"{}\",\"{}\",{},{},\"{}\",\"{}\",\"{}\"", parts[0], "ABILITY_INFO", scribing_ability.id, new_name, scribing_ability.icon, "F", "T", focus_script, signature_script, affix_script),
+        format!("{},{},{},\"{}\",\"{}\",{},{},\"{}\",\"{}\",\"{}\"", parts[0], "ABILITY_INFO", ability_id_clone, ability_name_clone, scribing_ability.icon, "F", "T", focus_script, signature_script, affix_script)]);
+    } else if parts[2] == PRAGMATIC || parts[2] == EXHAUSTING {
         add_arcanist_beam_information(parts)
     } else if parts[2].parse::<u32>().ok() == Some(BLOCKADE_DEFAULT) {
         add_blockade_versions(parts)     
@@ -321,8 +359,10 @@ fn add_blockade_versions(parts: Vec<&str>) -> Option<Vec<String>> {
     return Some(lines);
 }
 
-fn modify_player_data(parts: Vec<&str>) -> Option<Vec<String>> {
+fn modify_player_data(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
     
+    // println!("Modifying player data: {:?}", parts);
+
     if parts.len() < 7 { // this can occur if either the player is wearing nothing and has no skills, or they're not in the trial.
         return None;
     }
@@ -343,8 +383,14 @@ fn modify_player_data(parts: Vec<&str>) -> Option<Vec<String>> {
             backbar_type = item_type;
         }
     }
+    // println!("{}", custom_log_data.scribing_map.len());
+    // println!("{}", custom_log_data.scribing_map.keys().map(|k| k.to_string()).collect::<Vec<_>>().join(", "));
+    // println!("{}", custom_log_data.scribing_abilities.iter().map(|a| a.id.to_string()).collect::<Vec<_>>().join(", "));
+    // println!("{:?}", custom_log_data.scribing_abilities);
 
     for id in &mut primary_ability_id_list {
+        // println!("Checking id: {}", id);
+        // println!("Current scribing_map: {:?}", custom_log_data.scribing_map);
         if *id == BLOCKADE_DEFAULT || *id == BLOCKADE_FIRE || *id == BLOCKADE_FROST || *id == BLOCKADE_STORMS {
             *id = match frontbar_type {
                 ItemType::FrostStaff => BLOCKADE_FROST,
@@ -352,6 +398,12 @@ fn modify_player_data(parts: Vec<&str>) -> Option<Vec<String>> {
                 ItemType::LightningStaff => BLOCKADE_STORMS,
                 _ => BLOCKADE_DEFAULT,
             };
+        } else if custom_log_data.scribing_map.contains_key(id) {
+            // println!("Replacing {} with {}", id, BEGIN_SCRIBING_ABILITIES as u32);
+            if let Some(index) = custom_log_data.scribing_map.get(id) {
+                // println!("Replacing {} with {}", id, BEGIN_SCRIBING_ABILITIES + *index as u32);
+                *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
+            }
         }
     }
 
@@ -363,6 +415,12 @@ fn modify_player_data(parts: Vec<&str>) -> Option<Vec<String>> {
                 ItemType::LightningStaff => BLOCKADE_STORMS,
                 _ => BLOCKADE_DEFAULT,
             };
+        } else if custom_log_data.scribing_map.contains_key(id) {
+            // println!("Replacing {} with {}", id, BEGIN_SCRIBING_ABILITIES as u32);
+            if let Some(index) = custom_log_data.scribing_map.get(id) {
+                // println!("Replacing {} with {}", id, BEGIN_SCRIBING_ABILITIES + *index as u32);
+                *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
+            }
         }
     }
     

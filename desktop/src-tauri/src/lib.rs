@@ -1,8 +1,8 @@
-use cli::log_edit::{handle_line, ZenDebuffState};
+use cli::log_edit::{handle_line, CustomLogData};
 use state::AppState;
 use tauri_plugin_updater::UpdaterExt;
 use std::{
-    collections::HashMap, fs::{File, OpenOptions}, io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write}, path::Path, thread, time::Duration
+    fs::{File, OpenOptions}, io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write}, path::Path, thread, time::Duration
 };
 use tauri::{path::BaseDirectory, Emitter, Manager, State, Window};
 use tauri_plugin_dialog::DialogExt;
@@ -34,7 +34,7 @@ fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), Str
         .open(&new_path)
         .map_err(|e| format!("Failed to create output file: {}", e))?;
     let mut writer = BufWriter::new(file);
-    let mut zen_status: HashMap<u32, ZenDebuffState> = HashMap::new();
+    let mut custom_log_data = CustomLogData::new();
 
     let mut processed = 0;
     for line_result in reader.lines() {
@@ -45,7 +45,7 @@ fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), Str
                 continue;
             }
         };
-        let modified_line = handle_line(line, &mut zen_status);
+        let modified_line = handle_line(line, &mut custom_log_data);
         for entry in modified_line {
             writeln!(writer, "{entry}").ok();
         }
@@ -256,11 +256,11 @@ fn live_log_from_folder(window: Window, app_state: State<'_, AppState>) -> Resul
             if let Some(last_newline_offset) = buffer.iter().rposition(|&b| b == b'\n') {
                 let complete_data = &buffer[..=last_newline_offset];
                 let text = String::from_utf8_lossy(complete_data);
-                let mut zen_status: HashMap<u32, ZenDebuffState> = HashMap::new();
+                let mut custom_log_data = CustomLogData::new();
                 let mut new_lines = 0;
 
                 for line in text.lines() {
-                    let line = handle_line(line.to_string(), &mut zen_status);
+                    let line = handle_line(line.to_string(), &mut custom_log_data);
                     for entry in line {
                         writeln!(writer, "{entry}").ok();
                         new_lines += 1;
