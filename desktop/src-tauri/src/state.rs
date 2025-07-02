@@ -32,6 +32,7 @@ pub struct AppState {
     pub log_files: RwLock<Option<Vec<FilePath>>>,
     pub live_log_folder: RwLock<Option<FilePath>>,
     pub http: RwLock<HttpState>,
+    pub esolog_code: RwLock<Option<String>>,
 }
 
 impl AppState {
@@ -41,6 +42,7 @@ impl AppState {
             log_files: RwLock::new(None),
             live_log_folder: RwLock::new(None),
             http: RwLock::new(HttpState::new()),
+            esolog_code: RwLock::new(None),
         }
     }
 }

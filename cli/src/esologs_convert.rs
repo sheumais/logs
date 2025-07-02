@@ -1,8 +1,10 @@
-use std::{error::Error, fs::File, io::{BufRead, BufReader}, path::Path};
-
+use std::{error::Error, fs::File, io::{BufRead, BufReader, BufWriter}, path::Path};
+use std::io::Write;
 use parser::{event::{self, DamageType, EventResult}, parse::{self}, player::{Class, Race}, unit::Reaction};
+use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+use std::fs;
 
-use crate::esologs_format::*;
+use crate::{esologs_format::*, log_edit::{handle_line, CustomLogData}};
 
 pub struct ESOLogProcessor {
     pub eso_logs_log: ESOLogsLog,
@@ -79,63 +81,46 @@ impl ESOLogProcessor {
         Ok(())
     }
 
-    fn push_if_nonempty<'a>(v: &mut Vec<&'a str>, s: &'a str) {
-        if !s.is_empty() { v.push(s); }
-    }
-
-    fn handle_line(&mut self, line: String) {
-        let mut in_brackets = false;
-        let mut in_quotes = false;
-        let mut start = 0;
-        let mut just_closed_quote = false; 
+    pub fn handle_line(&mut self, line: String) {
         let mut parts: Vec<&str> = Vec::new();
+        let mut start = 0usize;
+        let mut bracket_level = 0u32;
+        let bytes = line.as_bytes();
 
-        let mut iter = line.char_indices().peekable();
-        while let Some((i, ch)) = iter.next() {
-            match ch {
-                '[' if !in_quotes => {
-                    in_brackets = true;
-                    start = i + 1;
-                }
-
-                ']' if !in_quotes => {
-                    in_brackets = false;
-                    Self::push_if_nonempty(&mut parts, &line[start..i]);
-                    start = i + 1;
-                }
-
-                '"' => {
-                    if in_quotes && iter.peek().map(|(_,c)| *c) == Some('"') {
-                        iter.next();
-                        continue;
-                    }
-
-                    if in_quotes {
-                        parts.push(&line[start..i]);
-                        in_quotes = false;
-                        just_closed_quote = true;
-                        start = i + 1;
-                    } else {
-                        in_quotes = true;
-                        start = i + 1;
+        let mut i = 0;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'[' => {
+                    bracket_level += 1;
+                    if i + 1 < bytes.len() && bytes[i + 1] == b'[' {
+                        i += 1;
                     }
                 }
-
-                ',' if !in_brackets && !in_quotes => {
-                    if just_closed_quote {
-                        just_closed_quote = false;
-                    } else {
-                        Self::push_if_nonempty(&mut parts, &line[start..i]);
+                b']' => {
+                    if bracket_level > 0 {
+                        bracket_level -= 1;
+                    }
+                    if i + 1 < bytes.len() && bytes[i + 1] == b']' {
+                        i += 1;
+                    }
+                }
+                b',' if bracket_level == 0 => {
+                    let field = line[start..i].trim_matches(&['[', ']'][..]).trim();
+                    if !field.is_empty() {
+                        parts.push(field);
                     }
                     start = i + 1;
                 }
-
                 _ => {}
             }
+            i += 1;
         }
 
-        if start < line.len() || just_closed_quote {
-            Self::push_if_nonempty(&mut parts, &line[start..]);
+        if start < line.len() {
+            let field = line[start..].trim_matches(&['[', ']'][..]).trim();
+            if !field.is_empty() {
+                parts.push(field);
+            }
         }
 
         self.parse_line(parts);
@@ -297,7 +282,6 @@ impl ESOLogProcessor {
         } else {
             parse::unit_state(parts, 19)
         };
-        let source_equal_target = parts[19] == "*";
         let ability_id = parts[8].parse().unwrap();
         let mut buff_event= ESOLogsBuffEvent {
             unique_index: 0,
@@ -342,7 +326,7 @@ impl ESOLogProcessor {
                 self.add_log_event(ESOLogsEvent::CastLine(
                     ESOLogsCastLine {
                         timestamp: ev.time,
-                        line_type: if &critical == &2 {ESOLogsLineType::CriticalDamage} else if source_equal_target {ESOLogsLineType::CastOnSelf} else {ESOLogsLineType::CastOnOthers},
+                        line_type: if &critical == &2 {ESOLogsLineType::CriticalDamage} else {ESOLogsLineType::Cast},
                         buff_event: buff_event,
                         cast: ESOLogsCastBase {
                             magic_number_1: 16,
@@ -369,7 +353,10 @@ impl ESOLogProcessor {
                 self.add_log_event(ESOLogsEvent::CastLine(
                     ESOLogsCastLine {
                         timestamp: ev.time,
-                        line_type: if &critical == &2 {ESOLogsLineType::CriticalHeal} else if source_equal_target {ESOLogsLineType::CastOnSelf} else {ESOLogsLineType::CastOnOthers},
+                        line_type: match ev.result {
+                            EventResult::HotTick | EventResult::HotTickCritical => {ESOLogsLineType::HotTick}
+                            _ => {ESOLogsLineType::Heal}
+                        },
                         buff_event: buff_event,
                         cast: ESOLogsCastBase {
                             magic_number_1: 16,
@@ -414,11 +401,11 @@ impl ESOLogProcessor {
                         },
                         hit_value: ev.hit_value,
                         overflow: ev.overflow,
-                        resource_type: match ev.power_type {
+                        resource_type: match ev.power_type { // health and stamina are intentionally around the wrong way from format
                             0 => ESOLogsResourceType::Magicka,
-                            1 => ESOLogsResourceType::Stamina,
+                            4 => ESOLogsResourceType::Stamina,
                             8 => ESOLogsResourceType::Ultimate,
-                            4 => ESOLogsResourceType::Health,
+                            1 => ESOLogsResourceType::Health,
                             _ => {eprintln!("Unknown power type: {}", ev.power_type); ESOLogsResourceType::Health},
                         },
                     }
@@ -450,11 +437,11 @@ impl ESOLogProcessor {
                 buff.caused_by_id = ability_id;
             }
         }
-        let source_equal_target = parts[16] == "*";
+        let cast_time = parts[2].parse::<u32>().unwrap();
         self.add_log_event(ESOLogsEvent::CastLine(
                     ESOLogsCastLine {
                         timestamp: parts[0].parse::<u64>().unwrap() - self.timestamp_offset as u64,
-                        line_type: if source_equal_target {ESOLogsLineType::CastOnSelf} else {ESOLogsLineType::CastOnOthers},
+                        line_type: if cast_time > 0 {ESOLogsLineType::CastWithCastTime} else {ESOLogsLineType::Cast},
                         buff_event: buff_event,
                         cast: ESOLogsCastBase {
                             magic_number_1: 16,
@@ -537,8 +524,8 @@ impl ESOLogProcessor {
     // 2960,MAP_CHANGED,1721,"Moon-Sugar Meadow","housing/moonsugarmeadow_base"
     fn handle_map_changed(&mut self, parts: &[&str]) {
         let zone_id = parts[2].parse().unwrap_or(0);
-        let zone_name = parts[3].to_string();
-        let map_url = parts[4].trim_matches('"').to_string();
+        let zone_name = parts[3].to_string().trim_matches('"').to_string();
+        let map_url = parts[4].trim_matches('"').to_lowercase();
         self.add_log_event(ESOLogsEvent::MapInfo(ESOLogsMapInfo {
             timestamp: parts[0].parse::<u64>().unwrap() - self.timestamp_offset as u64,
             line_type: ESOLogsLineType::MapInfo,
@@ -550,7 +537,7 @@ impl ESOLogProcessor {
 
     fn handle_zone_changed(&mut self, parts: &[&str]) {
         let zone_id: u16 = parts[2].parse().unwrap_or(0);
-        let zone_name = parts[3].to_string();
+        let zone_name = parts[3].to_string().trim_matches('"').to_string();
         let difficulty: String = parts[4].trim_matches('"').to_string();
         let difficulty_int = match difficulty.as_str() {
             "NONE" => 0,
@@ -604,12 +591,185 @@ impl ESOLogProcessor {
         let source = parse::unit_state(parts, 3);
         let source_id = self.unit_index(source.unit_id).map_or(0, |idx| idx as u16);
         let buff_index = self.buff_index(Self::HEALTH_RECOVERY_BUFF_ID).map_or(0, |idx| idx as u32);
-        let buff_event = ESOLogsBuffEvent {
+        let mut buff_event = ESOLogsBuffEvent {
             unique_index: 0,
             source_unit_index: source_id,
             target_unit_index: source_id,
             buff_index: buff_index,
         };
-        self.add_buff_event(buff_event);
+        let unique_index = self.add_buff_event(buff_event);
+        buff_event.unique_index = unique_index;
+        let health_recovery = ESOLogsHealthRecovery {
+            timestamp: parts[0].parse::<u64>().unwrap() - self.timestamp_offset as u64,
+            line_type: ESOLogsLineType::HotTick,
+            buff_event: buff_event,
+            effective_regen: parts[2].parse::<u32>().unwrap(),
+            unit_state: ESOLogsUnitState { unit_state: source, champion_points: self.get_cp_for_unit(source.unit_id) }
+        };
+        self.add_log_event(ESOLogsEvent::HealthRecovery(health_recovery));
     }
+}
+
+pub fn split_and_zip_log_by_fight<InputPath, OutputDir>(input_path: InputPath, output_dir: OutputDir) -> Result<(), String> where InputPath: AsRef<Path>, OutputDir: AsRef<Path> {
+    fs::create_dir_all(&output_dir)
+        .map_err(|e| format!("Failed to create output dir: {e}"))?;
+    let timestamps_path = output_dir.as_ref().join("timestamps");
+    if let Err(e) = fs::remove_file(&timestamps_path) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            return Err(format!("Failed to clear timestamps file: {e}"));
+        }
+    }
+    let input_file = File::open(&input_path)
+        .map_err(|e| format!("Failed to open input file: {e}"))?;
+    let mut lines = BufReader::new(input_file).lines();
+
+    let mut elp = ESOLogProcessor::new();
+    let mut custom_state = CustomLogData::new();
+    let mut fight_index: u16 = 1;
+
+    let mut first_timestamp: Option<u64> = None;
+    while let Some(line) = lines.next() {
+        let line = line.map_err(|e| format!("Read error: {e}"))?;
+        let mut split = line.splitn(4, ',');        
+        let _first = split.next();
+        let second = split.next();        
+        let third = split.next();
+
+        if let Some("BEGIN_LOG") = second {
+            if let Some(third_str) = third {
+                if let Ok(ts) = third_str.parse::<u64>() {
+                    first_timestamp = Some(ts);
+                    println!("setting first_timestamp to {}", first_timestamp.unwrap());
+                }
+            }
+        }
+
+        let is_end_combat = matches!(second, Some("END_COMBAT"));
+        for l in handle_line(line, &mut custom_state) {
+            elp.handle_line(l.to_string());
+        }
+
+        if is_end_combat {
+            let seg_zip = output_dir
+                .as_ref()
+                .join(format!("report_segment_{fight_index}.zip"));
+            let seg_data = build_report_segment(&elp);
+            write_zip_with_logtxt(seg_zip, seg_data.as_bytes())?;
+
+            let tbl_zip = output_dir
+                .as_ref()
+                .join(format!("master_table_{fight_index}.zip"));
+            let tbl_data = build_master_table(&elp);
+            write_zip_with_logtxt(tbl_zip, tbl_data.as_bytes())?;
+
+            let events = &elp.eso_logs_log.events;
+            if !events.is_empty() {
+                fn get_timestamp(event: &ESOLogsEvent) -> Option<u64> {
+                    match event {
+                        ESOLogsEvent::BuffLine(e) => Some(e.timestamp),
+                        ESOLogsEvent::CastLine(e) => Some(e.timestamp),
+                        ESOLogsEvent::PowerEnergize(e) => Some(e.timestamp),
+                        ESOLogsEvent::ZoneInfo(e) => Some(e.timestamp),
+                        ESOLogsEvent::PlayerInfo(e) => Some(e.timestamp),
+                        ESOLogsEvent::MapInfo(e) => Some(e.timestamp),
+                        ESOLogsEvent::EndCombat(e) => Some(e.timestamp),
+                        ESOLogsEvent::BeginCombat(e) => Some(e.timestamp),
+                        ESOLogsEvent::EndTrial(e) => Some(e.timestamp),
+                        _ => None,
+                    }
+                }
+                let mut last_ts = get_timestamp(&events[events.len()-1]);
+                if last_ts.is_some() && first_timestamp.is_some() {
+                    last_ts = Some(last_ts.unwrap() + first_timestamp.unwrap());
+                }
+                if let (Some(first), Some(last)) = (first_timestamp, last_ts) {
+                    use std::io::Write;
+                    let timestamps_path = output_dir.as_ref().join("timestamps");
+                    let mut file = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(timestamps_path)
+                        .map_err(|e| format!("Failed to open timestamps file: {e}"))?;
+                    writeln!(file, "{},{}", first, last)
+                        .map_err(|e| format!("Failed to write timestamps: {e}"))?;
+                }
+            }
+
+            elp.eso_logs_log.events.clear();
+
+            fight_index += 1;
+        }
+    }
+
+    Ok(())
+}
+
+
+
+fn write_zip_with_logtxt<P: AsRef<Path>>(zip_path: P, data: &[u8]) -> Result<(), String> {
+    let file = File::create(&zip_path)
+        .map_err(|e| format!("Failed to create `{}`: {e}", zip_path.as_ref().display()))?;
+    let buf = BufWriter::new(file);
+    let mut zip = ZipWriter::new(buf);
+
+    zip.start_file(
+        "log.txt",
+        SimpleFileOptions::default()
+            .compression_method(CompressionMethod::Deflated)
+            .unix_permissions(0o644),
+    )
+    .map_err(|e| format!("ZIP error (start_file): {e}"))?;
+
+    zip.write_all(data)
+        .map_err(|e| format!("Write error: {e}"))?;
+
+    zip.finish()
+        .map_err(|e| format!("ZIP error (finish): {e}"))?;
+    Ok(())
+}
+
+fn build_report_segment(elp: &ESOLogProcessor) -> String {
+    let mut out = String::with_capacity(elp.eso_logs_log.events.len() * 64);
+    let server_id = if elp.megaserver == "NA Megaserver" { 1 } else { 2 };
+
+    out.push_str(&format!("15|{}\n", server_id));
+    out.push_str(&format!("{}\n", elp.eso_logs_log.events.len()));
+
+    for e in &elp.eso_logs_log.events {
+        out.push_str(&e.to_string());
+        out.push('\n');
+    }
+    out
+}
+
+fn build_master_table(elp: &ESOLogProcessor) -> String {
+    let approx_capacity = (elp.eso_logs_log.units.len()
+        + elp.eso_logs_log.buffs.len()
+        + elp.eso_logs_log.effects.len())
+        * 64;
+    let mut out = String::with_capacity(approx_capacity);
+
+    let server_id = if elp.megaserver == "\"NA Megaserver\"" { 1 } else { 2 };
+    out.push_str(&format!("15|{}|\n", server_id));
+
+    out.push_str(&format!("{}\n", elp.eso_logs_log.units.len()));
+    for u in &elp.eso_logs_log.units {
+        out.push_str(&u.to_string());
+        out.push('\n');
+    }
+
+    out.push_str(&format!("{}\n", elp.eso_logs_log.buffs.len()));
+    for b in &elp.eso_logs_log.buffs {
+        out.push_str(&b.to_string());
+        out.push('\n');
+    }
+
+    out.push_str(&format!("{}\n", elp.eso_logs_log.effects.len()));
+    for e in &elp.eso_logs_log.effects {
+        out.push_str(&e.to_string());
+        out.push('\n');
+    }
+
+    out.push_str("0\n");
+    out
 }

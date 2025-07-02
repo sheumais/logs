@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::env;
 use std::path::Path;
-use cli::esologs_convert::ESOLogProcessor;
+use cli::esologs_convert::{split_and_zip_log_by_fight, ESOLogProcessor};
 use cli::log_edit::modify_log_file;
 use cli::read_file;
 use cli::split_log::split_encounter_file_into_log_files;
@@ -82,6 +82,12 @@ fn main() {
                 if let Err(e) = writeln!(file, "{line}") {
                     eprintln!("Error writing to file: {}", e);
                 }
+            }
+        }
+        "esologzip" => {
+            match split_and_zip_log_by_fight(Path::new(file_path), Path::new("C:/Users/H/Downloads/esologzipoutput/")) {
+                Ok(_) => {println!("Done split + zip")},
+                Err(e) => println!("{e}"),
             }
         }
         "fights" => {

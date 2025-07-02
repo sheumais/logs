@@ -1,5 +1,4 @@
 use std::rc::Rc;
-
 use cli::esologs_format::LoginResponse;
 use stylist::{css, Style};
 use tauri_sys::core::{invoke, invoke_result};
@@ -45,7 +44,8 @@ pub fn login_screen() -> Html {
     let username = use_state(|| String::new());
     let password = use_state(|| String::new());
     let logging_in = use_state(|| false);
-    let login_error = use_state(|| None as Option<String>);
+    let has_chosen_file = use_state(|| false);
+    let error = use_state(|| None as Option<String>);
 
     let login_ctx = use_context::<LoginContext>().expect("LoginContext not found");
 
@@ -54,23 +54,23 @@ pub fn login_screen() -> Html {
         let password = password.clone();
         let login_ctx = login_ctx.clone();
         let logging_in = logging_in.clone();
-        let login_error = login_error.clone();
+        let error = error.clone();
         move |event: SubmitEvent| {
             event.prevent_default();
             let username = username.clone();
             let password = password.clone();
             let login_ctx = login_ctx.clone();
             let logging_in = logging_in.clone();
-            let login_error = login_error.clone();
+            let error = error.clone();
             wasm_bindgen_futures::spawn_local(async move {
                 if *logging_in == true {
                     return;
                 } else if *username == "" || *password == "" {
-                    login_error.set(Some("Email and password cannot be empty".to_string()));
+                    error.set(Some("Email and password cannot be empty".to_string()));
                     return;
                 } {
                     logging_in.set(true);
-                    login_error.set(None);
+                    error.set(None);
                     match invoke_result::<LoginResponse, String>(
                         "login",
                         &serde_json::json!({
@@ -82,14 +82,32 @@ pub fn login_screen() -> Html {
                     {
                         Ok(body) => {
                             login_ctx.set(Some(Rc::new(body)));
-                            login_error.set(None);
+                            error.set(None);
                         }
                         Err(other) => {
-                            login_error.set(Some(other.to_string()));
+                            error.set(Some(other.to_string()));
                         }
                     }
                     logging_in.set(false);
                 }
+            });
+        }
+    };
+
+    let upload_log = {
+        let has_chosen_file = has_chosen_file.clone();
+        let error = error.clone();
+        move |_| {
+            let has_chosen_file = has_chosen_file.clone();
+            let error = error.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                invoke::<()>("pick_and_load_file", &()).await;
+                has_chosen_file.set(true);
+
+                match invoke_result::<String, String>("upload_log", &()).await {
+                    Ok(_) => {error.set(None)}
+                    Err(err) => {error.set(Some(err.to_string()))}
+                };
             });
         }
     };
@@ -155,6 +173,10 @@ pub fn login_screen() -> Html {
                     <div>
                         { format!("Welcome, {}", login.user.username) }
                     </div>
+                    <Icon width={"5em".to_owned()} height={"5em".to_owned()} class={icon_style().clone()} icon_id={IconId::LucideUpload} onclick={upload_log.clone()} />
+                    if let Some(err) = &*error {
+                        <div style="color: red; margin-bottom: 1em;">{ err }</div>
+                    }
                 } else {
                     <form class={form_style.clone()} onsubmit={on_submit} autocomplete="off">
                         <div class={header_style().clone()}>
@@ -175,7 +197,7 @@ pub fn login_screen() -> Html {
                             </span>
                             {"yourself, or contact me through the Discord linked on GitHub." }
                         </div>
-                        if let Some(err) = &*login_error {
+                        if let Some(err) = &*error {
                             <div style="color: red; margin-bottom: 1em;">{ err }</div>
                         }
                         <div class={input_container_style.clone()}>

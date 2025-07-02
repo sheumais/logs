@@ -7,3 +7,4 @@ edition = "2024"
 parser = { path = "../parser" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+zip = { version = "4.2.0", default-features = false, features = ["deflate"] }

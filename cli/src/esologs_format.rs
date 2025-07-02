@@ -22,7 +22,7 @@
 // [Effect/Cast array]
 
 use std::{collections::HashMap, fmt::{self, Display}, hash::Hash};
-use parser::{event::DamageType, player::Race, unit::{Reaction, UnitState}};
+use parser::{event::DamageType, player::Race, unit::{blank_unit_state, Reaction, UnitState}};
 use serde::{Deserialize, Serialize};
 
 #[derive(Default)]
@@ -150,12 +150,23 @@ pub enum ESOLogsEvent {
     EndCombat(ESOLogsCombatEvent),
     BeginCombat(ESOLogsCombatEvent),
     EndTrial(ESOLogsEndTrial),
+    HealthRecovery(ESOLogsHealthRecovery),
 }
 
 impl Display for ESOLogsEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            e => write!(f, "{e}"),
+            ESOLogsEvent::Buff(e) => write!(f, "{e}"),
+            ESOLogsEvent::BuffLine(e) => write!(f, "{e}"),
+            ESOLogsEvent::CastLine(e) => write!(f, "{e}"),
+            ESOLogsEvent::PowerEnergize(e) => write!(f, "{e}"),
+            ESOLogsEvent::ZoneInfo(e) => write!(f, "{e}"),
+            ESOLogsEvent::PlayerInfo(e) => write!(f, "{e}"),
+            ESOLogsEvent::MapInfo(e) => write!(f, "{e}"),
+            ESOLogsEvent::EndCombat(e) => write!(f, "{e}"),
+            ESOLogsEvent::BeginCombat(e) => write!(f, "{e}"),
+            ESOLogsEvent::EndTrial(e) => write!(f, "{e}"),
+            ESOLogsEvent::HealthRecovery(e) => write!(f, "{e}"),
         }
     }
 }
@@ -253,14 +264,14 @@ impl Display for ESOLogsBuffEvent {
 pub enum ESOLogsLineType {
     CriticalDamage = 1,
     DotTickCritical = 2,
-    CriticalHeal = 3,
-    CastOnOthers = 4,
-    BuffFaded = 7,
-    EffectStacksUpdated = 6, // stacks after buff table reference (52438|6|37|16|16|3)
+    Heal = 3,
+    HotTick = 4,
     BuffGained = 5,
+    EffectStacksUpdated = 6, // stacks after buff table reference (52438|6|37|16|16|3)
+    BuffFaded = 7,
     FadedOnOthers = 12,
     CastWithCastTime = 15,
-    CastOnSelf = 16,
+    Cast = 16,
     PowerEnergize = 26,
     ZoneInfo = 41,
     PlayerInfo = 44,
@@ -290,11 +301,11 @@ pub struct ESOLogsBuffLine {
 impl Display for ESOLogsBuffLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.source_cast_index.is_some() {
-            if self.source_shield != 0 {
-                if self.target_shield != 0 {
+            if (self.target_shield != 0 || self.target_shield == 0 && self.source_shield != 0) && self.target_shield != self.source_shield {
+                if self.source_shield != 0 {
                     return write!(f, "{}|{}|{}|{}|{}|A{}|{}|{}", self.timestamp, self.line_type, self.buff_event.unique_index, self.magic_number_1, self.magic_number_2, self.source_cast_index.unwrap(), self.source_shield, self.target_shield);
                 }
-                return write!(f, "{}|{}|{}|{}|{}|A{}|{}", self.timestamp, self.line_type, self.buff_event.unique_index, self.magic_number_1, self.magic_number_2, self.source_cast_index.unwrap(), self.source_shield);
+                return write!(f, "{}|{}|{}|{}|{}|A{}|{}", self.timestamp, self.line_type, self.buff_event.unique_index, self.magic_number_1, self.magic_number_2, self.source_cast_index.unwrap(), self.target_shield);
             }
             return write!(f, "{}|{}|{}|{}|{}|A{}", self.timestamp, self.line_type, self.buff_event.unique_index, self.magic_number_1, self.magic_number_2, self.source_cast_index.unwrap());
         } else {
@@ -311,7 +322,7 @@ pub struct ESOLogsUnitState {
 impl Display for ESOLogsUnitState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             let map_x_int = (self.unit_state.map_x * 10_000.0).round() as u32;
-            let map_y_int = (self.unit_state.map_y * 10_000.0).round() as u32;
+            let map_y_int = (10_000f32 - (self.unit_state.map_y * 10_000.0)).round() as u32;
             let heading_int = (self.unit_state.heading * 100.0).round() as u32;
             write!(f, "{}/{}|{}/{}|{}/{}|{}/{}|{}/{}|{}|{}|{}|{}|{}",
             self.unit_state.health,
@@ -359,6 +370,9 @@ pub struct ESOLogsCastBase {
 
 impl Display for ESOLogsCastBase {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.target_unit_state.unit_state == blank_unit_state() {
+            return write!(f, "{}|{}|C{}|S{}", self.magic_number_1, self.magic_number_2, self.cast_id_origin, self.source_unit_state)
+        }
         write!(f, "{}|{}|C{}|S{}|T{}", self.magic_number_1, self.magic_number_2, self.cast_id_origin, self.source_unit_state, self.target_unit_state)
     }
 }
@@ -494,6 +508,21 @@ impl Display for ESOLogsEndTrial {
     }
 }
 
+pub struct ESOLogsHealthRecovery {
+    pub timestamp: u64,
+    pub line_type: ESOLogsLineType,
+    pub buff_event: ESOLogsBuffEvent,
+    pub effective_regen: u32,
+    pub unit_state: ESOLogsUnitState,
+}
+
+impl Display for ESOLogsHealthRecovery {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}|{}|{}|16|16|S{}|T{}|1|{}", self.timestamp, self.line_type, self.buff_event.unique_index, self.unit_state, self.unit_state, self.effective_regen)
+    }
+}
+
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginResponse {
@@ -623,4 +652,9 @@ pub struct LabelValue {
 pub struct ValueLabel {
     pub label: String,
     pub value: u8,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct EncounterReportCode {
+    pub code: String
 }
