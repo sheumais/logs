@@ -5,7 +5,7 @@
 
 This desktop tool is designed to help you manage and process your ESO log files. 
 
-While it doesn’t handle uploading, it makes file handling faster and fixes your logs for uploading to [esologs.com](https://esologs.com/).
+With the option to upload directly to [esologs.com](https://esologs.com/), handling your logs has never been easier.
 
 ## Features & Roadmap
 
@@ -14,14 +14,13 @@ While it doesn’t handle uploading, it makes file handling faster and fixes you
 - [x] Merge encounter logs
 - [x] Live logging with fixes
 - [ ] esologs.com integration
-- [ ] Log analysis page
 
 ### Current Fixes
 - [x] Shows casts of Fatecarver
 - [x] Blockade of Elements shows correct icon
 - [x] Touch of Z'en stacks
 - [x] Scribing skills show their scripts
-- [ ] Kills showing as 0.0% wipes where possible
+- [x] Better buff/debuff source & type classification
 
 ### Other useful log tools: 
 Easy Stalking AddOn for automatically logging trials
