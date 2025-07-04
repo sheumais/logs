@@ -14,7 +14,8 @@ pub struct ESOLogsLog {
     pub buffs_hashmap: HashMap<u32, usize>,
     pub effects: Vec<ESOLogsBuffEvent>,
     pub effects_hashmap: HashMap<ESOLogsBuffEventKey, usize>,
-    pub events: Vec<ESOLogsEvent>
+    pub events: Vec<ESOLogsEvent>,
+    pub pets: Vec<ESOLogPetRelationship>,
 }
 
 impl ESOLogsLog {
@@ -323,12 +324,12 @@ pub enum ESOLogsLineType {
     DotTick = 2,
     Heal = 3,
     HotTick = 4,
-    BuffGainedSelf = 5,
-    BuffStacksUpdated = 6, // stacks after buff table reference (52438|6|37|16|16|3)
-    BuffFaded = 7,
-    BuffGainedTarget = 10,
-    DebuffStacksUpdated = 11,
-    FadedOnOthers = 12,
+    BuffGainedAlly = 5,
+    BuffStacksUpdatedAlly = 6, // stacks after buff table reference (52438|6|37|16|16|3)
+    BuffFadedAlly = 7,
+    BuffGainedEnemy = 10,
+    BuffStacksUpdatedEnemy = 11,
+    BuffFadedEnemy = 12,
     CastWithCastTime = 15,
     Cast = 16,
     Death = 19,
@@ -349,7 +350,7 @@ impl Display for ESOLogsLineType {
 
 pub struct ESOLogsBuffLine {
     pub timestamp: u64,
-    pub line_type: ESOLogsLineType, // BuffFaded or BuffGained
+    pub line_type: ESOLogsLineType, // BuffFadedAlly or BuffGained
     pub buff_event: ESOLogsBuffEvent, // print only the index
     pub unit_instance_id: (usize, usize),
     pub source_allegiance: u8, // often 16, sometimes 32, maybe some other stuff
@@ -622,6 +623,29 @@ pub struct ESOLogsHealthRecovery {
 impl Display for ESOLogsHealthRecovery {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}|{}|{}|16|16|S{}|T{}|1|{}", self.timestamp, self.line_type, self.buff_event.unique_index, self.unit_state, self.unit_state, self.effective_regen)
+    }
+}
+
+#[derive(Debug)]
+pub struct ESOLogPetRelationship {
+    pub owner_index: usize,
+    pub pet: ESOLogPet,
+}
+
+impl Display for ESOLogPetRelationship {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}|{}", self.pet, self.owner_index)
+    }
+}
+
+#[derive(Debug)]
+pub struct ESOLogPet {
+    pub pet_type_index: usize,
+}
+
+impl Display for ESOLogPet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.pet_type_index)
     }
 }
 

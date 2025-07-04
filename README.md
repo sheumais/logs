@@ -21,6 +21,7 @@ With the option to upload directly to [esologs.com](https://esologs.com/), handl
 - [x] Touch of Z'en stacks
 - [x] Scribing skills show their scripts
 - [x] Better buff/debuff source & type classification
+- [x] Various improvements on the esologs.com parser
 
 ### Other useful log tools: 
 Easy Stalking AddOn for automatically logging trials

@@ -1,7 +1,6 @@
-use std::collections::HashMap;
 use std::env;
 use std::path::Path;
-use cli::esologs_convert::{split_and_zip_log_by_fight, ESOLogProcessor};
+use cli::esologs_convert::{build_master_table, split_and_zip_log_by_fight, ESOLogProcessor};
 use cli::log_edit::modify_log_file;
 use cli::read_file;
 use cli::split_log::split_encounter_file_into_log_files;
@@ -39,38 +38,9 @@ fn main() {
                     return;
                 }
             };
-            println!("{}", eso_log_processor.eso_logs_log.units.len());
-            for unit in eso_log_processor.eso_logs_log.units {
-                if let Err(e) = writeln!(file, "{unit}") {
-                    eprintln!("Error writing to file: {}", e);
-                }
-            }
-            { // Fix stuff for some buffs
-                let default_icon = "ability_mage_065";
-                let mut icon_by_name = HashMap::<String, String>::new();
-                for buff in eso_log_processor.eso_logs_log.buffs.iter() {
-                    if buff.icon != default_icon {
-                        icon_by_name.insert(buff.name.clone(), buff.icon.clone());
-                    }
-                }
-                println!("{}", eso_log_processor.eso_logs_log.buffs.len());
-                for buff in eso_log_processor.eso_logs_log.buffs.iter_mut() {
-                    if buff.icon == default_icon {
-                        if let Some(icon) = icon_by_name.get(&buff.name) {
-                            buff.icon = icon.clone();
-                        }
-                    }
-                    if let Err(e) = writeln!(file, "{buff}") {
-                        eprintln!("Error writing to file: {e}");
-                    }
-                }
-            }
-            println!("{}", eso_log_processor.eso_logs_log.effects.len());
-            for event in eso_log_processor.eso_logs_log.effects {
-                if let Err(e) = writeln!(file, "{event}") {
-                    eprintln!("Error writing to file: {}", e);
-                }
-            }
+            let master_table = build_master_table(&mut eso_log_processor);
+            write!(file, "{master_table}").expect("master_table write failed");
+            println!("master table written");
             let mut file = match File::create("C:/Users/H/Downloads/esolog_output2.txt") {
                 Ok(f) => f,
                 Err(e) => {

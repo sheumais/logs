@@ -74,6 +74,22 @@ pub fn monster(parts: &[&str]) -> Unit {
     }
 }
 
+pub fn monster_updated(parts: &[&str], unit: Unit) -> Unit {
+    Unit {
+        unit_id: parts[2].parse().unwrap(),
+        unit_type: unit.unit_type,
+        monster_id: unit.monster_id,
+        is_boss: unit.is_boss,
+        name: parts[5].trim_matches('"').to_string(),
+        level: parts[8].parse().unwrap(),
+        champion_points: parts[9].parse().unwrap(),
+        owner_unit_id: parts[10].parse().unwrap(),
+        reaction: unit::match_reaction(parts[11]),
+        unit_state: unit.unit_state,
+        effects: unit.effects,
+    }
+}
+
 pub fn object(parts: &[&str]) -> Unit {
     let unit_id: u32 = parts[2].parse().unwrap();
     Unit {

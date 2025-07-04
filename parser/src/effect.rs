@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-
 use crate::{fight::Fight, player::Player, set::get_item_type_from_hashmap, unit::UnitState};
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
@@ -161,6 +160,47 @@ pub fn is_zen_dot(effect_id: u32) -> bool {
         219720 => true, // travelling knife lingering torment
         _ => false
     }
+}
+
+pub enum SummonablePets {
+    // Sorcerer
+    UnstableFamiliar = 23304,
+    VolatileFamiliar = 23316,
+    UnstableClannfear = 23319,
+    GreaterStormAtronach = 23492,
+    ChargedAtronach = 23495,
+    StormAtronach = 23634,
+    WingedTwilight = 24613,
+    TwilightMatriach = 24639,
+    TwilightTormenter = 24636,
+    // Nightblade
+    Shade = 33211,
+    DarkShade = 35434,
+    ShadowImage = 35441,
+    // Undaunted
+    // TrappingWebs =,
+    // ShadowSilk =,
+    // TanglingWebs =,
+    // Werewolf
+    // Pack leader ultimate ???
+    // Warden
+    ViolentGuardian = 85982,
+    EternalGuardian = 85986,
+    WildGuardian = 85990,
+    // Necromancer
+    SpiritMender = 115710,
+    IntensiveMender = 118840,
+    SpiritGuardian = 118912,
+    SacrificialBones = 114860,
+    GraveLordsSacrifice = 117749,
+    BlightedBlastbones = 117690,
+    SkeletalMage = 114317,
+    SkeletalArcher = 118680,
+    SkeletonArcanist = 118726,
+    // Arcanist
+    VitalizingGlyphic = 183709,
+    GlyphicOfTheTides = 193794,
+    ResonatingGlyphic = 193558, // Hostile!
 }
 
 #[allow(dead_code)]
