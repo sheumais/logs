@@ -9,13 +9,16 @@ pub struct ESOLogsLog {
     pub unit_id_to_session_id: HashMap<u32, u32>,
     pub session_units: HashMap<u32, Vec<u32>>,
     pub unit_index_in_session: HashMap<u32, usize>,
+    pub players: HashMap<u32, bool>,
     pub objects: HashMap<String, u32>,
     pub buffs: Vec<ESOLogsBuff>,
     pub buffs_hashmap: HashMap<u32, usize>,
     pub effects: Vec<ESOLogsBuffEvent>,
     pub effects_hashmap: HashMap<ESOLogsBuffEventKey, usize>,
     pub events: Vec<ESOLogsEvent>,
-    pub pets: Vec<ESOLogPetRelationship>,
+    pub pets: Vec<ESOLogsPetRelationship>,
+    pub shields: HashMap<u32, HashMap<usize, ESOLogsBuffEventKey2>>,
+    pub shield_values: HashMap<u32, u32>,
 }
 
 impl ESOLogsLog {
@@ -23,170 +26,140 @@ impl ESOLogsLog {
         Self::default()
     }
 
-
-    /// Insert a combat unit. Returns `true` when successful and `false` if the
-    /// session‑scoped unit already exists.
     pub fn add_unit(&mut self, unit: ESOLogsUnit) -> bool {
-        // println!("add_unit - attempting to add unit: session_id = {} (name = {})", unit.unit_id, unit.name);
         let id = unit.unit_id;
         if self.session_id_to_units_index.contains_key(&id) {
-            // println!("add_unit - unit with session_id {} already present; skipping", id);
+            // println!("units already contains id {}", id);
             return false;
         }
-        let index = self.units.len() + 1; // 1‑based because raw logs use that convention
+        let index = self.units.len();
         self.units.push(unit);
         self.session_id_to_units_index.insert(id, index);
-        // println!("add_unit - unit inserted at overall index {}", index);
         true
     }
 
-    /// Map a *combat* unit_id that appears inside events to its parent `session_id`.
     pub fn map_unit_id_to_monster_id(&mut self, unit_id: u32, session_id: u32) -> bool {
-        // println!("map_unit_id_to_monster_id - unit_id {} ↦ session_id {}", unit_id, session_id);
         if self.unit_id_to_session_id.contains_key(&unit_id) {
-            // println!("map_unit_id_to_monster_id - mapping already exists; aborting");
             return false;
         }
         self.unit_id_to_session_id.insert(unit_id, session_id);
 
+
         let pos = self.session_units.entry(session_id).or_default().len();
         self.session_units.get_mut(&session_id).unwrap().push(unit_id);
         self.unit_index_in_session.insert(unit_id, pos);
-        // println!("map_unit_id_to_monster_id - mapping added; index within session = {}", pos);
+
         true
     }
 
-    /// Add an *object* (e.g. boss mechanic entity) that lives outside the unit tables.
     pub fn add_object(&mut self, object: ESOLogsUnit) -> bool {
-        // println!("add_object - attempting to add object: {} (unit_id = {})", object.name, object.unit_id);
         if self.objects.contains_key(&object.name) {
-            // println!("add_object - object '{}' already registered; skipping", object.name);
+            let index = self.objects.get(&object.name).unwrap();
+            let session_id = self.session_id_to_units_index.get(index).unwrap();
+            self.session_id_to_units_index.insert(object.unit_id, *session_id);
             return false;
         }
-        let index = self.units.len() + 1;
+        let index = self.units.len();
         self.session_id_to_units_index.insert(object.unit_id, index);
         self.objects.insert(object.name.clone(), object.unit_id);
         self.units.push(object);
-        // println!("add_object - object inserted at overall index {}", index);
         true
     }
 
-    /// Register a new buff definition.
     pub fn add_buff(&mut self, buff: ESOLogsBuff) -> bool {
-        // println!("add_buff - id {} ({})", buff.id, buff.name);
         let id = buff.id;
         if self.buffs_hashmap.contains_key(&id) {
-            // println!("add_buff - buff {} already exists; skipping", id);
             return false;
         }
-        let index = self.buffs.len() + 1;
+        let index = self.buffs.len();
         self.buffs.push(buff);
         self.buffs_hashmap.insert(id, index);
-        // println!("add_buff - buff stored at index {}", index);
         true
     }
 
-    /// Deduplicate and/or insert a buff application/removal event.
-    /// Returns the unique index of the resulting `ESOLogsBuffEvent` in `self.effects`.
     pub fn add_buff_event(&mut self, mut buff_event: ESOLogsBuffEvent) -> usize {
         let key = ESOLogsBuffEventKey {
             source_unit_index: buff_event.source_unit_index,
             target_unit_index: buff_event.target_unit_index,
             buff_index: buff_event.buff_index,
         };
-        // println!("add_buff_event - looking for existing key {:?}", key);
         if let Some(&idx) = self.effects_hashmap.get(&key) {
-            // println!("add_buff_event - event already present at index {}", idx);
             return idx;
         }
-        let index = self.effects.len() + 1;
+        let index = self.effects.len();
         buff_event.unique_index = index;
         self.effects.push(buff_event);
         self.effects_hashmap.insert(key, index);
-        // println!("add_buff_event - new buff event stored at index {}", index);
         index
     }
 
-    /// Translate a combat `unit_id` to the canonical 1‑based `unit_index` used by ESO‑Logs.
     pub fn unit_index(&self, unit_id: u32) -> Option<usize> {
-        // println!("unit_index - resolving unit_id {}", unit_id);
-        if let Some(&session_id) = self.unit_id_to_session_id.get(&unit_id) {
-            let res = self.session_id_to_units_index.get(&session_id).copied();
-            // println!("unit_index - resolved to {:?}", res);
+        if let Some(session_id) = self.unit_id_to_session_id.get(&unit_id) {
+            let res = self.session_id_to_units_index.get(session_id).copied();
             res
         } else {
-            // println!("unit_index - unit_id {} not found", unit_id);
             None
         }
     }
 
-    /// Lookup the index for a given `buff_id`.
+    pub fn object_index(&self, object_id: String) -> Option<usize> {
+        if let Some(session_id) = self.objects.get(&object_id) {
+            let res = self.session_id_to_units_index.get(session_id).copied();
+            res
+        } else {
+            None
+        }
+    }
+
     pub fn buff_index(&self, buff_id: u32) -> Option<usize> {
-        // println!("buff_index - resolving buff_id {}", buff_id);
         let res = self.buffs_hashmap.get(&buff_id).copied();
-        // println!("buff_index - resolved to {:?}", res);
         res
     }
 
-    /// Append a generic combat `event` to the flat list.
     pub fn add_log_event(&mut self, event: ESOLogsEvent) {
         self.events.push(event);
     }
 
-    /// Fetch the *icon path* for a given `buff_id`.
     pub fn get_buff_icon(&self, buff_id: u32) -> String {
-        // println!("get_buff_icon - buff_id {}", buff_id);
         if let Some(&idx) = self.buffs_hashmap.get(&buff_id) {
-            if let Some(buff) = self.buffs.get(idx - 1) {
-                // println!("get_buff_icon - found icon '{}'", buff.icon);
+            if let Some(buff) = self.buffs.get(idx) {
                 return buff.icon.clone();
             }
         }
-        // println!("get_buff_icon - buff_id {} unknown; returning 'nil'", buff_id);
         "nil".to_string()
     }
 
-    /// Return champion points for a given unit, or `0` when unknown.
     pub fn get_cp_for_unit(&self, unit_id: u32) -> u16 {
-        // println!("get_cp_for_unit - unit_id {}", unit_id);
         if let Some(&session_id) = self.unit_id_to_session_id.get(&unit_id) {
             if let Some(unit_index) = self.session_id_to_units_index.get(&session_id) {
-                let cp = self.units[*unit_index - 1].champion_points;
-                // println!("get_cp_for_unit - CP = {}", cp);
+                let cp = self.units[*unit_index].champion_points;
                 return cp;
             }
         }
-        // println!("get_cp_for_unit - CP unknown for unit_id {}", unit_id);
         0
     }
 
-    /// Position of `unit_id` within its session's unit array.
     pub fn index_in_session(&self, unit_id: u32) -> Option<usize> {
-        // println!("index_in_session - unit_id {}", unit_id);
+        if let Some(player_bool) = self.players.get(&unit_id) {
+            if *player_bool {
+                return None
+            }
+        }
         let res = self.unit_index_in_session.get(&unit_id).copied();
-        // println!("index_in_session - resolved to {:?}", res);
         res
     }
 
-    /// Convenience wrapper around `session_units` that hides the mutable `Vec`.
-    pub fn units_for_session(&self, session_id: u32) -> Option<&[u32]> {
-        // println!("units_for_session - session_id {}", session_id);
-        let res = self.session_units.get(&session_id).map(|v| v.as_slice());
-        // println!("units_for_session - found {} units", res.map_or(0, |s| s.len()));
-        res
-    }
-
-    /// Get the Reaction of the session unit corresponding to a given unit_id.
     pub fn get_reaction_for_unit(&self, unit_id: u32) -> Option<Reaction> {
         if let Some(&session_id) = self.unit_id_to_session_id.get(&unit_id) {
             if let Some(&unit_index) = self.session_id_to_units_index.get(&session_id) {
-                return self.units.get(unit_index.saturating_sub(1)).map(|unit| unit.unit_type.clone());
+                return self.units.get(unit_index).map(|unit| unit.unit_type.clone());
             }
         }
         None
     }
 }
 
+#[derive(Debug)]
 pub enum ESOLogsEvent {
     Buff(ESOLogsBuffEvent),
     BuffLine(ESOLogsBuffLine),
@@ -200,6 +173,7 @@ pub enum ESOLogsEvent {
     EndTrial(ESOLogsEndTrial),
     HealthRecovery(ESOLogsHealthRecovery),
     StackUpdate(ESOLogsBuffStacks),
+    DamageShielded(ESOLogsDamageShielded),
 }
 
 impl Display for ESOLogsEvent {
@@ -217,16 +191,19 @@ impl Display for ESOLogsEvent {
             ESOLogsEvent::EndTrial(e) => write!(f, "{e}"),
             ESOLogsEvent::HealthRecovery(e) => write!(f, "{e}"),
             ESOLogsEvent::StackUpdate(e) => write!(f, "{e}"),
+            ESOLogsEvent::DamageShielded(e) => write!(f, "{e}"),
         }
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ESOLogsPlayerSpecificData {
     pub username: String,
     pub character_id: u64,
     pub is_logging_player: bool
 }
 
+#[derive(Debug, Clone)]
 pub struct ESOLogsUnit {
     pub name: String,
     pub player_data: Option<ESOLogsPlayerSpecificData>,
@@ -235,7 +212,7 @@ pub struct ESOLogsUnit {
     pub class: u8,
     pub server_string: String,
     pub race: Race,
-    pub icon: Option<String>, // nil for players, non-trivial to compute. default to death_recap_melee_basic
+    pub icon: Option<String>, // nil for players & objects, default to death_recap_melee_basic
     pub champion_points: u16
 }
 
@@ -264,10 +241,7 @@ impl Display for ESOLogsUnit {
     }
 }
 
-// 612,ABILITY_INFO,45509,"Penetrating Magic","/esoui/art/icons/ability_weapon_008.dds",T,T          3
-// 612,ABILITY_INFO,30959,"Ancient Knowledge","/esoui/art/icons/ability_weapon_003.dds",F,T          1
-// 1913,ABILITY_INFO,61506,"Echoing Vigor","/esoui/art/icons/ability_ava_echoing_vigor.dds",F,F      0
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ESOLogsBuff {
     pub name: String,
     pub damage_type: DamageType,
@@ -297,35 +271,45 @@ impl Display for ESOLogsBuff {
     }
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
-pub struct ESOLogsBuffEventKey {
-    source_unit_index: u16,
-    target_unit_index: u16,
-    buff_index: u32,
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
+pub struct ESOLogsBuffEventKey2 {
+    pub source_unit_index: usize,
+    pub source_unit_id: u32,
+    pub target_unit_index: usize,
+    pub target_unit_id: u32,
+    pub buff_index: usize,
 }
 
-#[derive(Eq, Hash, PartialEq, Clone, Copy)]
+#[derive(Eq, Hash, PartialEq, Debug)]
+pub struct ESOLogsBuffEventKey {
+    pub source_unit_index: usize,
+    pub target_unit_index: usize,
+    pub buff_index: usize,
+}
+
+
+#[derive(Eq, Hash, PartialEq, Clone, Copy, Debug)]
 pub struct ESOLogsBuffEvent {
     pub unique_index: usize,
-    pub source_unit_index: u16,
-    pub target_unit_index: u16,
-    pub buff_index: u32,
+    pub source_unit_index: usize,
+    pub target_unit_index: usize,
+    pub buff_index: usize,
 }
 
 impl Display for ESOLogsBuffEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}|{}|{}", self.source_unit_index, self.target_unit_index, self.buff_index)
+        write!(f, "{}|{}|{}", self.source_unit_index.wrapping_add(1), self.target_unit_index.wrapping_add(1), self.buff_index.wrapping_add(1))
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum ESOLogsLineType {
     Damage = 1,
     DotTick = 2,
     Heal = 3,
     HotTick = 4,
     BuffGainedAlly = 5,
-    BuffStacksUpdatedAlly = 6, // stacks after buff table reference (52438|6|37|16|16|3)
+    BuffStacksUpdatedAlly = 6,
     BuffFadedAlly = 7,
     BuffGainedEnemy = 10,
     BuffStacksUpdatedEnemy = 11,
@@ -334,6 +318,7 @@ pub enum ESOLogsLineType {
     Cast = 16,
     Death = 19,
     PowerEnergize = 26,
+    DamageShielded = 38,
     ZoneInfo = 41,
     PlayerInfo = 44,
     MapInfo = 51,
@@ -348,15 +333,16 @@ impl Display for ESOLogsLineType {
     }
 }
 
+#[derive(Debug)]
 pub struct ESOLogsBuffLine {
     pub timestamp: u64,
-    pub line_type: ESOLogsLineType, // BuffFadedAlly or BuffGained
-    pub buff_event: ESOLogsBuffEvent, // print only the index
+    pub line_type: ESOLogsLineType,
+    pub buff_event: ESOLogsBuffEvent,
     pub unit_instance_id: (usize, usize),
-    pub source_allegiance: u8, // often 16, sometimes 32, maybe some other stuff
-    pub target_allegiance: u8, // always 16?
+    pub source_allegiance: u8,
+    pub target_allegiance: u8,
     pub source_cast_index: Option<usize>, // A(number), index of the cast in the cast table that caused this buff change
-    pub source_shield: u32, // shield amount
+    pub source_shield: u32,
     pub target_shield: u32,
 }
 
@@ -364,26 +350,27 @@ impl Display for ESOLogsBuffLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (id0, id1) = self.unit_instance_id;
         let unit_instance_str = if id0 == 0 && id1 == 0 {
-            format!("{}", self.buff_event.unique_index)
+            format!("{}", self.buff_event.unique_index.wrapping_add(1))
         } else if id1 == 0 {
-            format!("{}.{}", self.buff_event.unique_index, id0)
+            format!("{}.{}", self.buff_event.unique_index.wrapping_add(1), id0)
         } else {
-            format!("{}.{}.{}", self.buff_event.unique_index, id0, id1)
+            format!("{}.{}.{}", self.buff_event.unique_index.wrapping_add(1), id0, id1)
         };
         if self.source_cast_index.is_some() {
             if (self.target_shield != 0 || self.target_shield == 0 && self.source_shield != 0) && self.target_shield != self.source_shield {
                 if self.source_shield != 0 {
-                    return write!(f, "{}|{}|{}|{}|{}|A{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.source_cast_index.unwrap(), self.source_shield, self.target_shield);
+                    return write!(f, "{}|{}|{}|{}|{}|A{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.source_cast_index.unwrap().wrapping_add(1), self.source_shield, self.target_shield);
                 }
-                return write!(f, "{}|{}|{}|{}|{}|A{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.source_cast_index.unwrap(), self.target_shield);
+                return write!(f, "{}|{}|{}|{}|{}|A{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.source_cast_index.unwrap().wrapping_add(1), self.target_shield);
             }
-            return write!(f, "{}|{}|{}|{}|{}|A{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.source_cast_index.unwrap());
+            return write!(f, "{}|{}|{}|{}|{}|A{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.source_cast_index.unwrap().wrapping_add(1));
         } else {
             write!(f, "{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance)
         }
     }
 }
 
+#[derive(Debug)]
 pub struct ESOLogsBuffStacks {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
@@ -398,16 +385,17 @@ impl Display for ESOLogsBuffStacks {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (id0, id1) = self.unit_instance_id;
         let unit_instance_str = if id0 == 0 && id1 == 0 {
-            format!("{}", self.buff_event.unique_index)
+            format!("{}", self.buff_event.unique_index.wrapping_add(1))
         } else if id1 == 0 {
-            format!("{}.{}", self.buff_event.unique_index, id0)
+            format!("{}.{}", self.buff_event.unique_index.wrapping_add(1), id0)
         } else {
-            format!("{}.{}.{}", self.buff_event.unique_index, id0, id1)
+            format!("{}.{}.{}", self.buff_event.unique_index.wrapping_add(1), id0, id1)
         };
         write!(f, "{}|{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.stacks)
     }
 }
 
+#[derive(Debug)]
 pub struct ESOLogsUnitState {
     pub unit_state: UnitState,
     pub champion_points: u16, // fucking champion points. why the fuck ?????
@@ -438,9 +426,10 @@ impl Display for ESOLogsUnitState {
     }
 }
 
+#[derive(Debug)]
 pub struct ESOLogsCastData {
     pub critical: u8, // 1 = no, 2 = yes critical, 0 = ??
-    pub hit_value: u32, // set equal to overflow if = 0
+    pub hit_value: u32,
     pub overflow: u32, 
 }
 
@@ -451,14 +440,15 @@ impl Display for ESOLogsCastData {
         } else if self.hit_value > 0 && self.overflow == 0 {
             write!(f, "{}|{}", self.critical, self.hit_value)
         } else {
-            write!(f, "{}|{}|{}", self.critical, self.hit_value, self.overflow)
+            write!(f, "{}|{}|{}", self.critical, self.hit_value + self.overflow, self.overflow)
         }
     }
 }
 
+#[derive(Debug)]
 pub struct ESOLogsCastBase {
-    pub source_allegiance: u8, // source allegiance (16 = friendly, 32 = ally?, 64 = enemy)
-    pub target_allegiance: u8, // target allegiance
+    pub source_allegiance: u8,
+    pub target_allegiance: u8,
     pub cast_id_origin: u32,
     pub source_unit_state: ESOLogsUnitState,
     pub target_unit_state: ESOLogsUnitState,
@@ -473,10 +463,10 @@ impl Display for ESOLogsCastBase {
     }
 }
 
-
+#[derive(Debug)]
 pub struct ESOLogsCastLine {
     pub timestamp: u64,
-    pub line_type: ESOLogsLineType, // CastOnOthers or CastOnSelf if source == target
+    pub line_type: ESOLogsLineType,
     pub buff_event: ESOLogsBuffEvent,
     pub unit_instance_id: (usize, usize),
     pub cast: ESOLogsCastBase,
@@ -487,11 +477,11 @@ impl Display for ESOLogsCastLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (id0, id1) = self.unit_instance_id;
         let unit_instance_str = if id0 == 0 && id1 == 0 {
-            format!("{}", self.buff_event.unique_index)
+            format!("{}", self.buff_event.unique_index.wrapping_add(1))
         } else if id1 == 0 {
-            format!("{}.{}", self.buff_event.unique_index, id0)
+            format!("{}.{}", self.buff_event.unique_index.wrapping_add(1), id0)
         } else {
-            format!("{}.{}.{}", self.buff_event.unique_index, id0, id1)
+            format!("{}.{}.{}", self.buff_event.unique_index.wrapping_add(1), id0, id1)
         };
         if let Some(cast_info) = &self.cast_information {
             write!(f, "{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.cast, cast_info)
@@ -501,7 +491,7 @@ impl Display for ESOLogsCastLine {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum ESOLogsResourceType {
     Health = 4,
     Magicka = 0,
@@ -515,9 +505,10 @@ impl Display for ESOLogsResourceType {
     }
 }
 
+#[derive(Debug)]
 pub struct ESOLogsPowerEnergize {
     pub timestamp: u64,
-    pub line_type: ESOLogsLineType, // PowerEnergize
+    pub line_type: ESOLogsLineType,
     pub buff_event: ESOLogsBuffEvent,
     pub cast: ESOLogsCastBase,
     pub hit_value: u32,
@@ -537,10 +528,10 @@ impl Display for ESOLogsPowerEnergize {
     }
 }
 
-
+#[derive(Debug)]
 pub struct ESOLogsZoneInfo {
     pub timestamp: u64,
-    pub line_type: ESOLogsLineType, // ZoneInfo
+    pub line_type: ESOLogsLineType,
     pub zone_id: u16,
     pub zone_name: String,
     pub zone_difficulty: u8, // 0 none, 1 = normal, 2 = veteran
@@ -552,10 +543,10 @@ impl Display for ESOLogsZoneInfo {
     }
 }
 
-
+#[derive(Debug)]
 pub struct ESOLogsMapInfo {
     pub timestamp: u64,
-    pub line_type: ESOLogsLineType, // MapInfo
+    pub line_type: ESOLogsLineType,
     pub map_id: u16,
     pub map_name: String,
     pub map_image_url: String,
@@ -567,6 +558,7 @@ impl Display for ESOLogsMapInfo {
     }
 }
 
+#[derive(Debug)]
 pub struct ESOLogsPlayerBuild {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
@@ -581,10 +573,11 @@ pub struct ESOLogsPlayerBuild {
 impl Display for ESOLogsPlayerBuild {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let gear = self.gear.join("],[");
-        write!(f, "{}|{}|{}|[{}],[{}],[[{}]],[{}],[{}]", self.timestamp, self.line_type, self.unit_index, self.permanent_buffs, self.buff_stacks, gear, self.primary_abilities, self.backup_abilities)
+        write!(f, "{}|{}|{}|[{}],[{}],[[{}]],[{}],[{}]", self.timestamp, self.line_type, self.unit_index.wrapping_add(1), self.permanent_buffs, self.buff_stacks, gear, self.primary_abilities, self.backup_abilities)
     }
 }
 
+#[derive(Debug)]
 pub struct ESOLogsCombatEvent {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
@@ -596,6 +589,7 @@ impl Display for ESOLogsCombatEvent {
     }
 }
 
+#[derive(Debug)]
 pub struct ESOLogsEndTrial {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
@@ -603,7 +597,6 @@ pub struct ESOLogsEndTrial {
     pub duration: u64,
     pub success: u8, // 1 = success, 0 = fail
     pub final_score: u32,
-    // pub vitality_bonus: u16, not used
 }
 
 impl Display for ESOLogsEndTrial {
@@ -612,6 +605,7 @@ impl Display for ESOLogsEndTrial {
     }
 }
 
+#[derive(Debug)]
 pub struct ESOLogsHealthRecovery {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
@@ -622,33 +616,62 @@ pub struct ESOLogsHealthRecovery {
 
 impl Display for ESOLogsHealthRecovery {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}|{}|{}|16|16|S{}|T{}|1|{}", self.timestamp, self.line_type, self.buff_event.unique_index, self.unit_state, self.unit_state, self.effective_regen)
+        write!(f, "{}|{}|{}|16|16|S{}|T{}|1|{}", self.timestamp, self.line_type, self.buff_event.unique_index.wrapping_add(1), self.unit_state, self.unit_state, self.effective_regen)
     }
 }
 
 #[derive(Debug)]
-pub struct ESOLogPetRelationship {
+pub struct ESOLogsPetRelationship {
     pub owner_index: usize,
-    pub pet: ESOLogPet,
+    pub pet: ESOLogsPet,
 }
 
-impl Display for ESOLogPetRelationship {
+impl Display for ESOLogsPetRelationship {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}|{}", self.pet, self.owner_index)
+        write!(f, "{}|{}", self.pet, self.owner_index.wrapping_add(1))
     }
 }
 
 #[derive(Debug)]
-pub struct ESOLogPet {
+pub struct ESOLogsPet {
     pub pet_type_index: usize,
 }
 
-impl Display for ESOLogPet {
+impl Display for ESOLogsPet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.pet_type_index)
+        write!(f, "{}", self.pet_type_index.wrapping_add(1))
     }
 }
 
+// 5314073|38|17895.1.1|64|64|6|0|16|0|451|609
+// timestamp | linetype | unit_instance_string for original shield | source allegiance | target allegiance | damage source instance id | damage source allegiance | 0 | hit_value | source_cast_index
+#[derive(Debug)]
+pub struct ESOLogsDamageShielded {
+    pub timestamp: u64,
+    pub line_type: ESOLogsLineType,
+    pub buff_event: ESOLogsBuffEvent,
+    pub damage_source_allegiance: u8,
+    pub shield_source_allegiance: u8,
+    pub shield_recipient_allegiance: u8,
+    pub unit_instance_id: (usize, usize),
+    pub orig_shield_instance_ids: (usize, usize),
+    pub hit_value: u32,
+    pub source_ability_cast_index: usize,
+}
+
+impl Display for ESOLogsDamageShielded {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (id0, id1) = self.unit_instance_id;
+        let unit_instance_str = if id0 == 0 && id1 == 0 {
+            format!("{}", self.buff_event.unique_index.wrapping_add(1))
+        } else if id1 == 0 {
+            format!("{}.{}", self.buff_event.unique_index.wrapping_add(1), id0)
+        } else {
+            format!("{}.{}.{}", self.buff_event.unique_index.wrapping_add(1), id0, id1)
+        };
+        write!(f, "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.shield_source_allegiance, self.shield_recipient_allegiance, self.buff_event.source_unit_index.wrapping_add(1), self.orig_shield_instance_ids.0, self.damage_source_allegiance, 0, self.hit_value, self.source_ability_cast_index.wrapping_add(1))
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]

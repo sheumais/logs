@@ -1,4 +1,4 @@
-use std::{error::Error, fs::File, io::{BufRead, BufReader, BufWriter}, path::Path};
+use std::{collections::HashMap, error::Error, fs::File, io::{BufRead, BufReader, BufWriter}, path::Path};
 use std::io::Write;
 use parser::{effect::{self, StatusEffectType}, event::{self, DamageType, EventResult}, parse::{self}, player::{Class, Race}, unit::{self, blank_unit_state, Reaction, UnitState}};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
@@ -42,10 +42,16 @@ impl ESOLogProcessor {
     }
 
     pub fn unit_index(&self, unit_id: u32) -> Option<usize> {
+        if unit_id == 0 {return Some(usize::MAX)}
         self.eso_logs_log.unit_index(unit_id)
     }
 
+    pub fn object_index(&self, object_id: String) -> Option<usize> {
+        self.eso_logs_log.object_index(object_id)
+    }
+
     pub fn buff_index(&self, buff_id: u32) -> Option<usize> {
+        if buff_id == 0 {return Some(usize::MAX)}
         self.eso_logs_log.buff_index(buff_id)
     }
 
@@ -59,10 +65,6 @@ impl ESOLogProcessor {
 
     pub fn index_in_session(&self, unit_id: u32) -> Option<usize> {
         self.eso_logs_log.index_in_session(unit_id)
-    }
-
-    pub fn units_for_session(&self, session_id: u32) -> Option<&[u32]> {
-        self.eso_logs_log.units_for_session(session_id)
     }
 
     pub fn get_reaction_for_unit(&self, unit_id: u32) -> Option<Reaction> {
@@ -109,10 +111,10 @@ impl ESOLogProcessor {
 
     pub fn handle_line(&mut self, line: String) {
         let mut parts: Vec<&str> = Vec::new();
-        let mut start          = 0usize;
-        let mut bracket_level  = 0u32;
-        let mut in_quotes      = false;          // ← NEW
-        let bytes              = line.as_bytes();
+        let mut start = 0usize;
+        let mut bracket_level = 0u32;
+        let mut in_quotes = false;
+        let bytes = line.as_bytes();
 
         let mut i = 0;
         while i < bytes.len() {
@@ -258,10 +260,17 @@ impl ESOLogProcessor {
                     icon: None,
                     champion_points: player.champion_points
                 };
-                if unit.name != "Offline" {
-                    self.map_unit_id_to_monster_id(player.unit_id, player.player_per_session_id);
-                    self.add_unit(unit);
+                self.map_unit_id_to_monster_id(player.unit_id, player.player_per_session_id);
+                self.eso_logs_log.shield_values.insert(player.unit_id, 0);
+                self.eso_logs_log.players.insert(player.unit_id, true);
+                if let Some(unit_index) = self.eso_logs_log.session_id_to_units_index.get(&unit.unit_id) {
+                    if let Some(player) = self.eso_logs_log.units.get_mut(*unit_index) {
+                        if player.name == "Offline" {
+                            *player = unit.clone();
+                        }
+                    }
                 }
+                self.add_unit(unit);
             }
             "MONSTER" => {
                 let monster = parse::monster(parts);
@@ -279,18 +288,13 @@ impl ESOLogProcessor {
                 let pet_owner_index = self.unit_index(monster.owner_unit_id);
                 self.add_unit(unit);
                 self.map_unit_id_to_monster_id(monster.unit_id, monster.monster_id);
+                self.eso_logs_log.shield_values.insert(monster.unit_id, 0);
                 if pet_owner_index.is_some() && monster.reaction == Reaction::NpcAlly {
-                    let pet_relationship = ESOLogPetRelationship {
+                    let pet_relationship = ESOLogsPetRelationship {
                         owner_index: pet_owner_index.unwrap(),
-                        pet: ESOLogPet { pet_type_index: self.unit_index(monster.unit_id).unwrap_or(65535) }
+                        pet: ESOLogsPet { pet_type_index: self.unit_index(monster.unit_id).unwrap_or(0) }
                     };
                     if !self.eso_logs_log.pets.iter().any(|rel| rel.owner_index == pet_relationship.owner_index && rel.pet.pet_type_index == pet_relationship.pet.pet_type_index) {
-                        // println!(
-                        //     "Pet relationship: owner_index={}, pet_type_index={}, pet_name={}",
-                        //     pet_relationship.owner_index,
-                        //     pet_relationship.pet.pet_type_index,
-                        //     monster.name
-                        // );
                         self.eso_logs_log.pets.push(pet_relationship);
                     }
                 }
@@ -310,13 +314,13 @@ impl ESOLogProcessor {
                 };
                 self.add_object(unit);
                 self.map_unit_id_to_monster_id(object.unit_id, object.unit_id);
+                self.eso_logs_log.shield_values.insert(object.unit_id, 0);
             }
             &_ => ()
         }
     }
 
     fn handle_player_info(&mut self, parts: &[&str]) {
-        // println!("Player info: {:?}", parts);
         let length = parts.len();
         if length < 8 {
             eprintln!("Invalid PLAYER_INFO line: {:?}", parts);
@@ -354,6 +358,24 @@ impl ESOLogProcessor {
         self.add_buff(buff);
     }
 
+    fn update_shield_history(esolog: &mut ESOLogsLog, unit_id: u32, shield: u32, buff_event: &ESOLogsBuffEventKey2) {
+        let units_stored_shield = *esolog.shield_values.get(&unit_id).unwrap_or(&0);
+        let buff = &esolog.buffs[buff_event.buff_index as usize];
+        if shield != units_stored_shield || buff.id == 146311 /* frost safeguard */ { 
+            // println!("Comparing shields for unit {}: {} new vs stored {}", unit_id, shield, units_stored_shield);
+            if let Some(shield_buffs_for_unit) = esolog.shields.get_mut(&unit_id) {
+                shield_buffs_for_unit.insert(buff_event.buff_index, buff_event.clone());
+                // println!("Adding buff index: {}", buff_event.buff_index);
+            } else {
+                let mut hashmap = HashMap::new();
+                hashmap.insert(buff_event.buff_index, buff_event.clone());
+                esolog.shields.insert(unit_id, hashmap);
+                // println!("Adding buff index: {}", buff_event.buff_index);
+            }
+            esolog.shield_values.insert(unit_id, shield);
+        }
+    }
+
     fn handle_combat_event(&mut self, parts: &[&str]) {
         let source = parse::unit_state(parts, 9);
         let target = if parts[19] == "*" {
@@ -362,11 +384,12 @@ impl ESOLogProcessor {
             parse::unit_state(parts, 19)
         };
         let ability_id = parts[8].parse().unwrap();
+        if ability_id == 0 {return}
         let mut buff_event= ESOLogsBuffEvent {
             unique_index: 0,
-            source_unit_index: self.unit_index(source.unit_id).map_or(0, |idx| idx as u16),
-            target_unit_index: self.unit_index(target.unit_id).map_or(0, |idx| idx as u16),
-            buff_index: self.buff_index(ability_id).map_or(0, |idx| idx as u32),
+            source_unit_index: self.unit_index(source.unit_id).expect("Combat event: source_unit_index should never be nothing"),
+            target_unit_index: self.unit_index(target.unit_id).expect("Combat event: target_unit_index should never be nothing"),
+            buff_index: self.buff_index(ability_id).expect("Combat event: buff_index should never be nothing"),
         };
         let unique_index = self.add_buff_event(buff_event);
         buff_event.unique_index = unique_index;
@@ -378,7 +401,7 @@ impl ESOLogProcessor {
             hit_value: parts[5].parse().unwrap(),
             overflow: parts[6].parse().unwrap(),
             cast_track_id: parts[7].parse().unwrap(),
-            ability_id: parts[8].parse().unwrap(),
+            ability_id: ability_id,
             source_unit_state: source,
             target_unit_state: target,
         };
@@ -391,36 +414,81 @@ impl ESOLogProcessor {
             };
         let icon = self.eso_logs_log.get_buff_icon(ability_id);
         let cast_id: u32 = ev.cast_track_id;
-        let index = self.eso_logs_log.buffs_hashmap.get(&cast_id).copied();
+        let index_option = self.eso_logs_log.buffs_hashmap.get(&cast_id).copied();
         let source_allegiance = Self::allegiance_from_reaction(self.allegiance_from_unit_state(source));
         let target_allegiance = Self::allegiance_from_reaction(self.allegiance_from_unit_state(target));
         match ev.result {
-            EventResult::BlockedDamage | EventResult::Dodged | EventResult::DamageShielded => {
-                if let Some(buff) = self.eso_logs_log.buffs.get_mut((buff_event.buff_index as usize).saturating_sub(1)) {
-                    if ev.damage_type != DamageType::Heal { // You can't block, dodge or shield a heal. That doesn't make any sense
+            EventResult::DamageShielded => {
+                if let Some(buff) = self.eso_logs_log.buffs.get_mut(buff_event.buff_index as usize) {
+                    if ev.damage_type != DamageType::Heal {
+                        buff.damage_type = ev.damage_type;
+                    }
+                }
+                // if index_option.is_none() {
+                //     println!("index is none - cast id {}", cast_id);
+                //     if cast_id == 0 {
+                //         println!("{:?}", parts);
+                //     }
+                // }
+                if cast_id != 0 {
+                    // println!("Looking for unit {} and ability {}", &target.unit_id, &ability_id);
+                    let shield_buff_event = &self.eso_logs_log.shields.get(&target.unit_id).unwrap().get(&buff_event.buff_index).unwrap().clone();
+                    if let Some(shields) = self.eso_logs_log.shields.get(&target.unit_id) {
+                        if let Some(original_shield_event) = shields.get(&buff_event.buff_index) {
+                            let new_key = ESOLogsBuffEventKey {
+                                source_unit_index: original_shield_event.source_unit_index,
+                                target_unit_index: original_shield_event.target_unit_index,
+                                buff_index: original_shield_event.buff_index
+                            };
+                            let shield_event = self.eso_logs_log.effects_hashmap.get(&new_key).unwrap();
+                            let option = self.eso_logs_log.effects.get(*shield_event);
+                            if option.is_none() {
+                                println!("error: {:?}", shield_buff_event);
+                                println!("parts: {:?}", parts);
+                            }
+                            let buff_event_shield = option.unwrap();
+                            // println!("event_shield = {:?}", buff_event_shield);
+                            // println!("shield source = {:?}", self.eso_logs_log.units[buff_event_shield.source_unit_index as usize]);
+                            self.add_log_event(ESOLogsEvent::DamageShielded(ESOLogsDamageShielded {
+                                timestamp: ev.time, 
+                                line_type: ESOLogsLineType::DamageShielded,
+                                buff_event: *buff_event_shield, // buff event from shield history, unique to each ability id,
+                                shield_source_allegiance: Self::allegiance_from_reaction(self.eso_logs_log.units[buff_event_shield.source_unit_index as usize].unit_type), // allegiance of buff event source,
+                                shield_recipient_allegiance: target_allegiance,
+                                damage_source_allegiance: source_allegiance,
+                                unit_instance_id: (self.index_in_session(source.unit_id).unwrap_or(0), self.index_in_session(target.unit_id).unwrap_or(0)),
+                                orig_shield_instance_ids: (self.index_in_session(original_shield_event.source_unit_id).unwrap_or(0), self.index_in_session(original_shield_event.target_unit_id).unwrap_or(0)), // index in session of buff event source and target,
+                                hit_value: ev.hit_value,
+                                source_ability_cast_index: index_option.unwrap_or(self.eso_logs_log.buffs.len().wrapping_add(1)) // ability from ev.cast_track_id 
+                            }));
+                        }
+                    }
+                    Self::update_shield_history(&mut self.eso_logs_log, target.unit_id, target.shield, &shield_buff_event);
+                }
+            }
+            EventResult::BlockedDamage | EventResult::Dodged => {
+                if let Some(buff) = self.eso_logs_log.buffs.get_mut(buff_event.buff_index as usize) {
+                    if ev.damage_type != DamageType::Heal { // You can't block or dodge a heal
                         buff.damage_type = ev.damage_type;
                     }
                 }
             }
             EventResult::Damage | EventResult::DotTick | EventResult::CriticalDamage | EventResult::DotTickCritical => {
-                if let Some(unit_idx) = (buff_event.source_unit_index as usize).checked_sub(1) {
-                    if unit_idx < self.eso_logs_log.units.len() {
-                        let unit = &mut self.eso_logs_log.units[unit_idx];
-                        if icon != "nil" && icon != "death_recap_melee_basic" {
-                            unit.icon = Some(icon.clone());
-                        } else if unit.icon.is_none() {
-                            unit.icon = Some("death_recap_melee_basic".to_string());
-                        }
-                    }
-                } else if let Some(unit_idx) = (buff_event.target_unit_index as usize).checked_sub(1) {
-                    if unit_idx < self.eso_logs_log.units.len() {
-                        let unit = &mut self.eso_logs_log.units[unit_idx];
-                        if unit.icon.is_none() {
-                            unit.icon = Some("death_recap_melee_basic".to_string());
-                        }
+                if buff_event.source_unit_index < self.eso_logs_log.units.len() {
+                    let unit = &mut self.eso_logs_log.units[buff_event.source_unit_index];
+                    if icon != "nil" && icon != "death_recap_melee_basic" {
+                        unit.icon = Some(icon.clone());
+                    } else if unit.icon.is_none() {
+                        unit.icon = Some("death_recap_melee_basic".to_string());
                     }
                 }
-                if let Some(buff) = self.eso_logs_log.buffs.get_mut((buff_event.buff_index as usize).saturating_sub(1)) {
+                if buff_event.target_unit_index < self.eso_logs_log.units.len() {
+                    let unit = &mut self.eso_logs_log.units[buff_event.target_unit_index];
+                    if unit.icon.is_none() {
+                        unit.icon = Some("death_recap_melee_basic".to_string());
+                    }
+                }
+                if let Some(buff) = self.eso_logs_log.buffs.get_mut(buff_event.buff_index as usize) {
                     buff.damage_type = ev.damage_type;
                 }
                 self.add_log_event(ESOLogsEvent::CastLine(
@@ -451,24 +519,22 @@ impl ESOLogProcessor {
                         },
                         cast_information: Some(ESOLogsCastData {
                             critical,
-                            hit_value: if ev.hit_value == 0 {ev.overflow} else {ev.hit_value},
+                            hit_value: ev.hit_value,
                             overflow: ev.overflow,
                         })
                     }
                 ));
             }
             EventResult::HotTick | EventResult::CriticalHeal | EventResult::Heal | EventResult::HotTickCritical => {
-                if let Some(unit_idx) = (buff_event.source_unit_index as usize).checked_sub(1) {
-                    if unit_idx < self.eso_logs_log.units.len() {
-                        let unit = &mut self.eso_logs_log.units[unit_idx];
-                        if icon != "nil" && icon != "death_recap_melee_basic" {
-                            unit.icon = Some(icon.clone());
-                        } else if unit.icon.is_none() {
-                            unit.icon = Some("death_recap_melee_basic".to_string());
-                        }
+                if buff_event.source_unit_index < self.eso_logs_log.units.len() {
+                    let unit = &mut self.eso_logs_log.units[buff_event.source_unit_index];
+                    if icon != "nil" && icon != "death_recap_melee_basic" {
+                        unit.icon = Some(icon.clone());
+                    } else if unit.icon.is_none() {
+                        unit.icon = Some("death_recap_melee_basic".to_string());
                     }
                 }
-                if let Some(buff) = self.eso_logs_log.buffs.get_mut((buff_event.buff_index as usize).saturating_sub(1)) {
+                if let Some(buff) = self.eso_logs_log.buffs.get_mut(buff_event.buff_index as usize) {
                     buff.damage_type = ev.damage_type;
                 }
                 self.add_log_event(ESOLogsEvent::CastLine(
@@ -495,7 +561,7 @@ impl ESOLogProcessor {
                         },
                         cast_information: Some(ESOLogsCastData {
                             critical,
-                            hit_value: if ev.hit_value == 0 {ev.overflow} else {ev.hit_value},
+                            hit_value: ev.hit_value,
                             overflow: ev.overflow,
                         })
                     }
@@ -534,7 +600,7 @@ impl ESOLogProcessor {
                 ));
                 return
             }
-            EventResult::Died | EventResult::DiedXP => {
+            EventResult::Died | EventResult::DiedXP | EventResult::KillingBlow => {
                 self.add_log_event(ESOLogsEvent::CastLine(
                     ESOLogsCastLine {
                         timestamp: ev.time,
@@ -565,19 +631,10 @@ impl ESOLogProcessor {
             }
             _ => {}
         };
-        if let Some(caused_by_idx_raw) = index {
-            let caused_by_idx = caused_by_idx_raw.saturating_sub(1) as usize;
-            let target_idx = buff_event.buff_index.saturating_sub(1) as usize;
+
+        if let Some(caused_by_idx) = index_option {
+            let target_idx = buff_event.buff_index;
             if let Some((target_buff, source_buff)) = self.buffs_pair_mut(target_idx, caused_by_idx) {
-                if target_buff.id == 172672 && source_buff.id == 184621 {
-                    println!("WTF?");
-                    println!(
-                        "target_buff: id={}, name={}, caused_by_id={}; source_buff: id={}, name={}, caused_by_id={}",
-                        target_buff.id, target_buff.name, target_buff.caused_by_id,
-                        source_buff.id, source_buff.name, source_buff.caused_by_id
-                    );
-                    println!("{:?}", ev);
-                }
                 target_buff.caused_by_id = source_buff.id;
             } else if caused_by_idx == target_idx {
                 if let Some(buff) = self.eso_logs_log.buffs.get_mut(target_idx) {
@@ -597,15 +654,15 @@ impl ESOLogProcessor {
         let ability_id = parts[5].parse().unwrap();
         let mut buff_event= ESOLogsBuffEvent {
             unique_index: 0,
-            source_unit_index: self.unit_index(source.unit_id).map_or(0, |idx| idx as u16),
-            target_unit_index: self.unit_index(target.unit_id).map_or(0, |idx| idx as u16),
-            buff_index: self.buff_index(ability_id).map_or(0, |idx| idx as u32),
+            source_unit_index: self.unit_index(source.unit_id).expect("Begin cast: unit_index should never be nothing"),
+            target_unit_index: self.unit_index(target.unit_id).expect("Begin cast: unit_index should never be nothing"),
+            buff_index: self.buff_index(ability_id).expect("Begin cast: buff_index should never be nothing"),
         };
         let cast_id: u32 = parts[4].parse().unwrap();
-        self.eso_logs_log.buffs_hashmap.insert(cast_id, buff_event.buff_index as usize);
+        self.eso_logs_log.buffs_hashmap.insert(cast_id, buff_event.buff_index);
         buff_event.unique_index = self.add_buff_event(buff_event);
         if cast_id != 0 {
-            if let Some(buff) = self.eso_logs_log.buffs.get_mut((buff_event.buff_index as usize).saturating_sub(1)) {
+            if let Some(buff) = self.eso_logs_log.buffs.get_mut(buff_event.buff_index as usize) {
                 buff.caused_by_id = ability_id;
             }
         }
@@ -647,16 +704,16 @@ impl ESOLogProcessor {
         let ability_id = parts[5].parse().unwrap();
         let mut buff_event= ESOLogsBuffEvent {
             unique_index: 0,
-            source_unit_index: self.unit_index(source.unit_id).map_or(0, |idx| idx as u16),
-            target_unit_index: self.unit_index(target.unit_id).map_or(0, |idx| idx as u16),
-            buff_index: self.buff_index(ability_id).map_or(0, |idx| idx as u32),
+            source_unit_index: self.unit_index(source.unit_id).expect("Effect changed: source_unit_index should never be nothing"),
+            target_unit_index: self.unit_index(target.unit_id).expect("Effect changed: target_unit_index should never be nothing"),
+            buff_index: self.buff_index(ability_id).expect("Effect changed: buff_index should never be nothing"),
         };
         let cast_id: u32 = parts[4].parse().unwrap();
         buff_event.unique_index = self.add_buff_event(buff_event);
         let index = self.eso_logs_log.buffs_hashmap.get(&cast_id).copied();
         if let Some(caused_by_idx_raw) = index {
-            let caused_by_idx = caused_by_idx_raw.saturating_sub(1) as usize;
-            let target_idx = buff_event.buff_index.saturating_sub(1) as usize;
+            let caused_by_idx = caused_by_idx_raw as usize;
+            let target_idx = buff_event.buff_index as usize;
             if let Some((target_buff, source_buff)) = self.buffs_pair_mut(target_idx, caused_by_idx) {
                 target_buff.caused_by_id = source_buff.id;
             } else if caused_by_idx == target_idx {
@@ -667,6 +724,18 @@ impl ESOLogProcessor {
         };
         let source_allegiance = Self::allegiance_from_reaction(self.allegiance_from_unit_state(source));
         let target_allegiance = Self::allegiance_from_reaction(self.allegiance_from_unit_state(target));
+        let shield_buff_event = ESOLogsBuffEventKey2 {
+            source_unit_index: buff_event.source_unit_index,
+            source_unit_id: source.unit_id,
+            target_unit_index: buff_event.target_unit_index,
+            target_unit_id: target.unit_id,
+            buff_index: buff_event.buff_index,
+        };
+        if source.unit_id != 0 {
+            Self::update_shield_history(&mut self.eso_logs_log, source.unit_id, source.shield, &shield_buff_event);
+            Self::update_shield_history(&mut self.eso_logs_log, target.unit_id, target.shield, &shield_buff_event);
+        }
+
         if parts[2] == "GAINED" {
             self.add_log_event(ESOLogsEvent::BuffLine (
                 ESOLogsBuffLine {
@@ -779,8 +848,8 @@ impl ESOLogProcessor {
         };
         self.add_buff(health_recovery);
         let source = parse::unit_state(parts, 3);
-        let source_id = self.unit_index(source.unit_id).map_or(0, |idx| idx as u16);
-        let buff_index = self.buff_index(Self::HEALTH_RECOVERY_BUFF_ID).map_or(0, |idx| idx as u32);
+        let source_id = self.unit_index(source.unit_id).expect("health_recovery source_index should never be nothing");
+        let buff_index = self.buff_index(Self::HEALTH_RECOVERY_BUFF_ID).expect("health_recovery_buff_index should always exist");
         let mut buff_event = ESOLogsBuffEvent {
             unique_index: 0,
             source_unit_index: source_id,
@@ -804,7 +873,7 @@ impl ESOLogProcessor {
         // let effect_type = effect::parse_effect_type(parts[3]);
         let status_effect_type = effect::parse_status_effect_type(parts[4]);
         if let Some(&idx) = self.eso_logs_log.buffs_hashmap.get(&effect_id) {
-            if let Some(buff) = self.eso_logs_log.buffs.get_mut(idx.saturating_sub(1)) {
+            if let Some(buff) = self.eso_logs_log.buffs.get_mut(idx) {
                 buff.status_type = status_effect_type;
             }
         }
@@ -814,7 +883,7 @@ impl ESOLogProcessor {
         let unit_id = parts[2].parse().unwrap();
         let unit_index = self.unit_index(unit_id);
         if unit_index.is_some() {
-            let unit = &mut self.eso_logs_log.units[unit_index.unwrap().saturating_sub(1)];
+            let unit = &mut self.eso_logs_log.units[unit_index.unwrap()];
             unit.unit_type = unit::match_reaction(parts[11]);
         }
     }
@@ -984,7 +1053,7 @@ pub fn build_master_table(elp: &mut ESOLogProcessor) -> String {
             continue;
         }
         if let Some(&parent_idx) = elp.eso_logs_log.buffs_hashmap.get(&parent_id) {
-            if let Some(parent_buff) = elp.eso_logs_log.buffs.get_mut(parent_idx.saturating_sub(1)) {
+            if let Some(parent_buff) = elp.eso_logs_log.buffs.get_mut(parent_idx) {
                 if parent_buff.damage_type == DamageType::None {
                     parent_buff.damage_type = child_damage_type;
                 } else if parent_buff.damage_type == DamageType::Heal

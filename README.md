@@ -3,7 +3,7 @@
 [![Release](https://github.com/sheumais/logs/actions/workflows/release.yml/badge.svg?branch=release)](https://github.com/sheumais/logs/actions/workflows/release.yml)
 [![Chat](https://img.shields.io/badge/chat-discord-5865f2.svg?logo=discord&logoColor=fff)](https://discord.gg/FjJjXHjUQ4)
 
-This desktop tool is designed to help you manage and process your ESO log files. 
+This application is designed to help you manage and process your Elder Scrolls Online Encounter log files. 
 
 With the option to upload directly to [esologs.com](https://esologs.com/), handling your logs has never been easier.
 
@@ -17,11 +17,10 @@ With the option to upload directly to [esologs.com](https://esologs.com/), handl
 
 ### Current Fixes
 - [x] Shows casts of Fatecarver
-- [x] Blockade of Elements shows correct icon
 - [x] Touch of Z'en stacks
 - [x] Scribing skills show their scripts
-- [x] Better buff/debuff source & type classification
 - [x] Various improvements on the esologs.com parser
+- [x] Blockade of Elements shows correct icon
 
 ### Other useful log tools: 
 Easy Stalking AddOn for automatically logging trials
