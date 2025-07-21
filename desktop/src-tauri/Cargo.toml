@@ -19,7 +19,9 @@ serde_json = "1"
 parser = { path = "../../parser" }
 cli = { path = "../../cli" }
 reqwest = { version = "0.12.21", default-features = false, features = ["rustls-tls", "json", "cookies", "multipart"] }
-cookie_store = "0.21.1"
+cookie_store = { version = "0.21.1", features = ["serde"] }
+reqwest_cookie_store = "0.8.2"
+dirs = "6.0.0"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"

@@ -2,15 +2,21 @@ use std::{collections::HashMap, fmt::{self, Display}, hash::Hash};
 use parser::{effect::StatusEffectType, event::DamageType, player::Race, unit::{blank_unit_state, Reaction, UnitState}};
 use serde::{Deserialize, Serialize};
 
+pub const ESO_LOGS_COM_VERSION: &'static str = "8.17.18";
+pub const ESO_LOGS_PARSER_VERSION: &'static u8 = &11;
+
 #[derive(Default)]
 pub struct ESOLogsLog {
     pub units: Vec<ESOLogsUnit>,
     pub session_id_to_units_index: HashMap<u32, usize>,
+    pub owner_id_pairs_index: HashMap<(u32, usize), usize>,
     pub unit_id_to_session_id: HashMap<u32, u32>,
+    pub unit_id_to_units_index: HashMap<u32, usize>,
     pub session_units: HashMap<u32, Vec<u32>>,
     pub unit_index_in_session: HashMap<u32, usize>,
-    pub players: HashMap<u32, bool>,
     pub objects: HashMap<String, u32>,
+    pub players: HashMap<u32, bool>,
+    pub bosses: HashMap<u32, bool>,
     pub buffs: Vec<ESOLogsBuff>,
     pub buffs_hashmap: HashMap<u32, usize>,
     pub effects: Vec<ESOLogsBuffEvent>,
@@ -26,44 +32,56 @@ impl ESOLogsLog {
         Self::default()
     }
 
-    pub fn add_unit(&mut self, unit: ESOLogsUnit) -> bool {
+    pub fn add_unit(&mut self, unit: ESOLogsUnit) -> usize {
         let id = unit.unit_id;
-        if self.session_id_to_units_index.contains_key(&id) {
-            // println!("units already contains id {}", id);
-            return false;
+        let owner_id = unit.owner_id;
+        let session_id = self.unit_id_to_session_id.get(&owner_id).unwrap_or(&0);
+        let raw_key = (id, self.session_id_to_units_index.get(session_id).unwrap_or(&0usize));
+        // println!("owner id: {} to session id: {} to raw_key {:?}", owner_id, session_id, raw_key);
+        let key = (raw_key.0, *raw_key.1);
+
+        // if unit.player_data.is_some() {
+        //     self.players.insert(id, true);
+        // }
+
+        if let Some(existing_index) = self.owner_id_pairs_index.get(&key) {
+            if *existing_index < self.units.len() {
+                // println!("Existing index: {}", *existing_index);
+                return *existing_index;
+            }
         }
+
         let index = self.units.len();
         self.units.push(unit);
+        self.owner_id_pairs_index.insert(key, index);
         self.session_id_to_units_index.insert(id, index);
-        true
+        // println!("New index: {}, unit_id: {}", index, id);
+        index
     }
 
-    pub fn map_unit_id_to_monster_id(&mut self, unit_id: u32, session_id: u32) -> bool {
+    pub fn map_unit_id_to_monster_id(&mut self, unit_id: u32, unit: &ESOLogsUnit) -> bool {
+        let session_id = unit.unit_id;
         if self.unit_id_to_session_id.contains_key(&unit_id) {
             return false;
         }
         self.unit_id_to_session_id.insert(unit_id, session_id);
-
-
-        let pos = self.session_units.entry(session_id).or_default().len();
-        self.session_units.get_mut(&session_id).unwrap().push(unit_id);
-        self.unit_index_in_session.insert(unit_id, pos);
-
         true
     }
 
-    pub fn add_object(&mut self, object: ESOLogsUnit) -> bool {
+    pub fn add_object(&mut self, object: ESOLogsUnit) -> usize {
         if self.objects.contains_key(&object.name) {
-            let index = self.objects.get(&object.name).unwrap();
-            let session_id = self.session_id_to_units_index.get(index).unwrap();
-            self.session_id_to_units_index.insert(object.unit_id, *session_id);
-            return false;
+            let session_id = self.objects.get(&object.name).unwrap();
+            let index = self.session_id_to_units_index.get(session_id).unwrap();
+            let index2 = index.clone();
+            self.session_id_to_units_index.insert(object.unit_id, *index);
+            return index2;
         }
         let index = self.units.len();
+        self.unit_id_to_units_index.insert(object.unit_id, index);
         self.session_id_to_units_index.insert(object.unit_id, index);
         self.objects.insert(object.name.clone(), object.unit_id);
         self.units.push(object);
-        true
+        index
     }
 
     pub fn add_buff(&mut self, buff: ESOLogsBuff) -> bool {
@@ -94,12 +112,9 @@ impl ESOLogsLog {
     }
 
     pub fn unit_index(&self, unit_id: u32) -> Option<usize> {
-        if let Some(session_id) = self.unit_id_to_session_id.get(&unit_id) {
-            let res = self.session_id_to_units_index.get(session_id).copied();
-            res
-        } else {
-            None
-        }
+        // println!("{:?}", self.unit_id_to_session_id);
+        let res = self.unit_id_to_units_index.get(&unit_id).copied();
+        res
     }
 
     pub fn object_index(&self, object_id: String) -> Option<usize> {
@@ -130,36 +145,46 @@ impl ESOLogsLog {
     }
 
     pub fn get_cp_for_unit(&self, unit_id: u32) -> u16 {
-        if let Some(&session_id) = self.unit_id_to_session_id.get(&unit_id) {
-            if let Some(unit_index) = self.session_id_to_units_index.get(&session_id) {
-                let cp = self.units[*unit_index].champion_points;
-                return cp;
-            }
+        if let Some(unit_index) = self.unit_id_to_units_index.get(&unit_id) {
+            let cp = self.units[*unit_index].champion_points;
+            return cp;
         }
         0
     }
 
-    pub fn index_in_session(&self, unit_id: u32) -> Option<usize> {
-        if let Some(player_bool) = self.players.get(&unit_id) {
-            if *player_bool {
-                return None
+    pub fn index_in_session(&mut self, unit_id: u32) -> Option<usize> {
+        let session_id = *self.unit_id_to_session_id.get(&unit_id)?;
+        if let Some(is_player) = self.players.get(&unit_id) {
+            if *is_player {
+                // println!("Found player in index_in_session: {}, {}", unit_id, session_id);
+                // if let Some(index) = self.unit_index_in_session.get(&unit_id) {
+                //     println!("Player index would be: {}", index);
+                // }
+                return Some(0)
             }
         }
-        let res = self.unit_index_in_session.get(&unit_id).copied();
-        res
+        if let Some(is_boss) = self.bosses.get(&unit_id) {
+            if *is_boss {return Some(0)}
+        }
+        let entry = self.session_units.entry(session_id).or_insert_with(Vec::new);
+        
+        if let Some(&idx) = self.unit_index_in_session.get(&unit_id) {return Some(idx)}
+
+        let new_idx = entry.len();
+        entry.push(unit_id);
+        self.unit_index_in_session.insert(unit_id, new_idx);
+        Some(new_idx)
     }
 
     pub fn get_reaction_for_unit(&self, unit_id: u32) -> Option<Reaction> {
-        if let Some(&session_id) = self.unit_id_to_session_id.get(&unit_id) {
-            if let Some(&unit_index) = self.session_id_to_units_index.get(&session_id) {
-                return self.units.get(unit_index).map(|unit| unit.unit_type.clone());
-            }
+        if let Some(&unit_index) = self.unit_id_to_units_index.get(&unit_id) {
+            return self.units.get(unit_index).map(|unit| unit.unit_type.clone());
         }
         None
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ESOLogsEvent {
     Buff(ESOLogsBuffEvent),
     BuffLine(ESOLogsBuffLine),
@@ -213,7 +238,8 @@ pub struct ESOLogsUnit {
     pub server_string: String,
     pub race: Race,
     pub icon: Option<String>, // nil for players & objects, default to death_recap_melee_basic
-    pub champion_points: u16
+    pub champion_points: u16,
+    pub owner_id: u32,
 }
 
 impl Display for ESOLogsUnit {
@@ -333,7 +359,7 @@ impl Display for ESOLogsLineType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ESOLogsBuffLine {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
@@ -370,7 +396,7 @@ impl Display for ESOLogsBuffLine {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ESOLogsBuffStacks {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
@@ -395,7 +421,7 @@ impl Display for ESOLogsBuffStacks {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ESOLogsUnitState {
     pub unit_state: UnitState,
     pub champion_points: u16, // fucking champion points. why the fuck ?????
@@ -403,9 +429,9 @@ pub struct ESOLogsUnitState {
 
 impl Display for ESOLogsUnitState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            let map_x_int = (self.unit_state.map_x * 10_000.0).round() as u32;
-            let map_y_int = (10_000f32 - (self.unit_state.map_y * 10_000.0)).round() as u32;
-            let heading_int = (self.unit_state.heading * 100.0).round() as u32;
+            let map_x_int = (self.unit_state.map_x * 10_000.0).round() as i32;
+            let map_y_int = (10_000f32 - (self.unit_state.map_y * 10_000.0)).round() as i32;
+            let heading_int = (self.unit_state.heading * 100.0).round() as i32;
             write!(f, "{}/{}|{}/{}|{}/{}|{}/{}|{}/{}|{}|{}|{}|{}|{}",
             self.unit_state.health,
             self.unit_state.max_health,
@@ -426,26 +452,33 @@ impl Display for ESOLogsUnitState {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ESOLogsCastData {
     pub critical: u8, // 1 = no, 2 = yes critical, 0 = ??
     pub hit_value: u32,
-    pub overflow: u32, 
+    pub overflow: u32,
+    pub override_magic_number: Option<u8>,
+    pub replace_hitvalue_overflow: bool, 
 }
 
 impl Display for ESOLogsCastData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.hit_value == 0 && self.overflow > 0 {
-            write!(f, "{}|{}|{}", self.critical, self.overflow, self.overflow)
-        } else if self.hit_value > 0 && self.overflow == 0 {
-            write!(f, "{}|{}", self.critical, self.hit_value)
+        if let Some(n) = self.override_magic_number {
+            write!(f, "{}", n)
         } else {
-            write!(f, "{}|{}|{}", self.critical, self.hit_value + self.overflow, self.overflow)
+            if self.hit_value == 0 && self.overflow > 0 {
+                write!(f, "{}|{}|{}", self.critical, if self.replace_hitvalue_overflow { self.hit_value } else { self.overflow }, self.overflow)
+            } else if self.hit_value > 0 && self.overflow == 0 {
+                write!(f, "{}|{}", self.critical, self.hit_value)
+            } else {
+                write!(f, "{}|{}|{}", self.critical, self.hit_value + self.overflow, self.overflow)
+            }
         }
+
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ESOLogsCastBase {
     pub source_allegiance: u8,
     pub target_allegiance: u8,
@@ -456,14 +489,19 @@ pub struct ESOLogsCastBase {
 
 impl Display for ESOLogsCastBase {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let cast_str = if self.cast_id_origin == 0 {
+            format!("")
+        } else {
+            format!("|C{}", self.cast_id_origin)
+        };
         if self.target_unit_state.unit_state == blank_unit_state() {
-            return write!(f, "{}|{}|C{}|S{}", self.source_allegiance, self.target_allegiance, self.cast_id_origin, self.source_unit_state)
+            return write!(f, "{}|{}{}|S{}", self.source_allegiance, self.target_allegiance, cast_str, self.source_unit_state)
         }
-        write!(f, "{}|{}|C{}|S{}|T{}", self.source_allegiance, self.target_allegiance, self.cast_id_origin, self.source_unit_state, self.target_unit_state)
+        write!(f, "{}|{}{}|S{}|T{}", self.source_allegiance, self.target_allegiance, cast_str, self.source_unit_state, self.target_unit_state)
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ESOLogsCastLine {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
@@ -484,7 +522,11 @@ impl Display for ESOLogsCastLine {
             format!("{}.{}.{}", self.buff_event.unique_index.wrapping_add(1), id0, id1)
         };
         if let Some(cast_info) = &self.cast_information {
-            write!(f, "{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.cast, cast_info)
+            if self.cast.target_unit_state.unit_state.health == 0 {
+                write!(f, "{}|{}|{}|{}|{}|{}|0|0|{}", self.timestamp, self.line_type, unit_instance_str, self.cast, cast_info.critical, cast_info.hit_value + cast_info.overflow, cast_info.overflow)
+            } else {
+                write!(f, "{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.cast, cast_info)
+            }
         } else {
             write!(f, "{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.cast)
         }
@@ -505,7 +547,7 @@ impl Display for ESOLogsResourceType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ESOLogsPowerEnergize {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
@@ -519,16 +561,16 @@ pub struct ESOLogsPowerEnergize {
 impl Display for ESOLogsPowerEnergize {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let max_of_that_resource = match self.resource_type {
-            ESOLogsResourceType::Health => self.cast.source_unit_state.unit_state.max_health,
-            ESOLogsResourceType::Magicka => self.cast.source_unit_state.unit_state.max_magicka,
-            ESOLogsResourceType::Stamina => self.cast.source_unit_state.unit_state.max_stamina,
-            ESOLogsResourceType::Ultimate => self.cast.source_unit_state.unit_state.max_ultimate,
+            ESOLogsResourceType::Health => self.cast.target_unit_state.unit_state.max_health, // this should never happen. an energize of health is called a heal!
+            ESOLogsResourceType::Magicka => self.cast.target_unit_state.unit_state.max_magicka,
+            ESOLogsResourceType::Stamina => self.cast.target_unit_state.unit_state.max_stamina,
+            ESOLogsResourceType::Ultimate => self.cast.target_unit_state.unit_state.max_ultimate,
         };
-        write!(f, "{}|{}|{}|{}|{}|{}|{}|{}", self.timestamp, self.line_type, self.buff_event.unique_index, self.cast, self.hit_value, self.overflow, self.resource_type, max_of_that_resource)
+        write!(f, "{}|{}|{}|{}|{}|{}|{}|{}", self.timestamp, self.line_type, self.buff_event.unique_index.wrapping_add(1), self.cast, self.hit_value, self.overflow, self.resource_type, max_of_that_resource)
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ESOLogsZoneInfo {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
@@ -543,7 +585,7 @@ impl Display for ESOLogsZoneInfo {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ESOLogsMapInfo {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
@@ -558,7 +600,7 @@ impl Display for ESOLogsMapInfo {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ESOLogsPlayerBuild {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
@@ -577,7 +619,7 @@ impl Display for ESOLogsPlayerBuild {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ESOLogsCombatEvent {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
@@ -589,7 +631,7 @@ impl Display for ESOLogsCombatEvent {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ESOLogsEndTrial {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
@@ -605,7 +647,7 @@ impl Display for ESOLogsEndTrial {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ESOLogsHealthRecovery {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
@@ -620,7 +662,7 @@ impl Display for ESOLogsHealthRecovery {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ESOLogsPetRelationship {
     pub owner_index: usize,
     pub pet: ESOLogsPet,
@@ -632,7 +674,7 @@ impl Display for ESOLogsPetRelationship {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ESOLogsPet {
     pub pet_type_index: usize,
 }
@@ -645,8 +687,8 @@ impl Display for ESOLogsPet {
 
 // 5314073|38|17895.1.1|64|64|6|0|16|0|451|609
 // timestamp | linetype | unit_instance_string for original shield | source allegiance | target allegiance | damage source instance id | damage source allegiance | 0 | hit_value | source_cast_index
-#[derive(Debug)]
-pub struct ESOLogsDamageShielded {
+#[derive(Debug, Clone)]
+pub struct ESOLogsDamageShielded { // purely for healing purposes. we copy the overflow value to a damage event
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
     pub buff_event: ESOLogsBuffEvent,

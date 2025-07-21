@@ -41,6 +41,8 @@ fn main() {
             let master_table = build_master_table(&mut eso_log_processor);
             write!(file, "{master_table}").expect("master_table write failed");
             println!("master table written");
+            // println!("{:?}", eso_log_processor.eso_logs_log.unit_id_to_units_index);
+            // println!("{:?}", eso_log_processor.eso_logs_log.owner_id_pairs_index);
             let mut file = match File::create("C:/Users/H/Downloads/esolog_output2.txt") {
                 Ok(f) => f,
                 Err(e) => {

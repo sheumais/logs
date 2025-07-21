@@ -13,13 +13,13 @@ With the option to upload directly to [esologs.com](https://esologs.com/), handl
 - [x] Split encounter log (10x faster)
 - [x] Merge encounter logs
 - [x] Live logging with fixes
-- [ ] esologs.com integration
+- [ ] esologs.com integration (work in progress)
+- [ ] esologs parser parity (work in progress)
 
 ### Current Fixes
 - [x] Shows casts of Fatecarver
 - [x] Touch of Z'en stacks
 - [x] Scribing skills show their scripts
-- [x] Various improvements on the esologs.com parser
 - [x] Blockade of Elements shows correct icon
 
 ### Other useful log tools: 

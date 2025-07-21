@@ -1,4 +1,4 @@
-use cli::{esologs_convert::split_and_zip_log_by_fight, esologs_format::{EncounterReportCode, LoginResponse}, log_edit::{handle_line, CustomLogData}};
+use cli::{esologs_convert::split_and_zip_log_by_fight, esologs_format::{EncounterReportCode, LoginResponse, ESO_LOGS_COM_VERSION, ESO_LOGS_PARSER_VERSION}, log_edit::{handle_line, CustomLogData}};
 use reqwest::multipart::{Form, Part};
 use state::AppState;
 use tauri_plugin_updater::UpdaterExt;
@@ -7,6 +7,8 @@ use std::{
 };
 use tauri::{path::BaseDirectory, Emitter, Manager, State, Window};
 use tauri_plugin_dialog::DialogExt;
+
+use crate::state::cookie_file_path;
 mod state;
 
 const LINE_COUNT_FOR_PROGRESS: usize = 25000usize;
@@ -374,13 +376,36 @@ fn pick_and_load_folder(window: Window, state: State<'_, AppState>) -> Result<()
     pick_files_internal(&window, PickerType::Folder, &state)
 }
 
+fn save_login_response(resp: &LoginResponse) {
+    let path = cookie_file_path().with_file_name("login_response.json");
+    if let Ok(json) = serde_json::to_string(resp) {
+        println!("Saving login response");
+        let _ = fs::write(path, json);
+    }
+}
+
+fn load_login_response() -> Option<LoginResponse> {
+    let path = cookie_file_path().with_file_name("login_response.json");
+    if let Ok(data) = fs::read_to_string(path) {
+        println!("Loading login response");
+        serde_json::from_str(&data).ok()
+    } else {
+        None
+    }
+}
+
+#[tauri::command]
+fn get_saved_login_response() -> Option<LoginResponse> {
+    load_login_response()
+}
+
 #[tauri::command]
 async fn login(
     state: tauri::State<'_, AppState>,
     username: String,
     password: String,
 ) -> Result<LoginResponse, String> {
-    let payload = serde_json::json!({ "email": username, "password": password, "version": "8.17.18" });
+    let payload = serde_json::json!({ "email": username, "password": password, "version": ESO_LOGS_COM_VERSION });
 
     let client = {
         let client_guard = state.http.read().map_err(|e| e.to_string())?;
@@ -396,11 +421,39 @@ async fn login(
     if !resp.status().is_success() {
         return Err(format!("Server returned {}", resp.status()));
     }
+    println!("{:?}", resp.headers());
     let text = resp.text().await.map_err(|e| format!("Failed to read response text: {e}"))?;
     let body: LoginResponse = serde_json::from_str(&text).map_err(|e| format!("Invalid JSON: {e}"))?;
+    {
+        let http = state.http.read().unwrap();
+        let store = http.cookie_store.lock().unwrap();
+        for cookie in store.iter_any() {
+            println!("{:?}", cookie);
+        }
+    }
+
+    state.http.write().unwrap().save_cookies();
+    save_login_response(&body);
     Ok(body)
 }
 
+#[tauri::command]
+fn logout(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let http = state.http.write().map_err(|e| e.to_string())?;
+    if let Ok(mut store) = http.cookie_store.lock() {
+        store.clear();
+        if let Ok(json) = serde_json::to_string(&*store) {
+            let _ = fs::write(cookie_file_path(), json);
+        }
+    }
+    let login_response_path = cookie_file_path().with_file_name("login_response.json");
+    if let Err(e) = fs::remove_file(login_response_path) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            println!("Failed to remove login_response.json: {}", e);
+        }
+    }
+    Ok(())
+}
 #[tauri::command]
 async fn upload_log(
     state: State<'_, AppState>
@@ -427,12 +480,10 @@ async fn upload_log(
         .parse::<u64>()
         .map_err(|e| format!("Failed to parse timestamp: {e}"))?;
 
-    let version = "8.17.18";
-    let parser_version = 11;
     let time = start_timestamp;
     let payload = serde_json::json!({
-        "clientVersion": version,
-        "parserVersion": parser_version,
+        "clientVersion": ESO_LOGS_COM_VERSION,
+        "parserVersion": ESO_LOGS_PARSER_VERSION,
         "startTime": time,
         "endTime": time,
         "fileName": "Encounter.log",
@@ -442,40 +493,12 @@ async fn upload_log(
         "description": "",
         "guildId": null
     });
-    println!("Create‑report payload: {payload}");
+    println!("Create-report payload: {payload}");
 
     let client = {
         let g = state.http.read().map_err(|e| e.to_string())?;
         g.client.clone()
     };
-
-    println!("POST https://www.esologs.com/desktop-client/create-report");
-
-    let response = client
-        .post("https://www.esologs.com/desktop-client/create-report")
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|e| format!("Request error: {e}"))?;
-
-    let status = response.status();
-    let raw_body = response.text().await.map_err(|e| format!("Failed to read response text: {e}"))?;
-
-    println!("Received response status: {}", status);
-    println!("Raw response body: {}", raw_body);
-
-    if !status.is_success() {
-        return Err(format!("Server returned error status: {} with body: {}", status, raw_body));
-    }
-
-    let report: EncounterReportCode = serde_json::from_str(&raw_body)
-        .map_err(|e| format!("Invalid JSON: {e}\nRaw body: {raw_body}"))?;
-
-    println!("Parsed report: {:?}", report);
-
-    let code = report.code.clone();
-    *state.esolog_code.write().map_err(|e| e.to_string())? = Some(code.clone());
-
     println!("Spawning split/zip task …");
     
     let tmp_dir = std::env::temp_dir().join("esologtool_temporary");
@@ -508,6 +531,35 @@ async fn upload_log(
     .await
     .map_err(|e| format!("spawn_blocking error: {e}"))??;
 
+    println!("POST https://www.esologs.com/desktop-client/create-report");
+
+    let response = client
+        .post("https://www.esologs.com/desktop-client/create-report")
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Request error: {e}"))?;
+
+    let status = response.status();
+    let raw_body = response.text().await.map_err(|e| format!("Failed to read response text: {e}"))?;
+
+    println!("Received response status: {}", status);
+    println!("Raw response body: {}", raw_body);
+
+    if !status.is_success() {
+        return Err(format!("Server returned error status: {} with body: {}", status, raw_body));
+    }
+
+    state.http.write().unwrap().save_cookies();
+
+    let report: EncounterReportCode = serde_json::from_str(&raw_body)
+        .map_err(|e| format!("Invalid JSON: {e}\nRaw body: {raw_body}"))?;
+
+    println!("Parsed report: {:?}", report);
+
+    let code = report.code.clone();
+    *state.esolog_code.write().map_err(|e| e.to_string())? = Some(code.clone());
+
     let base = "https://www.esologs.com/desktop-client";
     let mut segment_id = 1u16;
 
@@ -536,7 +588,10 @@ async fn upload_log(
         .send()
         .await
         .map_err(|e| e.to_string())?;
+    state.http.write().unwrap().save_cookies();
     println!("Report terminated OK");
+
+    end_report(&client, report.code.clone()).await;
 
     Ok(report)
 }
@@ -649,6 +704,16 @@ async fn upload_segment_and_get_next_id(
     Ok(next_id as u16)
 }
 
+async fn end_report(client: &reqwest::Client, code: String) {
+    println!("POST https://www.esologs.com/desktop-client/terminate-report");
+
+    let _response = client
+        .post(format!("https://www.esologs.com/desktop-client/terminate-report/{}", code))
+        .send()
+        .await
+        .map_err(|e| format!("Request error: {e}"));
+}
+
 fn read_timestamps(path: &Path) -> Result<Vec<(u64, u64)>, String> {
     use std::io::{BufRead, BufReader};
     let f = File::open(path)
@@ -694,7 +759,9 @@ pub fn run() {
             combine_encounter_log_files,
             live_log_from_folder,
             login,
-            upload_log
+            logout,
+            upload_log,
+            get_saved_login_response
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -28,14 +28,6 @@ pub fn icon_style_small() -> Style {
     "#)).expect("Error creating style")
 }
 
-pub fn icon_style_inactive() -> Style {
-    Style::new(css!(r#"
-        position: relative;
-        opacity: 0.5;
-        cursor: not-allowed;
-    "#)).expect("Error creating style")
-}
-
 pub fn icon_description() -> Style {
     Style::new(css!(r#"
         visibility: hidden;
@@ -244,10 +236,10 @@ pub fn fancy_link_style() -> Style {
     "#)).expect("Error creating style")
 }
 
-pub fn text_link_style() -> Style {
-    Style::new(css!(r#"
-        cursor: pointer;
-        display: inline-block;
-        color: #fff;
-    "#)).expect("Error creating style")
-}
+// pub fn text_link_style() -> Style {
+//     Style::new(css!(r#"
+//         cursor: pointer;
+//         display: inline-block;
+//         color: #fff;
+//     "#)).expect("Error creating style")
+// }

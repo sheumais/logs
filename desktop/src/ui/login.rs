@@ -1,5 +1,5 @@
 use std::rc::Rc;
-use cli::esologs_format::LoginResponse;
+use cli::esologs_format::{EncounterReportCode, LoginResponse};
 use stylist::{css, Style};
 use tauri_sys::core::{invoke, invoke_result};
 use web_sys::HtmlInputElement;
@@ -18,6 +18,22 @@ pub fn login_component() -> Html {
             navigator.push(&Route::Login);
         })
     };
+
+    {
+        let login_ctx = login_ctx.clone();
+        use_effect(move || {
+            wasm_bindgen_futures::spawn_local(async move {
+                match invoke::<Option<LoginResponse>>(
+                    "get_saved_login_response",
+                    &serde_json::json!({})
+                ).await {
+                    Some(login) => login_ctx.set(Some(Rc::new(login))),
+                    None => login_ctx.set(None),
+                }
+            });
+            || ()
+        });
+    }
 
     html! {
         <div class={login_box_style().clone()} onclick={go_to_login.clone()}>
@@ -48,6 +64,22 @@ pub fn login_screen() -> Html {
     let error = use_state(|| None as Option<String>);
 
     let login_ctx = use_context::<LoginContext>().expect("LoginContext not found");
+
+    {
+        let login_ctx = login_ctx.clone();
+        use_effect(move || {
+            wasm_bindgen_futures::spawn_local(async move {
+                match invoke::<Option<LoginResponse>>(
+                    "get_saved_login_response",
+                    &serde_json::json!({})
+                ).await {
+                    Some(login) => login_ctx.set(Some(Rc::new(login))),
+                    None => login_ctx.set(None),
+                }
+            });
+            || ()
+        });
+    }
 
     let on_submit = {
         let username = username.clone();
@@ -104,10 +136,21 @@ pub fn login_screen() -> Html {
                 invoke::<()>("pick_and_load_file", &()).await;
                 has_chosen_file.set(true);
 
-                match invoke_result::<String, String>("upload_log", &()).await {
-                    Ok(_) => {error.set(None)}
+                match invoke_result::<EncounterReportCode, String>("upload_log", &()).await {
+                    Ok(code) => {error.set(Some(code.code))}
                     Err(err) => {error.set(Some(err.to_string()))}
                 };
+            });
+        }
+    };
+
+    let logout = {
+        let login_ctx = login_ctx.clone();
+        move |_| {
+            let login_ctx = login_ctx.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                invoke::<()>("logout", &()).await;
+                login_ctx.set(None)
             });
         }
     };
@@ -170,10 +213,11 @@ pub fn login_screen() -> Html {
             </div>
             <div class={container_style().clone()}>
                 if let Some(login) = &*login_ctx {
-                    <div>
-                        { format!("Welcome, {}", login.user.username) }
+                    <div class={input_title_style.clone()}>
+                        { format!("Welcome, {}! You have successfully logged in.", login.user.username) }
                     </div>
                     <Icon width={"5em".to_owned()} height={"5em".to_owned()} class={icon_style().clone()} icon_id={IconId::LucideUpload} onclick={upload_log.clone()} />
+                    <Icon width={"5em".to_owned()} height={"5em".to_owned()} class={icon_style().clone()} icon_id={IconId::LucideLogOut} onclick={logout.clone()} />
                     if let Some(err) = &*error {
                         <div style="color: red; margin-bottom: 1em;">{ err }</div>
                     }
@@ -186,7 +230,7 @@ pub fn login_screen() -> Html {
                             { "Logging in allows uploading logs directly to esologs.com and is NOT mandatory." }
                         </div>
                         <div class={paragraph_style().clone()}>
-                            { "Your details are stored on your own computer and are sent directly to esologs.com only." }
+                            { "Your details are sent directly to esologs.com only and are not saved. Cookies set by esologs.com and your profile information are stored locally until you log out." }
                         </div>
                         <div class={paragraph_style().clone()}>
                             {"If you have any concerns you are welcome to audit the code, build it from" }

@@ -1,28 +1,80 @@
+use dirs::data_local_dir;
 use parser::log::Log;
-use reqwest::{cookie::Jar, Client};
-use std::{sync::{Arc, RwLock}, time::Duration};
+use reqwest::Client;
+use std::{env::temp_dir, fs::{self, create_dir_all, File}, io::Read, path::PathBuf, sync::{Arc, RwLock}, time::Duration};
 use tauri_plugin_dialog::FilePath;
+use cookie_store::CookieStore;
+use reqwest_cookie_store::CookieStoreMutex;
 
-fn build_http_client() -> (Client, Arc<Jar>) {
-    let jar = Arc::new(Jar::default());
-    let client = Client::builder()
-        .cookie_provider(jar.clone())
+pub fn cookie_file_path() -> PathBuf {
+    let mut dir = data_local_dir().unwrap_or_else(|| temp_dir());
+    dir.push("eso-log-tool");
+    create_dir_all(&dir).ok();
+    dir.push("cookies.json");
+    dir
+}
+
+fn build_http_client_with_store(store: Arc<CookieStoreMutex>) -> Client {
+    Client::builder()
+        .cookie_provider(store.clone())
         .timeout(Duration::from_secs(10))
         .user_agent("eso-log-tool")
         .build()
-        .expect("valid client");
-    (client, jar)
+        .expect("valid client")
+}
+
+fn load_cookie_store() -> Arc<CookieStoreMutex> {
+    let path = cookie_file_path();
+    println!("Loading cookies from: {:?}", path);
+    if let Ok(mut file) = File::open(&path) {
+        let mut data = String::new();
+        if file.read_to_string(&mut data).is_ok() {
+            if let Ok(store) = serde_json::from_str::<CookieStore>(&data) {
+                println!("Loaded cookies: {} cookies", store.iter_any().count());
+                return Arc::new(CookieStoreMutex::new(store));
+            } else {
+                println!("Failed to deserialize cookies");
+            }
+        } else {
+            println!("Failed to read cookie file");
+        }
+    } else {
+        println!("No cookie file found at {:?}", path);
+    }
+    Arc::new(CookieStoreMutex::default())
+}
+
+fn save_cookie_store(store: &CookieStoreMutex) {
+    let path = cookie_file_path();
+    if let Ok(store) = store.lock() {
+        let count = store.iter_any().count();
+        println!("Saving {} cookies to {:?}", count, path);
+        if let Ok(json) = serde_json::to_string(&*store) {
+            if let Err(e) = fs::write(&path, json) {
+                println!("Failed to write cookie file: {}", e);
+            }
+        } else {
+            println!("Failed to serialize cookies");
+        }
+    } else {
+        println!("Failed to lock cookie store for saving");
+    }
 }
 
 pub struct HttpState {
     pub client: Client,
-    jar: Arc<Jar>,
+    pub cookie_store: Arc<CookieStoreMutex>,
 }
 
 impl HttpState {
-    fn new() -> Self {
-        let (client, jar) = build_http_client();
-        Self { client, jar }
+    pub fn new() -> Self {
+        let cookie_store = load_cookie_store();
+        let client = build_http_client_with_store(cookie_store.clone());
+        Self { client, cookie_store }
+    }
+
+    pub fn save_cookies(&self) {
+        save_cookie_store(&self.cookie_store);
     }
 }
 
