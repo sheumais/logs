@@ -1,12 +1,12 @@
 use std::rc::Rc;
-use cli::esologs_format::{EncounterReportCode, LoginResponse};
+use cli::esologs_format::LoginResponse;
 use stylist::{css, Style};
 use tauri_sys::core::{invoke, invoke_result};
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
 use yew_router::hooks::use_navigator;
 use yew_icons::{Icon, IconId};
-use crate::{app::LoginContext, routes::Route, ui::style::*};
+use crate::{app::LoginContext, routes::Route, ui::{icon_button::{BackArrow, IconButton}, style::*}};
 
 #[function_component(LoginBox)]
 pub fn login_component() -> Html {
@@ -38,7 +38,12 @@ pub fn login_component() -> Html {
     html! {
         <div class={login_box_style().clone()} onclick={go_to_login.clone()}>
             if let Some(login) = &*login_ctx {
-                <span class="login-name">{ format!("{}", login.user.username) }</span>
+                <span class={classes!("login-name", 
+                match login.user.username.as_str() {
+                    "Angel.xo" => angel_style().clone(),
+                    "Pancake" | "XenoNox" | "JakeX1V" | "Scarece" | "Coeus-Metis" => pancake_style().clone(),
+                    _ => Style::new(css!(r#""#)).unwrap(),
+                })}>{ login.user.username.clone() }</span>
             } else {
                 <span class="login-name">{ "Login" }</span>
             }
@@ -49,18 +54,9 @@ pub fn login_component() -> Html {
 
 #[function_component(LoginScreen)]
 pub fn login_screen() -> Html {
-    let navigator = use_navigator().unwrap();
-    let go_home = {
-        let navigator = navigator.clone();
-        Callback::from(move |_| {
-            navigator.push(&Route::Home);
-        })
-    };
-
     let username = use_state(|| String::new());
     let password = use_state(|| String::new());
     let logging_in = use_state(|| false);
-    let has_chosen_file = use_state(|| false);
     let error = use_state(|| None as Option<String>);
 
     let login_ctx = use_context::<LoginContext>().expect("LoginContext not found");
@@ -126,24 +122,6 @@ pub fn login_screen() -> Html {
         }
     };
 
-    let upload_log = {
-        let has_chosen_file = has_chosen_file.clone();
-        let error = error.clone();
-        move |_| {
-            let has_chosen_file = has_chosen_file.clone();
-            let error = error.clone();
-            wasm_bindgen_futures::spawn_local(async move {
-                invoke::<()>("pick_and_load_file", &()).await;
-                has_chosen_file.set(true);
-
-                match invoke_result::<EncounterReportCode, String>("upload_log", &()).await {
-                    Ok(code) => {error.set(Some(code.code))}
-                    Err(err) => {error.set(Some(err.to_string()))}
-                };
-            });
-        }
-    };
-
     let logout = {
         let login_ctx = login_ctx.clone();
         move |_| {
@@ -174,7 +152,7 @@ pub fn login_screen() -> Html {
     let input_title_style = Style::new(css!(r#"
             font-weight: bold;
             margin-bottom: 0.5em;
-            width: min-content;
+            width: 40%;
         "#
     )).expect("Error creating input title style");
 
@@ -208,16 +186,20 @@ pub fn login_screen() -> Html {
 
     html! {
         <>
-            <div>
-                <Icon class={back_arrow_style().clone()} icon_id={IconId::LucideArrowLeftCircle} onclick={go_home} />
-            </div>
+            <BackArrow/>
             <div class={container_style().clone()}>
                 if let Some(login) = &*login_ctx {
                     <div class={input_title_style.clone()}>
                         { format!("Welcome, {}! You have successfully logged in.", login.user.username) }
                     </div>
-                    <Icon width={"5em".to_owned()} height={"5em".to_owned()} class={icon_style().clone()} icon_id={IconId::LucideUpload} onclick={upload_log.clone()} />
-                    <Icon width={"5em".to_owned()} height={"5em".to_owned()} class={icon_style().clone()} icon_id={IconId::LucideLogOut} onclick={logout.clone()} />
+                    <IconButton
+                        icon_id={IconId::LucideLogOut}
+                        description={"Logout"}
+                        onclick={Some(logout.clone())}
+                        class={icon_style()}
+                        width={"2em"}
+                        height={"2em"}
+                    />
                     if let Some(err) = &*error {
                         <div style="color: red; margin-bottom: 1em;">{ err }</div>
                     }

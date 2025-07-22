@@ -16,7 +16,6 @@ pub fn icon_style() -> Style {
     Style::new(css!(r#"
         position: relative;
         cursor: pointer;
-        height: 5em;
     "#)).expect("Error creating style")
 }
 
@@ -24,7 +23,6 @@ pub fn icon_style_small() -> Style {
     Style::new(css!(r#"
         position: relative;
         cursor: pointer;
-        height: 1em;
     "#)).expect("Error creating style")
 }
 
@@ -81,13 +79,13 @@ pub fn icon_border_style() -> Style {
 
 pub fn back_arrow_style() -> Style {
     Style::new(css!(r#"
-        position: absolute;
+        position: fixed;
         opacity: 0.5;
         top: 0px;
         left: 0px;
         width: 2em;
         height: 2em;
-        padding: 0.5em;
+        margin-left: 1em;
         cursor: pointer;
 
         &:hover {
@@ -236,10 +234,52 @@ pub fn fancy_link_style() -> Style {
     "#)).expect("Error creating style")
 }
 
-// pub fn text_link_style() -> Style {
-//     Style::new(css!(r#"
-//         cursor: pointer;
-//         display: inline-block;
-//         color: #fff;
-//     "#)).expect("Error creating style")
-// }
+pub fn text_link_style() -> Style {
+    Style::new(css!(r#"
+        cursor: pointer;
+        display: inline-block;
+        color: #fff;
+    "#)).expect("Error creating style")
+}
+
+pub fn angel_style() -> Style {
+    Style::new(css!(r#"
+        background: linear-gradient(45deg,rgba(224, 195, 215, 1), rgba(255, 0, 179, 1), rgba(126, 0, 176, 1), rgba(255, 0, 179, 1), rgba(224, 195, 215, 1));
+        background-size: 300% 100%;
+        background-position: 0 0;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: none;
+        animation: slide-gradient 3s linear infinite;
+
+        @keyframes slide-gradient {
+            0% {
+                background-position: 0 0;
+            }
+            100% {
+                background-position: 300% 0;
+            }
+        }
+    "#)).expect("Failed to create Angel style")
+}
+
+pub fn pancake_style() -> Style {
+    Style::new(css!(r#"
+        background: linear-gradient(45deg,rgba(0, 255, 140, 1) 0%, rgba(112, 87, 255, 1) 25%, rgba(0, 183, 255, 1) 50%, rgba(112, 87, 255, 1) 75%, rgba(0, 255, 140, 1) 100%);
+        background-size: 300% 100%;
+        background-position: 0 0;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: none;
+        animation: slide-gradient 3s linear infinite;
+
+        @keyframes slide-gradient {
+            0% {
+                background-position: 0 0;
+            }
+            100% {
+                background-position: 300% 0;
+            }
+        }
+    "#)).expect("Failed to create Pancake style")
+}

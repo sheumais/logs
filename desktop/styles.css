@@ -28,8 +28,3 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
-
-.icon-button:hover .icon-description {
-    visibility: visible;
-    opacity: 1;
-}

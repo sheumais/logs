@@ -1,9 +1,9 @@
-use cli::{esologs_convert::split_and_zip_log_by_fight, esologs_format::{EncounterReportCode, LoginResponse, ESO_LOGS_COM_VERSION, ESO_LOGS_PARSER_VERSION}, log_edit::{handle_line, CustomLogData}};
+use cli::{esologs_convert::split_and_zip_log_by_fight, esologs_format::{EncounterReportCode, LoginResponse, UploadSettings, ESO_LOGS_COM_VERSION, ESO_LOGS_PARSER_VERSION}, log_edit::{handle_line, CustomLogData}};
 use reqwest::multipart::{Form, Part};
 use state::AppState;
 use tauri_plugin_updater::UpdaterExt;
 use std::{
-    fs::{self, File, OpenOptions}, io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write}, path::{Path, PathBuf}, thread, time::Duration
+    fs::{self, File, OpenOptions}, io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write}, path::{Path, PathBuf}, thread, time::Duration, sync::atomic::Ordering::SeqCst
 };
 use tauri::{path::BaseDirectory, Emitter, Manager, State, Window};
 use tauri_plugin_dialog::DialogExt;
@@ -387,7 +387,6 @@ fn save_login_response(resp: &LoginResponse) {
 fn load_login_response() -> Option<LoginResponse> {
     let path = cookie_file_path().with_file_name("login_response.json");
     if let Ok(data) = fs::read_to_string(path) {
-        println!("Loading login response");
         serde_json::from_str(&data).ok()
     } else {
         None
@@ -397,6 +396,29 @@ fn load_login_response() -> Option<LoginResponse> {
 #[tauri::command]
 fn get_saved_login_response() -> Option<LoginResponse> {
     load_login_response()
+}
+
+fn save_upload_settings(resp: &UploadSettings) {
+    let path = cookie_file_path().with_file_name("user-settings.json");
+    if let Ok(json) = serde_json::to_string(&resp) {
+        println!("Saving upload settings {}", json);
+        let _ = fs::write(path, json);
+    }
+}
+
+fn load_upload_settings() -> Option<UploadSettings> {
+    let path = cookie_file_path().with_file_name("user-settings.json");
+    if let Ok(data) = fs::read_to_string(path) {
+        println!("Returning saved settings {}", data);
+        serde_json::from_str(&data).ok()
+    } else {
+        None
+    }
+}
+
+#[tauri::command]
+fn get_saved_upload_settings() -> Option<UploadSettings> {
+    load_upload_settings()
 }
 
 #[tauri::command]
@@ -452,12 +474,27 @@ fn logout(state: tauri::State<'_, AppState>) -> Result<(), String> {
             println!("Failed to remove login_response.json: {}", e);
         }
     }
+    let settings_path = cookie_file_path().with_file_name("user-settings.json");
+    if let Err(e) = fs::remove_file(settings_path) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            println!("Failed to remove user-settings.json: {}", e);
+        }
+    }
     Ok(())
 }
+
+#[tauri::command]
+fn cancel_upload_log(state: State<'_, AppState>) -> Result<(), String> {
+    state.upload_cancel_flag.store(true, SeqCst);
+    Ok(())
+}
+
 #[tauri::command]
 async fn upload_log(
-    state: State<'_, AppState>
+    state: State<'_, AppState>,
+    upload_settings: UploadSettings,
 ) -> Result<EncounterReportCode, String> {
+    state.upload_cancel_flag.store(false, SeqCst);
     let log_path_opt = {
         let lock = state.log_files.read().map_err(|e| e.to_string())?;
         println!("log_files = {:?}", *lock);
@@ -487,11 +524,11 @@ async fn upload_log(
         "startTime": time,
         "endTime": time,
         "fileName": "Encounter.log",
-        "serverOrRegion": 1,
-        "visibility": 2,
+        "serverOrRegion": upload_settings.region,
+        "visibility": upload_settings.visibility,
         "reportTagId": null,
-        "description": "",
-        "guildId": null
+        "description": upload_settings.description,
+        "guildId": if upload_settings.guild == -1 { None } else { Some(upload_settings.guild) },
     });
     println!("Create-report payload: {payload}");
 
@@ -507,8 +544,12 @@ async fn upload_log(
 
     let tmp_dir_for_spawn = tmp_dir.clone();
     let log_path_clone = log_path.clone();
+    let upload_cancel_flag = state.upload_cancel_flag.clone();
 
     let pairs = tauri::async_runtime::spawn_blocking(move || -> Result<Vec<(PathBuf,PathBuf,u16)>, String> {
+        if upload_cancel_flag.load(SeqCst) {
+            return Err("Upload cancelled".to_string());
+        }
         split_and_zip_log_by_fight(
             log_path_clone.as_path().ok_or("Invalid log file path")?,
             tmp_dir_for_spawn.as_path()
@@ -567,6 +608,9 @@ async fn upload_log(
     let timestamps   = read_timestamps(&ts_path)?;
 
     for ((tbl, seg, _), (start, end)) in pairs.iter().zip(timestamps.iter()) {
+        if state.upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err("Upload cancelled".to_string());
+        }
         upload_master_table(
             &client,
             &format!("{base}/set-report-master-table/{code}"),
@@ -592,6 +636,13 @@ async fn upload_log(
     println!("Report terminated OK");
 
     end_report(&client, report.code.clone()).await;
+
+    // Comment this out to view and debug the uploaded log sections :)
+    if let Err(e) = fs::remove_dir_all(&tmp_dir) {
+        println!("Failed to remove temp dir {:?}: {}", tmp_dir, e);
+    }
+    
+    save_upload_settings(&upload_settings);
 
     Ok(report)
 }
@@ -761,7 +812,9 @@ pub fn run() {
             login,
             logout,
             upload_log,
-            get_saved_login_response
+            cancel_upload_log,
+            get_saved_login_response,
+            get_saved_upload_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

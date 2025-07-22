@@ -850,3 +850,11 @@ pub struct ValueLabel {
 pub struct EncounterReportCode {
     pub code: String
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct UploadSettings {
+    pub guild: i32,
+    pub visibility: u8,
+    pub region: u8,
+    pub description: String,
+}

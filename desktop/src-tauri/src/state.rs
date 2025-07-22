@@ -1,7 +1,7 @@
 use dirs::data_local_dir;
 use parser::log::Log;
 use reqwest::Client;
-use std::{env::temp_dir, fs::{self, create_dir_all, File}, io::Read, path::PathBuf, sync::{Arc, RwLock}, time::Duration};
+use std::{env::temp_dir, fs::{self, create_dir_all, File}, io::Read, path::PathBuf, sync::{atomic::AtomicBool, Arc, RwLock}, time::Duration};
 use tauri_plugin_dialog::FilePath;
 use cookie_store::CookieStore;
 use reqwest_cookie_store::CookieStoreMutex;
@@ -85,6 +85,7 @@ pub struct AppState {
     pub live_log_folder: RwLock<Option<FilePath>>,
     pub http: RwLock<HttpState>,
     pub esolog_code: RwLock<Option<String>>,
+    pub upload_cancel_flag: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -95,6 +96,7 @@ impl AppState {
             live_log_folder: RwLock::new(None),
             http: RwLock::new(HttpState::new()),
             esolog_code: RwLock::new(None),
+            upload_cancel_flag: Arc::new(AtomicBool::new(false)),
         }
     }
 }

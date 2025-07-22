@@ -12,4 +12,6 @@ pub enum Route {
     LiveLog,
     #[at("/login")]
     Login,
+    #[at("/upload")]
+    Upload,
 }
