@@ -7,3 +7,4 @@ pub mod live_log;
 pub mod login;
 pub mod upload;
 pub mod icon_button;
+pub mod terms;

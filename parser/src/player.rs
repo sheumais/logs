@@ -447,7 +447,6 @@ pub fn maximum_item_level() -> u8 {
     160
 }
 
-#[allow(dead_code)]
 pub fn is_appropriate_level(level: u8, is_cp: bool) -> bool {
     let level = veteran_level_to_cp(level, is_cp);
     level > 0 && level <= maximum_item_level()

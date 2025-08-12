@@ -1,5 +1,4 @@
 use dirs::data_local_dir;
-use parser::log::Log;
 use reqwest::Client;
 use std::{env::temp_dir, fs::{self, create_dir_all, File}, io::Read, path::PathBuf, sync::{atomic::AtomicBool, Arc, RwLock}, time::Duration};
 use tauri_plugin_dialog::FilePath;
@@ -78,9 +77,7 @@ impl HttpState {
     }
 }
 
-#[allow(dead_code)]
 pub struct AppState {
-    pub logs: RwLock<Option<Vec<Log>>>,
     pub log_files: RwLock<Option<Vec<FilePath>>>,
     pub live_log_folder: RwLock<Option<FilePath>>,
     pub http: RwLock<HttpState>,
@@ -91,7 +88,6 @@ pub struct AppState {
 impl AppState {
     pub fn new() -> Self {
         AppState {
-            logs: RwLock::new(None),
             log_files: RwLock::new(None),
             live_log_folder: RwLock::new(None),
             http: RwLock::new(HttpState::new()),

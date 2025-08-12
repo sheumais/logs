@@ -157,7 +157,6 @@ pub fn get_item_type_name(item_type: ItemType) -> &'static str {
     }
 }
 
-#[allow(dead_code)]
 pub fn is_weapon_slot(slot: &GearSlot) -> bool {
     match slot {
         GearSlot::MainHand | GearSlot::MainHandBackup | GearSlot::OffHand | GearSlot::OffHandBackup => true,
@@ -165,7 +164,6 @@ pub fn is_weapon_slot(slot: &GearSlot) -> bool {
     }
 }
 
-#[allow(dead_code)]
 pub fn is_armour_slot(slot: &GearSlot) -> bool {
     match slot {
         GearSlot::Chest | GearSlot::Head | GearSlot::Shoulders | GearSlot::Hands | GearSlot::Waist | GearSlot::Legs | GearSlot::Feet => true,
@@ -173,7 +171,6 @@ pub fn is_armour_slot(slot: &GearSlot) -> bool {
     }
 }
 
-#[allow(dead_code)]
 pub fn is_jewellery_slot(slot: &GearSlot) -> bool {
     match slot {
         GearSlot::Necklace | GearSlot::Ring1 | GearSlot::Ring2 => true,

@@ -13,7 +13,7 @@ With the option to upload directly to [esologs.com](https://esologs.com/), handl
 - [x] Split encounter log (10x faster)
 - [x] Merge encounter logs
 - [x] Live logging with fixes
-- [ ] esologs.com integration (work in progress)
+- [x] esologs.com integration (work in progress)
 - [ ] esologs parser parity (work in progress)
 
 ### Current Fixes

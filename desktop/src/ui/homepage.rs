@@ -61,7 +61,13 @@ pub fn homepage() -> Html {
             navigator.push(&Route::Upload);
         })
     };
-    
+    let terms = {
+        let navigator = navigator.clone();
+        Callback::from(move |_| {
+            navigator.push(&Route::Terms);
+        })
+    };
+
     let login_ctx = use_context::<LoginContext>().expect("LoginContext not found");
 
     html! {
@@ -97,6 +103,9 @@ pub fn homepage() -> Html {
                     }
                 </div>
             </HomepageContainer>
+            <div onclick={terms.clone()} class={text_link_style()} style={"position:fixed;bottom:0px;left:0px;padding:0.5em;font-size:1em;"}>
+                {"Terms"}
+            </div>
         </>
     }
 }

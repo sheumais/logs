@@ -10,77 +10,55 @@ All lines begin with the time in milliseconds since logging began and the line t
 
 `<scribingInfo>` refers to the following fields for an ability: focusScript, signatureScript, affixScript.
 
-#### BEGIN_LOG
 BEGIN_LOG, timeSinceEpochMS, logVersion, realmName, language, gameVersion
 
-#### END_LOG
+END_LOG
 
-#### BEGIN_COMBAT
+BEGIN_COMBAT
 
-#### END_COMBAT
+END_COMBAT
 
-#### PLAYER_INFO
 PLAYER_INFO, unitId, [longTermEffectAbilityId,...], [longTermEffectStackCounts,...], [`<equipmentInfo>`,...], [primaryAbilityId,...], [backupAbilityId,...]
 
-#### BEGIN_CAST
 BEGIN_CAST, durationMS, channeled, castTrackId, abilityId, `<sourceUnitState>`, `<targetUnitState>`
 
-#### END_CAST
-END_CAST, endReason, castTrackId, interruptingAbilityId:optional, interruptingUnitId:optional
+END_CAST, endReason, castTrackId, interruptedAbilityId, interruptingAbilityId:optional, interruptingUnitId:optional
 
-#### COMBAT_EVENT
 COMBAT_EVENT, actionResult, damageType, powerType, hitValue, overflow, castTrackId, abilityId, `<sourceUnitState>`, `<targetUnitState>`
 
-#### HEALTH_REGEN
 HEALTH_REGEN, effectiveRegen, `<unitState>`
 
-#### UNIT_ADDED
 UNIT_ADDED, unitId, unitType, isLocalPlayer, playerPerSessionId, monsterId, isBoss, classId, raceId, name, displayName, characterId, level, championPoints, ownerUnitId, reaction, isGroupedWithLocalPlayer
 
-#### UNIT_CHANGED
 UNIT_CHANGED, unitId, classId, raceId, name, displayName, characterId, level, championPoints, ownerUnitId, reaction, isGroupedWithLocalPlayer
 
-#### UNIT_REMOVED
 UNIT_REMOVED, unitId
 
-#### EFFECT_CHANGED
 EFFECT_CHANGED, changeType, stackCount, castTrackId, abilityId, `<sourceUnitState>`, `<targetUnitState>`, playerInitiatedRemoveCastTrackId:optional
 
-#### ABILITY_INFO
 ABILITY_INFO, abilityId, name, iconPath, interruptible, blockable, `<scribingInfo>`:optional
 
-#### EFFECT_INFO
 EFFECT_INFO, abilityId, effectType, statusEffectType, effectBarDisplayBehaviour, grantsSynergyAbilityId:optional
 
-#### MAP_CHANGED
 MAP_CHANGED, id, name, texturePath
 
-#### ZONE_CHANGED
 ZONE_CHANGED, id, name, dungeonDifficulty
 
-#### TRIAL_INIT
 TRIAL_INIT, id, inProgress, completed, startTimeMS, durationMS, success, finalScore
 
-#### BEGIN_TRIAL
 BEGIN_TRIAL, id, startTimeMS
 
-#### END_TRIAL
 END_TRIAL, id, durationMS, success, finalScore, finalVitalityBonus
 
-#### ENDLESS_DUNGEON_BEGIN
 ENDLESS_DUNGEON_BEGIN, id, startTimeMS, unknownBoolean
 
-#### ENDLESS_DUNGEON_END
 ENDLESS_DUNGEON_END, id, durationMS, finalScore, unknownBoolean
 
-#### ENDLESS_DUNGEON_STAGE_END
 ENDLESS_DUNGEON_STAGE_END, id, dungeonBeginStartTimeMS
 
-#### ENDLESS_DUNGEON_BUFF_ADDED
 ENDLESS_DUNGEON_BUFF_ADDED, id, abilityId
 
-#### ENDLESS_DUNGEON_BUFF_REMOVED
 ENDLESS_DUNGEON_BUFF_REMOVED, id, abilityId
 
 ### Undocumented
-#### ENDLESS_DUNGEON_INIT
+ENDLESS_DUNGEON_INIT

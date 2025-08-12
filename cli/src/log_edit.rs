@@ -12,6 +12,7 @@ pub struct CustomLogData {
     pub zen_stacks: HashMap<u32, ZenDebuffState>,
     pub scribing_abilities: Vec<ScribingAbility>,
     pub scribing_map: HashMap<u32, usize>,
+    pub scribing_unit_map: HashMap<(u32, u32), usize>,
 }
 
 impl CustomLogData {
@@ -20,6 +21,7 @@ impl CustomLogData {
             zen_stacks: HashMap::new(),
             scribing_abilities: Vec::new(),
             scribing_map: HashMap::new(),
+            scribing_unit_map: HashMap::new(),
         }
     }
 }
@@ -388,37 +390,42 @@ fn modify_player_data(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> 
     // println!("{}", custom_log_data.scribing_abilities.iter().map(|a| a.id.to_string()).collect::<Vec<_>>().join(", "));
     // println!("{:?}", custom_log_data.scribing_abilities);
 
+    let player_id = parts[2].parse::<u32>().unwrap();
+
     for id in &mut primary_ability_id_list {
         // println!("Checking id: {}", id);
         // println!("Current scribing_map: {:?}", custom_log_data.scribing_map);
-        if *id == BLOCKADE_DEFAULT || *id == BLOCKADE_FIRE || *id == BLOCKADE_FROST || *id == BLOCKADE_STORMS {
+        if matches!(*id, BLOCKADE_DEFAULT | BLOCKADE_FIRE | BLOCKADE_FROST | BLOCKADE_STORMS) {
             *id = match frontbar_type {
                 ItemType::FrostStaff => BLOCKADE_FROST,
                 ItemType::FireStaff => BLOCKADE_FIRE,
                 ItemType::LightningStaff => BLOCKADE_STORMS,
                 _ => BLOCKADE_DEFAULT,
             };
+        } else if let Some(index) = custom_log_data.scribing_unit_map.get(&(player_id, *id)) {
+            // println!("Setting {} to originally existing index {} for {}", player_id, index, id);
+            *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
         } else if custom_log_data.scribing_map.contains_key(id) {
-            // println!("Replacing {} with {}", id, BEGIN_SCRIBING_ABILITIES as u32);
             if let Some(index) = custom_log_data.scribing_map.get(id) {
-                // println!("Replacing {} with {}", id, BEGIN_SCRIBING_ABILITIES + *index as u32);
+                custom_log_data.scribing_unit_map.insert((player_id, *id), *index);
                 *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
             }
         }
     }
 
     for id in &mut backup_ability_id_list {
-        if *id == BLOCKADE_DEFAULT || *id == BLOCKADE_FIRE || *id == BLOCKADE_FROST || *id == BLOCKADE_STORMS {
+        if matches!(*id, BLOCKADE_DEFAULT | BLOCKADE_FIRE | BLOCKADE_FROST | BLOCKADE_STORMS) {
             *id = match backbar_type {
                 ItemType::FrostStaff => BLOCKADE_FROST,
                 ItemType::FireStaff => BLOCKADE_FIRE,
                 ItemType::LightningStaff => BLOCKADE_STORMS,
                 _ => BLOCKADE_DEFAULT,
             };
+        } else if let Some(index) = custom_log_data.scribing_unit_map.get(&(player_id, *id)) {
+            *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
         } else if custom_log_data.scribing_map.contains_key(id) {
-            // println!("Replacing {} with {}", id, BEGIN_SCRIBING_ABILITIES as u32);
             if let Some(index) = custom_log_data.scribing_map.get(id) {
-                // println!("Replacing {} with {}", id, BEGIN_SCRIBING_ABILITIES + *index as u32);
+                custom_log_data.scribing_unit_map.insert((player_id, *id), *index);
                 *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
             }
         }

@@ -39,6 +39,7 @@ pub fn upload() -> Html {
     let report_code = use_state(|| None::<String>);
     let error = use_state(|| None::<String>);
     let is_uploading = use_state(|| false);
+    let has_been_deleted = use_state(|| false);
 
     let saved_settings = (*upload_settings_ctx).as_ref().map(|rc| rc.as_ref());
     let selected_guild = saved_settings.map(|s| s.guild).unwrap_or_else(|| -1);
@@ -127,6 +128,17 @@ pub fn upload() -> Html {
         })
     };
 
+    let delete_log_file = {
+        let has_been_deleted = has_been_deleted.clone();
+        Callback::from(move |_| {
+            let has_been_deleted = has_been_deleted.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                invoke::<()>("delete_log_file", &()).await;
+                has_been_deleted.set(true)
+            });
+        })
+    };
+
     let (guild_options, region_options, visibility_options) = if let Some(login) = &*login_ctx {
         let guild_options = login.guild_select_items.iter().map(|g| {
             html! {
@@ -161,15 +173,26 @@ pub fn upload() -> Html {
                         icon_id={IconId::BootstrapXLg}
                         description={"Cancel upload"}
                         onclick={Some(cancel_upload.clone())}
-                        class={icon_style().clone()}
+                        class={icon_border_style().clone()}
                         width={"2em"}
                         height={"2em"}
                     />
                 } else if report_code.is_some() {
                     if let Some(code) = report_code.clone().deref() {
-                        <a class={text_link_style().clone()} style={"font-size: large;margin-top:5em;"} href={format!("https://www.esologs.com/reports/{}", code)} target="_blank" rel="noopener noreferrer">
+                        <a class={text_link_style().clone()} style={"font-size: large;margin-top:5em;margin-bottom:3em;"} href={format!("https://www.esologs.com/reports/{}", code)} target="_blank" rel="noopener noreferrer">
                             {"Click to open your uploaded encounter log"}
                         </a>
+                        if !*has_been_deleted {
+                            <IconButton
+                                icon_id={IconId::BootstrapTrash3}
+                                description={"Delete log file permanently"}
+                                onclick={Some(delete_log_file.clone())}
+                                class={icon_border_style().clone()}
+                                width={"2em"}
+                                height={"2em"}
+                            /> 
+                        }
+                       
                     }
                 } else {
                     <div style="width: min-content; margin: 0.5em;">

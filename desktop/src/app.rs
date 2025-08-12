@@ -5,10 +5,12 @@ use yew::prelude::*;
 use yew_router::prelude::*;
 use crate::routes::Route;
 use crate::ui::homepage::Homepage;
+use crate::ui::icon_button::BackArrow;
 use crate::ui::live_log::LiveLog;
 use crate::ui::login::LoginScreen;
 use crate::ui::modify::ModifyScreen;
 use crate::ui::split::SplitCombineScreen;
+use crate::ui::terms::TermsComponent;
 use crate::ui::upload::UploadScreen;
 
 pub type LoginContext = UseStateHandle<Option<Rc<LoginResponse>>>;
@@ -37,6 +39,7 @@ fn switch(routes: Route) -> Html {
         Route::LiveLog => html! { <LiveLog/> },
         Route::Login => html! { <LoginScreen/> },
         Route::Upload => html! { <UploadScreen/> },
+        Route::Terms => html! { <> <BackArrow/> <TermsComponent/> </>},
         _ => html! {<Homepage />}
     }
 }

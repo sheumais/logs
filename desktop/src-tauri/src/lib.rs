@@ -1,11 +1,12 @@
 use cli::{esologs_convert::split_and_zip_log_by_fight, esologs_format::{EncounterReportCode, LoginResponse, UploadSettings, ESO_LOGS_COM_VERSION, ESO_LOGS_PARSER_VERSION}, log_edit::{handle_line, CustomLogData}};
-use reqwest::multipart::{Form, Part};
+use reqwest::{multipart::{Form, Part}, Client};
+use serde_json::json;
 use state::AppState;
 use tauri_plugin_updater::UpdaterExt;
 use std::{
-    fs::{self, File, OpenOptions}, io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write}, path::{Path, PathBuf}, thread, time::Duration, sync::atomic::Ordering::SeqCst
+    env::temp_dir, fs::{self, create_dir_all, File, OpenOptions}, io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write}, path::{Path, PathBuf}, sync::atomic::Ordering::SeqCst, thread, time::{Duration, SystemTime, UNIX_EPOCH}
 };
-use tauri::{path::BaseDirectory, Emitter, Manager, State, Window};
+use tauri::{async_runtime::spawn_blocking, path::BaseDirectory, Emitter, Manager, State, Window};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::state::cookie_file_path;
@@ -376,6 +377,16 @@ fn pick_and_load_folder(window: Window, state: State<'_, AppState>) -> Result<()
     pick_files_internal(&window, PickerType::Folder, &state)
 }
 
+#[tauri::command]
+fn delete_log_file(state: State<'_, AppState>) -> Result<(), String> {
+    let paths_guard = state.log_files.read().unwrap();
+    let file_paths = paths_guard.as_ref().ok_or("No file paths set")?;
+    let file_path = file_paths.get(0).ok_or("No file path in vector")?;
+    let path_ref = file_path.as_path().ok_or("Invalid file path")?;
+    std::fs::remove_file(path_ref).map_err(|e| format!("Failed to delete file: {}", e))?;
+    Ok(())
+}
+
 fn save_login_response(resp: &LoginResponse) {
     let path = cookie_file_path().with_file_name("login_response.json");
     if let Ok(json) = serde_json::to_string(resp) {
@@ -422,11 +433,7 @@ fn get_saved_upload_settings() -> Option<UploadSettings> {
 }
 
 #[tauri::command]
-async fn login(
-    state: tauri::State<'_, AppState>,
-    username: String,
-    password: String,
-) -> Result<LoginResponse, String> {
+async fn login(state: tauri::State<'_, AppState>, username: String, password: String) -> Result<LoginResponse, String> {
     let payload = serde_json::json!({ "email": username, "password": password, "version": ESO_LOGS_COM_VERSION });
 
     let client = {
@@ -489,88 +496,29 @@ fn cancel_upload_log(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-async fn upload_log(
-    state: State<'_, AppState>,
-    upload_settings: UploadSettings,
+async fn create_report(
+    state: &State<'_, AppState>,
+    client: &Client,
+    settings: &UploadSettings,
 ) -> Result<EncounterReportCode, String> {
-    state.upload_cancel_flag.store(false, SeqCst);
-    let log_path_opt = {
-        let lock = state.log_files.read().map_err(|e| e.to_string())?;
-        println!("log_files = {:?}", *lock);
-        lock.clone()
-    };
-    let log_path = log_path_opt
-        .and_then(|v| v.get(0).cloned())
-        .ok_or("No log file selected")?;
-    println!("Using log file: {:?}", log_path);
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_millis();
 
-    let file = File::open(log_path.as_path().ok_or("Invalid log file path")?).map_err(|e| e.to_string())?;
-    let mut reader = BufReader::new(file);
-    let mut first_line = String::new();
-    reader.read_line(&mut first_line).map_err(|e| e.to_string())?;
-    let start_timestamp = first_line
-        .splitn(4, ',')
-        .nth(2)
-        .ok_or("Malformed BEGIN_LOG line")?
-        .trim()
-        .parse::<u64>()
-        .map_err(|e| format!("Failed to parse timestamp: {e}"))?;
-
-    let time = start_timestamp;
-    let payload = serde_json::json!({
+    let payload = json!({
         "clientVersion": ESO_LOGS_COM_VERSION,
         "parserVersion": ESO_LOGS_PARSER_VERSION,
-        "startTime": time,
-        "endTime": time,
+        "startTime": now,
+        "endTime": now,
         "fileName": "Encounter.log",
-        "serverOrRegion": upload_settings.region,
-        "visibility": upload_settings.visibility,
+        "serverOrRegion": settings.region,
+        "visibility": settings.visibility,
         "reportTagId": null,
-        "description": upload_settings.description,
-        "guildId": if upload_settings.guild == -1 { None } else { Some(upload_settings.guild) },
+        "description": settings.description,
+        "guildId": if settings.guild == -1 { None } else { Some(settings.guild) },
     });
     println!("Create-report payload: {payload}");
-
-    let client = {
-        let g = state.http.read().map_err(|e| e.to_string())?;
-        g.client.clone()
-    };
-    println!("Spawning split/zip task …");
-    
-    let tmp_dir = std::env::temp_dir().join("esologtool_temporary");
-    println!("Temp dir: {:?}", tmp_dir);
-    fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
-
-    let tmp_dir_for_spawn = tmp_dir.clone();
-    let log_path_clone = log_path.clone();
-    let upload_cancel_flag = state.upload_cancel_flag.clone();
-
-    let pairs = tauri::async_runtime::spawn_blocking(move || -> Result<Vec<(PathBuf,PathBuf,u16)>, String> {
-        if upload_cancel_flag.load(SeqCst) {
-            return Err("Upload cancelled".to_string());
-        }
-        split_and_zip_log_by_fight(
-            log_path_clone.as_path().ok_or("Invalid log file path")?,
-            tmp_dir_for_spawn.as_path()
-        )?;
-        println!("Finished split_and_zip_log_by_fight");
-
-        let mut out = Vec::new();
-        for idx in 1u16.. {
-            let tbl = tmp_dir_for_spawn.join(format!("master_table_{idx}.zip"));
-            let seg = tmp_dir_for_spawn.join(format!("report_segment_{idx}.zip"));
-            if tbl.exists() && seg.exists() {
-                println!("Found pair idx={idx}: {:?}, {:?}", tbl, seg);
-                out.push((tbl, seg, idx));
-            } else {
-                break;
-            }
-        }
-        Ok(out)
-    })
-    .await
-    .map_err(|e| format!("spawn_blocking error: {e}"))??;
 
     println!("POST https://www.esologs.com/desktop-client/create-report");
 
@@ -600,6 +548,64 @@ async fn upload_log(
 
     let code = report.code.clone();
     *state.esolog_code.write().map_err(|e| e.to_string())? = Some(code.clone());
+    Ok(report)
+}
+
+#[tauri::command]
+async fn upload_log(state: State<'_, AppState>, upload_settings: UploadSettings) -> Result<EncounterReportCode, String> {
+    state.upload_cancel_flag.store(false, SeqCst);
+    let log_path_opt = {
+        let lock = state.log_files.read().map_err(|e| e.to_string())?;
+        println!("log_files = {:?}", *lock);
+        lock.clone()
+    };
+    let log_path = log_path_opt
+        .and_then(|v| v.get(0).cloned())
+        .ok_or("No log file selected")?;
+    println!("Using log file: {:?}", log_path);
+
+    let client = {
+        let g = state.http.read().map_err(|e| e.to_string())?;
+        g.client.clone()
+    };
+    println!("Spawning split/zip task …");
+    
+    let tmp_dir = temp_dir().join("esologtool_temporary");
+    println!("Temp dir: {:?}", tmp_dir);
+    create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
+
+    let tmp_dir_for_spawn = tmp_dir.clone();
+    let log_path_clone = log_path.clone();
+    let upload_cancel_flag = state.upload_cancel_flag.clone();
+
+    let pairs = spawn_blocking(move || -> Result<Vec<(PathBuf,PathBuf,u16)>, String> {
+        if upload_cancel_flag.load(SeqCst) {
+            return Err("Upload cancelled".to_string());
+        }
+        split_and_zip_log_by_fight(
+            log_path_clone.as_path().ok_or("Invalid log file path")?,
+            tmp_dir_for_spawn.as_path()
+        )?;
+        println!("Finished split_and_zip_log_by_fight");
+
+        let mut out = Vec::new();
+        for idx in 1u16.. {
+            let tbl = tmp_dir_for_spawn.join(format!("master_table_{idx}.zip"));
+            let seg = tmp_dir_for_spawn.join(format!("report_segment_{idx}.zip"));
+            if tbl.exists() && seg.exists() {
+                println!("Found pair idx={idx}: {:?}, {:?}", tbl, seg);
+                out.push((tbl, seg, idx));
+            } else {
+                break;
+            }
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking error: {e}"))??;
+
+    let report_code = create_report(&state, &client, &upload_settings).await?;
+    let code = report_code.code.clone();
 
     let base = "https://www.esologs.com/desktop-client";
     let mut segment_id = 1u16;
@@ -632,10 +638,9 @@ async fn upload_log(
         .send()
         .await
         .map_err(|e| e.to_string())?;
-    state.http.write().unwrap().save_cookies();
     println!("Report terminated OK");
 
-    end_report(&client, report.code.clone()).await;
+    end_report(&client, code.clone()).await;
 
     // Comment this out to view and debug the uploaded log sections :)
     if let Err(e) = fs::remove_dir_all(&tmp_dir) {
@@ -644,7 +649,7 @@ async fn upload_log(
     
     save_upload_settings(&upload_settings);
 
-    Ok(report)
+    Ok(report_code)
 }
 
 async fn upload_master_table(
@@ -813,6 +818,7 @@ pub fn run() {
             logout,
             upload_log,
             cancel_upload_log,
+            delete_log_file,
             get_saved_login_response,
             get_saved_upload_settings
         ])

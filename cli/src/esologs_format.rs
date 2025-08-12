@@ -21,6 +21,10 @@ pub struct ESOLogsLog {
     pub buffs_hashmap: HashMap<u32, usize>,
     pub effects: Vec<ESOLogsBuffEvent>,
     pub effects_hashmap: HashMap<ESOLogsBuffEventKey, usize>,
+    pub cast_id_hashmap: HashMap<u32, usize>,
+    pub cast_id_target_unit_id: HashMap<u32, u32>,
+    pub cast_id_source_unit_id: HashMap<u32, u32>,
+    pub interruption_hashmap: HashMap<ESOLogsBuffEvent, usize>,
     pub events: Vec<ESOLogsEvent>,
     pub pets: Vec<ESOLogsPetRelationship>,
     pub shields: HashMap<u32, HashMap<usize, ESOLogsBuffEventKey2>>,
@@ -199,6 +203,9 @@ pub enum ESOLogsEvent {
     HealthRecovery(ESOLogsHealthRecovery),
     StackUpdate(ESOLogsBuffStacks),
     DamageShielded(ESOLogsDamageShielded),
+    Interrupt(ESOLogsInterrupt),
+    InterruptionEnded(ESOLogsInterruptionEnded),
+    CastEnded(ESOLogsEndCast),
 }
 
 impl Display for ESOLogsEvent {
@@ -217,6 +224,9 @@ impl Display for ESOLogsEvent {
             ESOLogsEvent::HealthRecovery(e) => write!(f, "{e}"),
             ESOLogsEvent::StackUpdate(e) => write!(f, "{e}"),
             ESOLogsEvent::DamageShielded(e) => write!(f, "{e}"),
+            ESOLogsEvent::Interrupt(e) => write!(f, "{e}"),
+            ESOLogsEvent::InterruptionEnded(e) => write!(f, "{e}"),
+            ESOLogsEvent::CastEnded(e) => write!(f, "{e}"),
         }
     }
 }
@@ -344,6 +354,8 @@ pub enum ESOLogsLineType {
     Cast = 16,
     Death = 19,
     PowerEnergize = 26,
+    Interrupted = 27,
+    InterruptionRemoved = 28,
     DamageShielded = 38,
     ZoneInfo = 41,
     PlayerInfo = 44,
@@ -457,6 +469,7 @@ pub struct ESOLogsCastData {
     pub critical: u8, // 1 = no, 2 = yes critical, 0 = ??
     pub hit_value: u32,
     pub overflow: u32,
+    pub blocked: bool,
     pub override_magic_number: Option<u8>,
     pub replace_hitvalue_overflow: bool, 
 }
@@ -469,7 +482,11 @@ impl Display for ESOLogsCastData {
             if self.hit_value == 0 && self.overflow > 0 {
                 write!(f, "{}|{}|{}", self.critical, if self.replace_hitvalue_overflow { self.hit_value } else { self.overflow }, self.overflow)
             } else if self.hit_value > 0 && self.overflow == 0 {
-                write!(f, "{}|{}", self.critical, self.hit_value)
+                if self.blocked == false {
+                    write!(f, "{}|{}", self.critical, self.hit_value)
+                } else {
+                    write!(f, "{}|{}|{}|{}", 4, self.hit_value, 0, 1)
+                }
             } else {
                 write!(f, "{}|{}|{}", self.critical, self.hit_value + self.overflow, self.overflow)
             }
@@ -712,6 +729,81 @@ impl Display for ESOLogsDamageShielded {
             format!("{}.{}.{}", self.buff_event.unique_index.wrapping_add(1), id0, id1)
         };
         write!(f, "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.shield_source_allegiance, self.shield_recipient_allegiance, self.buff_event.source_unit_index.wrapping_add(1), self.orig_shield_instance_ids.0, self.damage_source_allegiance, 0, self.hit_value, self.source_ability_cast_index.wrapping_add(1))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ESOLogsInterrupt {
+    pub timestamp: u64,
+    pub line_type: ESOLogsLineType,
+    pub buff_event: ESOLogsBuffEvent,
+    pub unit_instance_id: (usize, usize),
+    pub source_allegiance: u8,
+    pub target_allegiance: u8,
+    pub interrupted_ability_index: usize,
+}
+
+impl Display for ESOLogsInterrupt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (id0, id1) = self.unit_instance_id;
+        let unit_instance_str = if id0 == 0 && id1 == 0 {
+            format!("{}", self.buff_event.unique_index.wrapping_add(1))
+        } else if id1 == 0 {
+            format!("{}.{}", self.buff_event.unique_index.wrapping_add(1), id0)
+        } else {
+            format!("{}.{}.{}", self.buff_event.unique_index.wrapping_add(1), id0, id1)
+        };
+        write!(f, "{}|{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.interrupted_ability_index.wrapping_add(1))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ESOLogsInterruptionEnded {
+    pub timestamp: u64,
+    pub line_type: ESOLogsLineType,
+    pub buff_event: ESOLogsBuffEvent,
+    pub unit_instance_id: (usize, usize),
+    pub source_allegiance: u8,
+    pub target_allegiance: u8,
+    pub interruption_index: usize,
+    pub magic_number: u8,
+}
+
+impl Display for ESOLogsInterruptionEnded {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (id0, id1) = self.unit_instance_id;
+        let unit_instance_str = if id0 == 0 && id1 == 0 {
+            format!("{}", self.buff_event.unique_index.wrapping_add(1))
+        } else if id1 == 0 {
+            format!("{}.{}", self.buff_event.unique_index.wrapping_add(1), id0)
+        } else {
+            format!("{}.{}.{}", self.buff_event.unique_index.wrapping_add(1), id0, id1)
+        };
+        write!(f, "{}|{}|{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.interruption_index.wrapping_add(1), self.magic_number)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ESOLogsEndCast {
+    pub timestamp: u64,
+    pub line_type: ESOLogsLineType,
+    pub buff_event: ESOLogsBuffEvent,
+    pub unit_instance_id: (usize, usize),
+    pub source_allegiance: u8,
+    pub target_allegiance: u8
+}
+
+impl Display for ESOLogsEndCast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (id0, id1) = self.unit_instance_id;
+        let unit_instance_str = if id0 == 0 && id1 == 0 {
+            format!("{}", self.buff_event.unique_index.wrapping_add(1))
+        } else if id1 == 0 {
+            format!("{}.{}", self.buff_event.unique_index.wrapping_add(1), id0)
+        } else {
+            format!("{}.{}.{}", self.buff_event.unique_index.wrapping_add(1), id0, id1)
+        };
+        write!(f, "{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance)
     }
 }
 

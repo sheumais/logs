@@ -33,13 +33,14 @@ pub fn icon_button(props: &IconButtonProps) -> Html {
     };
 
     html! {
-        <div class={classes!(props.class.clone())}
+        <div class={classes!(props.class.clone())} style="border:none;"
             {onmouseover}
             {onmouseout}
         >
             <Icon
                 width={props.width.clone()}
                 height={props.height.clone()}
+                class={props.class.clone()}
                 icon_id={props.icon_id.clone()}
                 onclick={props.onclick.clone()}
             />

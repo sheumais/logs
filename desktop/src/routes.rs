@@ -14,4 +14,6 @@ pub enum Route {
     Login,
     #[at("/upload")]
     Upload,
+    #[at("/terms")]
+    Terms,
 }

@@ -209,7 +209,7 @@ pub fn login_screen() -> Html {
                             { "Log in using esologs.com credentials"}
                         </div>
                         <div class={paragraph_style().clone()}>
-                            { "Logging in allows uploading logs directly to esologs.com and is NOT mandatory." }
+                            { "Logging in allows uploading logs directly to esologs.com and is NOT mandatory. Please note that this application is completely unaffiliated and not endorsed by esologs.com. You submit your details here in full knowledge of the terms of the software." }
                         </div>
                         <div class={paragraph_style().clone()}>
                             { "Your details are sent directly to esologs.com only and are not saved. Cookies set by esologs.com and your profile information are stored locally until you log out." }
@@ -221,7 +221,13 @@ pub fn login_screen() -> Html {
                                     {"source"}
                                 </a>
                             </span>
-                            {"yourself, or contact me through the Discord linked on GitHub." }
+                            {"yourself, or contact me through"}
+                            <span>
+                                <a class={fancy_link_style().clone()} href={"https://discord.gg/FjJjXHjUQ4"} target="_blank" rel="noopener noreferrer">
+                                    {"Discord"}
+                                </a>
+                            </span>
+                            {"."}
                         </div>
                         if let Some(err) = &*error {
                             <div style="color: red; margin-bottom: 1em;">{ err }</div>

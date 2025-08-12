@@ -101,28 +101,7 @@ fn main() {
                 }
             }
         }
-        _ => {
-            let logs = read_file(Path::new(file_path)).unwrap();
-            let query_id: u32 = query.parse::<u32>().unwrap_or(0);
-            let mut effect_name = "Unknown".to_string();
-            let log_analysis = &logs[2];
-
-            if query_id != 0 {
-                for (_index, effect) in &log_analysis.abilities {
-                    if effect.id == query_id {
-                        effect_name = effect.name.clone();
-                    }
-                }
-                
-                println!("Uptime of {}", effect_name);
-                for fight in &log_analysis.fights {
-                    for player in fight.players.iter() {
-                        let uptime = parser::effect::buff_uptime_over_fight(query_id, player.unit_id, fight);
-                        println!("{} {} {:.2}%", fight.name, player.display_name, 100.0 * uptime);
-                    }
-                };
-            }
-        }
+        _ => {}
     }
 }
 
