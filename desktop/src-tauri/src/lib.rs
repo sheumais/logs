@@ -747,7 +747,7 @@ async fn upload_segment_and_get_next_id(
     println!("  raw body   = {}", body);
 
     if !status.is_success() {
-        return Err(format!("Segment upload failed: {status} – {body}"));
+        return Err(format!("Segment upload failed: {status} - {body}"));
     }
 
     let next_id = serde_json::from_str::<serde_json::Value>(&body)

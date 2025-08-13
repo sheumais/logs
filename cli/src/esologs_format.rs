@@ -49,6 +49,9 @@ impl ESOLogsLog {
         // }
 
         if let Some(existing_index) = self.owner_id_pairs_index.get(&key) {
+            if let Some(original_unit) = self.units.get_mut(*existing_index) {
+                original_unit.unit_type = unit.unit_type;
+            }
             if *existing_index < self.units.len() {
                 // println!("Existing index: {}", *existing_index);
                 return *existing_index;

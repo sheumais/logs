@@ -217,7 +217,7 @@ pub fn login_screen() -> Html {
                         <div class={paragraph_style().clone()}>
                             {"If you have any concerns you are welcome to audit the code, build it from" }
                             <span>
-                                <a class={fancy_link_style().clone()} href={"https://github.com/sheumais/logs/tree/release/desktop"} target="_blank" rel="noopener noreferrer">
+                                <a class={fancy_link_style().clone()} href={"https://github.com/sheumais/logs/"} target="_blank" rel="noopener noreferrer">
                                     {"source"}
                                 </a>
                             </span>

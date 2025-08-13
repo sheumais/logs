@@ -10,6 +10,8 @@ All lines begin with the time in milliseconds since logging began and the line t
 
 `<scribingInfo>` refers to the following fields for an ability: focusScript, signatureScript, affixScript.
 
+## Line types
+
 BEGIN_LOG, timeSinceEpochMS, logVersion, realmName, language, gameVersion
 
 END_LOG
@@ -60,5 +62,5 @@ ENDLESS_DUNGEON_BUFF_ADDED, id, abilityId
 
 ENDLESS_DUNGEON_BUFF_REMOVED, id, abilityId
 
-### Undocumented
+## Undocumented/unknown line types
 ENDLESS_DUNGEON_INIT
