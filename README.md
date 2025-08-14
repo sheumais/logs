@@ -19,6 +19,7 @@ This application is designed to help you manage and process your Elder Scrolls O
 - [x] Touch of Z'en stacks
 - [x] Scribing skills show their scripts
 - [x] Blockade of Elements shows correct icon
+- [x] Bahsei taint stacks
 
 ### Other useful log tools: 
 Easy Stalking AddOn for automatically logging trials, dungeons & more

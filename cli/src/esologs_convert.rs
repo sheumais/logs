@@ -137,6 +137,7 @@ impl ESOLogProcessor {
         let file: File = File::open(file_path)?;
         let reader = BufReader::new(file);
         let mut lines = 0;
+        let mut custom_log_data = CustomLogData::new();
 
         for line_result in reader.lines() {
             let line = match line_result {
@@ -146,7 +147,10 @@ impl ESOLogProcessor {
                     continue;
                 }
             };
-            self.handle_line(line);
+            let modified_line = handle_line(line, &mut custom_log_data);
+            for line in modified_line {
+                self.handle_line(line);
+            }
             lines += 1;
             if lines % 250_000 == 0 {
                 println!("Processed {} lines", lines);
@@ -492,10 +496,6 @@ impl ESOLogProcessor {
         match ev.result {
             EventResult::DamageShielded => {
                 self.temporary_damage_buffer = ev.hit_value;
-                // let target_idx = buff_event.buff_index;
-                // if let Some(buff) = self.eso_logs_log.buffs.get_mut(target_idx) {
-                //     buff.caused_by_id = 0; // esologs.com looks this id up for colour and ends up with black instead of yellow if it's set to something reasonable
-                // }
                 let instance_ids = (
                     self.index_in_session(source.unit_id).unwrap_or(0),
                     self.index_in_session(target.unit_id).unwrap_or(0),
@@ -507,7 +507,7 @@ impl ESOLogProcessor {
                     .get(&target.unit_id)
                     .and_then(|shields| shields.get(&buff_event.buff_index))
                     .map(|original| (original.source_unit_id, original.target_unit_id))
-                    .unwrap_or((source.unit_id, target.unit_id)); // fallback if missing
+                    .unwrap_or((u32::MAX, u32::MAX));
 
                 let shield_instance_ids = (
                     self.index_in_session(original_src_id).unwrap_or(0),
@@ -655,6 +655,12 @@ impl ESOLogProcessor {
                         unit.icon = Some("death_recap_melee_basic".to_string());
                     }
                 }
+                if buff_event.source_unit_index < self.eso_logs_log.units.len() {
+                    let unit = &mut self.eso_logs_log.units[buff_event.source_unit_index];
+                    if unit.unit_type == Reaction::Friendly {
+                        unit.unit_type = Reaction::Hostile
+                    }
+                }
                 if let Some(buff) = self.eso_logs_log.buffs.get_mut(buff_event.buff_index) {
                     buff.damage_type = ev.damage_type;
                 }
@@ -737,7 +743,6 @@ impl ESOLogProcessor {
                         })
                     }
                 ));
-
             }
             EventResult::PowerEnergize => {
                 self.add_log_event(ESOLogsEvent::PowerEnergize(
@@ -773,7 +778,7 @@ impl ESOLogProcessor {
             EventResult::Died | EventResult::DiedXP | EventResult::KillingBlow => {
                 let instance_ids = (self.index_in_session(source.unit_id).unwrap_or(0), self.index_in_session(target.unit_id).unwrap_or(0));
                 if source_allegiance == 32 {source_allegiance = 64}
-                let timestamp = ev.time+1;
+                let timestamp = ev.time+3; // removing the +3, or even changing it to +2 makes some killing blows disappear. i hate this, but what fucking ever
                 let death_event = ESOLogsEvent::CastLine(
                     ESOLogsCastLine {
                         timestamp: timestamp.clone(),
@@ -875,6 +880,9 @@ impl ESOLogProcessor {
         }
         self.active_casts.insert(source.unit_id, buff_event.buff_index);
         let cast_time = parts[2].parse::<u32>().unwrap();
+        if cast_time > 0 {
+            self.eso_logs_log.cast_with_cast_time.insert(ability_id);
+        }
         let source_allegiance = Self::allegiance_from_reaction(self.allegiance_from_unit_state(source));
         let target_allegiance = Self::allegiance_from_reaction(self.allegiance_from_unit_state(target));
         let instance_ids = (self.index_in_session(source.unit_id).unwrap_or(0), self.index_in_session(target.unit_id).unwrap_or(0));
@@ -946,8 +954,8 @@ impl ESOLogProcessor {
                 }
             }
         };
-        let source_allegiance = Self::allegiance_from_reaction(self.allegiance_from_unit_state(source));
-        let target_allegiance = Self::allegiance_from_reaction(self.allegiance_from_unit_state(target));
+        let mut source_allegiance = Self::allegiance_from_reaction(self.allegiance_from_unit_state(source));
+        let mut target_allegiance = Self::allegiance_from_reaction(self.allegiance_from_unit_state(target));
         let shield_buff_event = ESOLogsBuffEventKey2 {
             source_unit_index: buff_event.source_unit_index,
             source_unit_id: source.unit_id,
@@ -976,19 +984,6 @@ impl ESOLogProcessor {
                 }
             ));
         } else if parts[2] == "FADED" {
-            // if let Some(interruption) = self.eso_logs_log.interruption_hashmap.get(&buff_event) {
-            //     self.add_log_event(ESOLogsEvent::InterruptionEnded(ESOLogsInterruptionEnded {
-            //         timestamp: self.last_known_timestamp,
-            //         line_type: ESOLogsLineType::InterruptionRemoved,
-            //         buff_event: buff_event,
-            //         unit_instance_id: instance_ids,
-            //         source_allegiance,
-            //         target_allegiance,
-            //         interruption_index: *interruption, 
-            //         magic_number: 0, 
-            //         }
-            //     ));
-            // } // kinda broken. idk what im doing with this. confused
             self.add_log_event(ESOLogsEvent::BuffLine (
                 ESOLogsBuffLine {
                     timestamp: self.last_known_timestamp,
@@ -1005,10 +1000,12 @@ impl ESOLogProcessor {
         } else if parts[2] == "UPDATED" {
             let stacks = parts[3].parse::<u16>().unwrap_or(1);
             if stacks > 1 {
+                if source_allegiance == 32 {source_allegiance = 16}
+                if target_allegiance == 32 {target_allegiance = 16}
                 self.add_log_event(ESOLogsEvent::StackUpdate (
                     ESOLogsBuffStacks {
                         timestamp: self.last_known_timestamp,
-                        line_type: if source_allegiance == target_allegiance || (source_allegiance != 64 && target_allegiance != 64) {ESOLogsLineType::BuffStacksUpdatedAlly} else {ESOLogsLineType::BuffStacksUpdatedEnemy},
+                        line_type: if source_allegiance == target_allegiance {ESOLogsLineType::BuffStacksUpdatedAlly} else {ESOLogsLineType::BuffStacksUpdatedEnemy},
                         buff_event: buff_event,
                         unit_instance_id: instance_ids,
                         source_allegiance,
@@ -1126,7 +1123,6 @@ impl ESOLogProcessor {
         }
     }
 
-    // this is broken
     fn handle_end_cast(&mut self, parts: &[&str]) {
         let end_reason = parse_cast_end_reason(parts[2]);
         if end_reason == Some(CastEndReason::Interrupted) {
@@ -1136,54 +1132,19 @@ impl ESOLogProcessor {
             let interrupting_ability = parts[5].parse::<u32>().unwrap();
             let interrupting_unit = parts[6].parse::<u32>().unwrap(); // can be zero sometimes
             if interrupting_unit != 0 {
-                let target_id = self.eso_logs_log.cast_id_source_unit_id
-                .get(&interrupted_cast_id)
-                .expect("every cast id should have a source")
-                .clone();
-
-                // println!("Resolved target_id: {}", target_id);
-
-                let target_index = self.eso_logs_log.unit_index(target_id)
-                    .expect("every target id should map to a unit");
-                // println!("Resolved target_index: {}", target_index);
-
-                let target = self.eso_logs_log.units
-                    .get(target_index)
-                    .expect("every target index should be a unit");
-                // println!("Resolved target unit: {:?}", target);
-
+                let target_id = self.eso_logs_log.cast_id_source_unit_id.get(&interrupted_cast_id).expect("every cast id should have a source").clone();
+                let target_index = self.eso_logs_log.unit_index(target_id).expect("every target id should map to a unit");
+                let target = self.eso_logs_log.units.get(target_index).expect("every target index should be a unit");
                 let target_allegiance = Self::allegiance_from_reaction(target.unit_type);
-                // println!("Target allegiance: {:?}", target_allegiance);
-
                 let target_session_index = self.eso_logs_log.index_in_session(target_id).unwrap_or(0);
-                // println!("Target session index: {}", target_session_index);
-
-                let source_index = self.unit_index(interrupting_unit)
-                    .expect("interrupting unit should always exist");
-                // println!("Resolved source_index: {}", source_index);
-
-                let source = self.eso_logs_log.units
-                    .get(source_index)
-                    .expect("interrupting unit should always exist");
-                // println!("Resolved source unit: {:?}", source);
-
+                let source_index = self.unit_index(interrupting_unit).expect("interrupting unit should always exist");
+                let source = self.eso_logs_log.units.get(source_index).expect("interrupting unit should always exist");
                 let source_allegiance = Self::allegiance_from_reaction(source.unit_type);
-                // println!("Source allegiance: {:?}", source_allegiance);
-
                 let instance_id = self.eso_logs_log.index_in_session(interrupting_unit).unwrap_or(0);
-                // println!("Interrupting unit session index: {}", instance_id);
-
-                let interrupted_ability_index = self.buff_index(interrupted_ability)
-                    .expect("interrupted ability should always be something");
-                // println!("Interrupted ability index: {}", interrupted_ability_index);
+                let interrupted_ability_index = self.buff_index(interrupted_ability).expect("interrupted ability should always be something");
                 let interrupted_ability_from_table = self.eso_logs_log.buffs.get(interrupted_ability_index).expect("index should always be at a point into buffs");
-                // println!("interrupted ability: {}", interrupted_ability_from_table);
-
-                let interrupting_ability_index = self.buff_index(interrupting_ability)
-                    .expect("interrupting ability should be something");
-                // println!("Interrupting ability index: {}", interrupting_ability_index);
+                let interrupting_ability_index = self.buff_index(interrupting_ability).expect("interrupting ability should be something");
                 let interrupting_ability_from_table = self.eso_logs_log.buffs.get(interrupting_ability_index).expect("index should always be at a point into buffs");
-                // println!("interrupting ability: {}", interrupting_ability_from_table);
 
                 if interrupting_ability_from_table.name == interrupted_ability_from_table.name {return}
 
@@ -1193,26 +1154,26 @@ impl ESOLogProcessor {
                     buff_index: interrupting_ability_index,
                 };
 
-                let buff_index = self.eso_logs_log.effects_hashmap.get(&new_cast_key).expect("interrupting cast should always exist");
-                let buff = self.eso_logs_log.effects.get(*buff_index).expect("buff_index will always be valid index into buffs");
-                // println!("Buff unique index: {}", buff.unique_index);
+                let buff_index = self.eso_logs_log.effects_hashmap.get(&new_cast_key);
+                if let Some(index) = buff_index {
+                    let buff = self.eso_logs_log.effects.get(*index).expect("buff_index will always be valid index into buffs");
 
-                // self.eso_logs_log.interruption_hashmap.insert(buff.clone(), interrupting_ability_index);
-
-                self.add_log_event(ESOLogsEvent::Interrupt(
-                ESOLogsInterrupt {
-                    timestamp: time,
-                    line_type: ESOLogsLineType::Interrupted,
-                    buff_event: buff.clone(),
-                    unit_instance_id: (instance_id, target_session_index),
-                    source_allegiance,
-                    target_allegiance,
-                    interrupted_ability_index,
-                }));
+                    self.add_log_event(ESOLogsEvent::Interrupt(
+                    ESOLogsInterrupt {
+                        timestamp: time,
+                        line_type: ESOLogsLineType::Interrupted,
+                        buff_event: buff.clone(),
+                        unit_instance_id: (instance_id, target_session_index),
+                        source_allegiance,
+                        target_allegiance,
+                        interrupted_ability_index,
+                    }));
+                }
             }
         } else if end_reason == Some(CastEndReason::Completed) { // 249171,END_CAST,COMPLETED,6859448,37108
             let time = parts[0].parse::<u64>().unwrap() - self.timestamp_offset as u64;
             let ability_cast_id = parts[3].parse::<u32>().unwrap();
+            if !self.eso_logs_log.cast_with_cast_time.contains(&ability_cast_id) {return}
             // println!("Ability cast id: {}", ability_cast_id);
             // let completed_ability_id = parts[4].parse::<u32>().unwrap();
             let buff_index = self.eso_logs_log.cast_id_hashmap.get(&ability_cast_id).unwrap_or(&usize::MAX); // "buff from cast_id should always be something" except when it isn't
@@ -1351,8 +1312,6 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir>(input_path: InputPath, o
 
     Ok(())
 }
-
-
 
 fn write_zip_with_logtxt<P: AsRef<Path>>(zip_path: P, data: &[u8]) -> Result<(), String> {
     let file = File::create(&zip_path)

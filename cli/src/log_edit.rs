@@ -3,16 +3,19 @@ use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Write, BufRead};
 use std::path::Path;
-use parser::effect::{is_zen_dot, ZEN_DEBUFF_ID};
+use parser::effect::{is_zen_dot, MOULDERING_TAINT_ID, MOULDERING_TAINT_TIME, ZEN_DEBUFF_ID};
+use parser::event::{self, EventResult};
 use parser::parse::{self, gear_piece, unit_state};
 use parser::player::GearSlot;
 use parser::set::{get_item_type_from_hashmap, ItemType};
+use parser::unit::UnitState;
 
 pub struct CustomLogData {
     pub zen_stacks: HashMap<u32, ZenDebuffState>,
     pub scribing_abilities: Vec<ScribingAbility>,
     pub scribing_map: HashMap<u32, usize>,
     pub scribing_unit_map: HashMap<(u32, u32), usize>,
+    pub taint_stacks: HashMap<u32, MoulderingTaintState>,
 }
 
 impl CustomLogData {
@@ -22,6 +25,7 @@ impl CustomLogData {
             scribing_abilities: Vec::new(),
             scribing_map: HashMap::new(),
             scribing_unit_map: HashMap::new(),
+            taint_stacks: HashMap::new(),
         }
     }
 }
@@ -30,6 +34,14 @@ pub struct ZenDebuffState {
     active: bool,
     source_id: u32,
     contributing_ability_ids: Vec<u32>,
+}
+
+pub struct MoulderingTaintState {
+    stacks: u8,
+    last_timestamp: u64,
+    last_source_unit_state: UnitState,
+    last_target_unit_state: UnitState,
+    last_cast_id: u32,
 }
 
 const BEGIN_SCRIBING_ABILITIES: u32 = 1000;
@@ -158,6 +170,7 @@ pub fn check_line_for_edits(parts: Vec<&str>, custom_log_data: &mut CustomLogDat
         "ABILITY_INFO" => check_ability_info(parts, custom_log_data),
         "EFFECT_INFO" => add_arcanist_beam_effect_information(parts),
         "PLAYER_INFO" => modify_player_data(parts, custom_log_data),
+        "COMBAT_EVENT" => modify_combat_event(parts, custom_log_data),
         _ => None,
     }
 }
@@ -454,4 +467,91 @@ fn modify_player_data(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> 
 
 
     Some(vec![new_parts.join(",")])
+}
+
+fn modify_combat_event(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
+    let ability_id = parts[8].parse::<u32>().unwrap();
+    // println!("ability_id: {}", ability_id);
+    let time = parts[0].parse().unwrap();
+    if ability_id == *MOULDERING_TAINT_ID {
+        // println!("{:?}", parts);
+        let source = parse::unit_state(&parts, 9);
+        let target = parse::unit_state(&parts, 19);
+        let cast_track_id = parts[7].parse::<u32>().unwrap(); 
+        let entry = custom_log_data.taint_stacks.entry(target.unit_id).or_insert_with(|| MoulderingTaintState {
+            stacks: 0,
+            last_timestamp: time,
+            last_source_unit_state: source,
+            last_cast_id: cast_track_id,
+            last_target_unit_state: target,
+        });
+        entry.stacks += 1;
+        entry.last_timestamp = time;
+        entry.last_source_unit_state = source;
+        entry.last_cast_id = cast_track_id;
+        entry.last_target_unit_state = target;
+        let mut lines: Vec<String> = vec![];
+        if entry.stacks == 1 {
+            let mut gained_line = format!(
+                "{},{},{},{},{},{},",
+                time, "EFFECT_CHANGED", "GAINED", "1", cast_track_id, MOULDERING_TAINT_ID.to_string()
+            );
+            let rest = parts[9..].join(",");
+            gained_line.push_str(&rest);
+            lines.push(gained_line);
+        }
+        let mut line = format!(
+            "{},{},{},{},{},{},",
+            time, "EFFECT_CHANGED", "UPDATED", entry.stacks, cast_track_id, MOULDERING_TAINT_ID.to_string()
+        );
+        let rest = parts[9..].join(",");
+        line.push_str(&rest);
+        lines.push(line);
+        // println!("{}", line);
+        return Some(lines);
+    } else {
+        let mut removed = Vec::new();
+        for (id, entry) in custom_log_data.taint_stacks.iter_mut() {
+            if parts[19] != "*" {
+                let target = parse::unit_state(&parts, 19);
+                if target.unit_id == *id {
+                    if (time > entry.last_timestamp + *MOULDERING_TAINT_TIME as u64 || (event::parse_event_result(parts[2]).unwrap() == EventResult::Died || target.health == 0)) && entry.stacks > 0 {
+                        entry.last_timestamp = time;
+                        entry.stacks = 0;
+                        let e = entry.last_source_unit_state;
+                        let mut line = format!(
+                            "{},{},{},{},{},{},{},{}/{},{}/{},{}/{},{}/{},{}/{},{},{},{},{},",
+                            time, "EFFECT_CHANGED", "FADED", "1", entry.last_cast_id, MOULDERING_TAINT_ID.to_string(),
+                            e.unit_id, e.health, e.max_health, e.magicka, e.max_magicka, e.stamina, e.max_stamina, e.ultimate, e.max_ultimate, e.werewolf, e.werewolf_max, e.shield, e.map_x, e.map_y, e.heading
+                        );
+                        let rest = parts[19..].join(",");
+                        line.push_str(&rest);
+                        // println!("{}", line);
+                        removed.push(id.clone());
+                        return Some(vec![line]);
+                    }
+                }
+            }
+            if time > entry.last_timestamp + 500 + *MOULDERING_TAINT_TIME as u64 && entry.stacks > 0 {
+                entry.last_timestamp = time;
+                entry.stacks = 0;
+                let e = entry.last_source_unit_state;
+                let t = entry.last_target_unit_state;
+                let line = format!(
+                    "{},{},{},{},{},{},{},{}/{},{}/{},{}/{},{}/{},{}/{},{},{},{},{},{},{}/{},{}/{},{}/{},{}/{},{}/{},{},{},{},{}",
+                    time, "EFFECT_CHANGED", "FADED", "1", entry.last_cast_id, MOULDERING_TAINT_ID.to_string(),
+                    e.unit_id, e.health, e.max_health, e.magicka, e.max_magicka, e.stamina, e.max_stamina, e.ultimate, e.max_ultimate, e.werewolf, e.werewolf_max, e.shield, e.map_x, e.map_y, e.heading,
+                    t.unit_id, "0", t.max_health, "0", "0", "0", "0", "0", "0", "0", "0", "0", t.map_x, t.map_y, t.heading
+                );
+                removed.push(id.clone());
+                return Some(vec![line]);
+            }
+        }
+        for k in removed {
+            custom_log_data.taint_stacks.remove_entry(&k);
+        }
+        
+    }
+
+    return None
 }

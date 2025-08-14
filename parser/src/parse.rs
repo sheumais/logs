@@ -7,6 +7,9 @@ pub fn is_true(value: &str) -> bool {
 }
 
 pub fn unit_state(parts: &[&str], start_index: usize) -> unit::UnitState {
+    if start_index >= parts.len() {
+        println!("Impossible unit state: {:?}", parts);
+    }
     let parse_value = |s: &str| s.parse::<u32>().unwrap_or(0);
     let parse_pair = |s: &str| {
         let mut split = s.split('/');

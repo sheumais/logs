@@ -78,6 +78,8 @@ pub fn parse_status_effect_type(string: &str) -> StatusEffectType {
 }
 
 pub const ZEN_DEBUFF_ID: &'static u32 = &126597;
+pub const MOULDERING_TAINT_ID: &'static u32 = &150002;
+pub const MOULDERING_TAINT_TIME: &'static u16 = &2500;
 
 pub fn is_zen_dot(effect_id: u32) -> bool {
     match effect_id {

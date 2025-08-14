@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::{self, Display}, hash::Hash};
+use std::{collections::{HashMap, HashSet}, fmt::{self, Display}, hash::Hash};
 use parser::{effect::StatusEffectType, event::DamageType, player::Race, unit::{blank_unit_state, Reaction, UnitState}};
 use serde::{Deserialize, Serialize};
 
@@ -24,6 +24,7 @@ pub struct ESOLogsLog {
     pub cast_id_hashmap: HashMap<u32, usize>,
     pub cast_id_target_unit_id: HashMap<u32, u32>,
     pub cast_id_source_unit_id: HashMap<u32, u32>,
+    pub cast_with_cast_time: HashSet<u32>,
     pub interruption_hashmap: HashMap<ESOLogsBuffEvent, usize>,
     pub events: Vec<ESOLogsEvent>,
     pub pets: Vec<ESOLogsPetRelationship>,
