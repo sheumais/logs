@@ -362,6 +362,7 @@ pub enum EnchantType {
     IncreaseSpellDamage,
     Magicka,
     MagickaRegen,
+    OblivionDamage,
     PoisonedWeapon,
     PrismaticDefense,
     PrismaticOnslaught,
@@ -405,6 +406,7 @@ pub fn match_enchant_type(string: &str) -> EnchantType {
         "PRISMATIC_ONSLAUGHT" => EnchantType::PrismaticOnslaught,
         "REDUCE_ARMOR" => EnchantType::ReduceArmor,
         "REDUCE_POWER" => EnchantType::ReducePower,
+        "DAMAGE_HEALTH" => EnchantType::OblivionDamage,
 
         "STAMINA" => EnchantType::Stamina,
         "MAGICKA" => EnchantType::Magicka,

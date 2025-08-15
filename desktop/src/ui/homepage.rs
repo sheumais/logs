@@ -75,24 +75,6 @@ pub fn homepage() -> Html {
             <LoginBox/>
             <HomepageContainer>
                 <div class={icon_wrapper_style()}>
-                    <IconButton
-                        icon_id={IconId::BootstrapFileEarmarkBreak}
-                        description={"Scan encounter log"}
-                        onclick={Some(modify_log.clone())}
-                        class={icon_style()}
-                    />
-                    <IconButton
-                        icon_id={IconId::BootstrapFiles}
-                        description={"Split/Combine logs"}
-                        onclick={Some(split_log.clone())}
-                        class={icon_style()}
-                    />
-                    <IconButton
-                        icon_id={IconId::BootstrapFolderSymlink}
-                        description={"Live log with scan"}
-                        onclick={Some(live_log.clone())}
-                        class={icon_style()}
-                    />
                     if login_ctx.is_some() {
                         <IconButton
                             icon_id={IconId::LucideUpload}
@@ -100,7 +82,27 @@ pub fn homepage() -> Html {
                             onclick={Some(upload.clone())}
                             class={icon_style()}
                         />
+                        // BootstrapFileEarmarkPlay
+                    } else {
+                        <IconButton
+                            icon_id={IconId::BootstrapFileEarmarkBreak}
+                            description={"Scan encounter log"}
+                            onclick={Some(modify_log.clone())}
+                            class={icon_style()}
+                        />
+                        <IconButton
+                            icon_id={IconId::BootstrapFolderSymlink}
+                            description={"Live log with scan"}
+                            onclick={Some(live_log.clone())}
+                            class={icon_style()}
+                        />
                     }
+                    <IconButton
+                        icon_id={IconId::BootstrapFiles}
+                        description={"Split/Combine logs"}
+                        onclick={Some(split_log.clone())}
+                        class={icon_style()}
+                    />
                 </div>
             </HomepageContainer>
             <div onclick={terms.clone()} class={text_link_style()} style={"position:fixed;bottom:0px;left:0px;padding:0.5em;font-size:1em;"}>

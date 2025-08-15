@@ -6,6 +6,70 @@ use std::fs;
 
 use crate::{esologs_format::*, log_edit::{handle_line, CustomLogData}};
 
+fn event_timestamp(e: &ESOLogsEvent) -> Option<u64> {
+    match e {
+        ESOLogsEvent::BuffLine(e) => Some(e.timestamp),
+        ESOLogsEvent::CastLine(e) => Some(e.timestamp),
+        ESOLogsEvent::PowerEnergize(e) => Some(e.timestamp),
+        ESOLogsEvent::ZoneInfo(e) => Some(e.timestamp),
+        ESOLogsEvent::PlayerInfo(e) => Some(e.timestamp),
+        ESOLogsEvent::MapInfo(e) => Some(e.timestamp),
+        ESOLogsEvent::EndCombat(e) => Some(e.timestamp),
+        ESOLogsEvent::BeginCombat(e) => Some(e.timestamp),
+        ESOLogsEvent::EndTrial(e) => Some(e.timestamp),
+        ESOLogsEvent::HealthRecovery(e) => Some(e.timestamp),
+        ESOLogsEvent::StackUpdate(e) => Some(e.timestamp),
+        ESOLogsEvent::DamageShielded(e) => Some(e.timestamp),
+        ESOLogsEvent::Interrupt(e) => Some(e.timestamp),
+        ESOLogsEvent::InterruptionEnded(e) => Some(e.timestamp),
+        ESOLogsEvent::CastEnded(e) => Some(e.timestamp),
+        _ => None,
+    }
+}
+
+fn set_event_timestamp(e: &mut ESOLogsEvent, timestamp: u64) {
+    match e {
+        ESOLogsEvent::BuffLine(inner) => inner.timestamp = timestamp,
+        ESOLogsEvent::CastLine(inner) => inner.timestamp = timestamp,
+        ESOLogsEvent::PowerEnergize(inner) => inner.timestamp = timestamp,
+        ESOLogsEvent::ZoneInfo(inner) => inner.timestamp = timestamp,
+        ESOLogsEvent::PlayerInfo(inner) => inner.timestamp = timestamp,
+        ESOLogsEvent::MapInfo(inner) => inner.timestamp = timestamp,
+        ESOLogsEvent::EndCombat(inner) => inner.timestamp = timestamp,
+        ESOLogsEvent::BeginCombat(inner) => inner.timestamp = timestamp,
+        ESOLogsEvent::EndTrial(inner) => inner.timestamp = timestamp,
+        ESOLogsEvent::HealthRecovery(inner) => inner.timestamp = timestamp,
+        ESOLogsEvent::StackUpdate(inner) => inner.timestamp = timestamp,
+        ESOLogsEvent::DamageShielded(inner) => inner.timestamp = timestamp,
+        ESOLogsEvent::Interrupt(inner) => inner.timestamp = timestamp,
+        ESOLogsEvent::InterruptionEnded(inner) => inner.timestamp = timestamp,
+        ESOLogsEvent::CastEnded(inner) => inner.timestamp = timestamp,
+        _ => {}
+    }
+}
+
+fn is_damage_event(e: &ESOLogsEvent) -> bool {
+    match e {
+        ESOLogsEvent::CastLine(cl) => matches!(cl.line_type, ESOLogsLineType::Damage | ESOLogsLineType::DotTick),
+        _ => false,
+    }
+}
+
+fn get_cast_id(e: &ESOLogsEvent) -> Option<u64> {
+    match e {
+        ESOLogsEvent::CastLine(cl) => Some(cl.cast.cast_id_origin.into()),
+        _ => None,
+    }
+}
+
+fn get_target_id(e: &ESOLogsEvent) -> Option<u64> {
+    match e {
+        ESOLogsEvent::CastLine(cl) => Some(cl.cast.target_unit_state.unit_state.unit_id.into()),
+        _ => None,
+    }
+}
+
+
 pub struct ESOLogProcessor {
     pub eso_logs_log: ESOLogsLog,
     pub megaserver: String,
@@ -63,49 +127,59 @@ impl ESOLogProcessor {
         self.eso_logs_log.buff_index(buff_id)
     }
 
-    fn event_timestamp(e: &ESOLogsEvent) -> Option<u64> {
-        match e {
-            ESOLogsEvent::BuffLine(e) => Some(e.timestamp),
-            ESOLogsEvent::CastLine(e) => Some(e.timestamp),
-            ESOLogsEvent::PowerEnergize(e) => Some(e.timestamp),
-            ESOLogsEvent::ZoneInfo(e) => Some(e.timestamp),
-            ESOLogsEvent::PlayerInfo(e) => Some(e.timestamp),
-            ESOLogsEvent::MapInfo(e) => Some(e.timestamp),
-            ESOLogsEvent::EndCombat(e) => Some(e.timestamp),
-            ESOLogsEvent::BeginCombat(e) => Some(e.timestamp),
-            ESOLogsEvent::EndTrial(e) => Some(e.timestamp),
-            ESOLogsEvent::HealthRecovery(e) => Some(e.timestamp),
-            ESOLogsEvent::StackUpdate(e) => Some(e.timestamp),
-            ESOLogsEvent::DamageShielded(e) => Some(e.timestamp),
-            ESOLogsEvent::Interrupt(e) => Some(e.timestamp),
-            ESOLogsEvent::InterruptionEnded(e) => Some(e.timestamp),
-            ESOLogsEvent::CastEnded(e) => Some(e.timestamp),
-            _ => None,
-        }
-    }
-
     pub fn add_log_event(&mut self, event: ESOLogsEvent) {
-        if !self.pending_death_events.is_empty() {
-            if let Some(event_ts) = Self::event_timestamp(&event) {
-                while let Some((death_ts, _)) = self.pending_death_events.first() {
-                    if *death_ts <= event_ts {
-                        let (death_ts, death_event) = self.pending_death_events.pop().unwrap();
+        let timestamp = event_timestamp(&event);
+        self.eso_logs_log.add_log_event(event);
+
+        if let Some(event_ts) = timestamp {
+            while let Some((death_ts, mut death_event)) = self.pending_death_events.pop() {
+                if death_ts <= event_ts {
+                    let death_cast_id = get_cast_id(&death_event);
+                    let death_target = get_target_id(&death_event);
+
+                    let mut closest_match: Option<(usize, u64)> = None;
+                    let max_diff_ms = 20;
+
+                    if let (Some(dc_id), Some(dt_id)) = (death_cast_id, death_target) {
+                        for (idx, e) in self.eso_logs_log.events.iter().enumerate() {
+                            if is_damage_event(e) {
+                                if let (Some(c_id), Some(t_id), Some(ts)) =
+                                    (get_cast_id(e), get_target_id(e), event_timestamp(e))
+                                {
+                                    if c_id == dc_id && t_id == dt_id {
+                                        let diff = if ts > death_ts { ts - death_ts } else { death_ts - ts };
+                                        if diff <= max_diff_ms {
+                                            if closest_match.is_none() || diff < {
+                                                let (_, best_ts) = closest_match.unwrap();
+                                                let best_diff = if best_ts > death_ts { best_ts - death_ts } else { death_ts - best_ts };
+                                                best_diff
+                                            } {
+                                                closest_match = Some((idx, ts));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some((match_idx, match_ts)) = closest_match {
+                        set_event_timestamp(&mut death_event, match_ts);
+                        self.eso_logs_log.events.insert(match_idx + 1, death_event);
+                    } else {
                         let idx = self.eso_logs_log.events.iter()
-                            .position(|e| match Self::event_timestamp(e) {
-                                Some(ts) => ts > death_ts,
-                                None => false,
-                            })
+                            .position(|e| event_timestamp(e).map_or(false, |ts| ts > death_ts))
                             .unwrap_or(self.eso_logs_log.events.len());
                         self.eso_logs_log.events.insert(idx, death_event);
-                    } else {
-                        break;
                     }
+                } else {
+                    self.pending_death_events.push((death_ts, death_event));
+                    break;
                 }
             }
         }
-
-        self.eso_logs_log.add_log_event(event);
     }
+
 
     pub fn get_cp_for_unit(&self, unit_id: u32) -> u16 {
         self.eso_logs_log.get_cp_for_unit(unit_id)
@@ -778,7 +852,7 @@ impl ESOLogProcessor {
             EventResult::Died | EventResult::DiedXP | EventResult::KillingBlow => {
                 let instance_ids = (self.index_in_session(source.unit_id).unwrap_or(0), self.index_in_session(target.unit_id).unwrap_or(0));
                 if source_allegiance == 32 {source_allegiance = 64}
-                let timestamp = ev.time+3; // removing the +3, or even changing it to +2 makes some killing blows disappear. i hate this, but what fucking ever
+                let timestamp = ev.time+1;
                 let death_event = ESOLogsEvent::CastLine(
                     ESOLogsCastLine {
                         timestamp: timestamp.clone(),
@@ -836,7 +910,7 @@ impl ESOLogProcessor {
                     }
                 ));
             }
-            EventResult::Queued | EventResult::Failed | EventResult::Sprinting | EventResult::Snared | EventResult::AbilityOnCooldown | EventResult::CannotUse | EventResult::BadTarget | EventResult::CasterDead | EventResult::TargetOutOfRange | EventResult::InsufficientResource | EventResult::FailedRequirements | EventResult::Knockback | EventResult::Staggered | EventResult::CantSeeTarget | EventResult::TargetDead | EventResult::Reincarnating | EventResult::TargetNotInView | EventResult::Falling | EventResult::Silenced | EventResult::Intercepted | EventResult::Busy => {},
+            EventResult::Queued | EventResult::Failed | EventResult::Sprinting | EventResult::Snared | EventResult::AbilityOnCooldown | EventResult::CannotUse | EventResult::BadTarget | EventResult::CasterDead | EventResult::TargetOutOfRange | EventResult::InsufficientResource | EventResult::FailedRequirements | EventResult::Knockback | EventResult::Staggered | EventResult::CantSeeTarget | EventResult::TargetDead | EventResult::Reincarnating | EventResult::TargetNotInView | EventResult::Falling | EventResult::Silenced | EventResult::Intercepted | EventResult::Busy | EventResult::InAir | EventResult::FallDamage | EventResult::NoLocationFound => {},
             EventResult::Taunted | EventResult::Stunned | EventResult::Interrupt | EventResult::OffBalance => {},
             _ => {println!("{:?}", ev.result);}
         };
@@ -1273,21 +1347,7 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir>(input_path: InputPath, o
 
             let events = &elp.eso_logs_log.events;
             if !events.is_empty() {
-                fn get_timestamp(event: &ESOLogsEvent) -> Option<u64> {
-                    match event {
-                        ESOLogsEvent::BuffLine(e) => Some(e.timestamp),
-                        ESOLogsEvent::CastLine(e) => Some(e.timestamp),
-                        ESOLogsEvent::PowerEnergize(e) => Some(e.timestamp),
-                        ESOLogsEvent::ZoneInfo(e) => Some(e.timestamp),
-                        ESOLogsEvent::PlayerInfo(e) => Some(e.timestamp),
-                        ESOLogsEvent::MapInfo(e) => Some(e.timestamp),
-                        ESOLogsEvent::EndCombat(e) => Some(e.timestamp),
-                        ESOLogsEvent::BeginCombat(e) => Some(e.timestamp),
-                        ESOLogsEvent::EndTrial(e) => Some(e.timestamp),
-                        _ => None,
-                    }
-                }
-                let mut last_ts = get_timestamp(&events[events.len()-1]);
+                let mut last_ts = event_timestamp(&events[events.len()-1]);
                 if last_ts.is_some() && first_timestamp.is_some() {
                     last_ts = Some(last_ts.unwrap() + first_timestamp.unwrap());
                 }
@@ -1367,6 +1427,7 @@ pub fn build_master_table(elp: &mut ESOLogProcessor) -> String {
             157738 => Some("gear_rockgrove_med_head_a".to_string()), // sul-xan
             111504 => Some("gear_undaunted_werewolfbehemoth_head_a".to_string()), // balorgh
             220015 => Some("gear_lucentguardian_heavy_head_a".to_string()), // lucent echoes
+            147459 => Some("antiquities_ornate_necklace_3".to_string()), // pearls of ehlnofey
             _ => None,
         };
         if let Some(icon) = new_icon {
