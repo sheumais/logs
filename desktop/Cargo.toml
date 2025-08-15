@@ -17,7 +17,7 @@ console_error_panic_hook = "0.1.7"
 gloo-utils = "0.2.0"
 parser = { path = "../parser" }
 cli = { path = "../cli" }
-yew_icons = {version = "0.8", features = ["LucideArrowLeftCircle", "LucideUpload", "BootstrapFileEarmarkBreak", "BootstrapGithub", "BootstrapFileEarmarkBarGraph", "BootstrapFiles", "BootstrapFolder", "BootstrapFileEarmarkArrowUp", "BootstrapFolderSymlink", "BootstrapPersonCircle", "LucideLogOut", "BootstrapXLg", "BootstrapDiscord", "BootstrapTrash3"]}
+yew_icons = {version = "0.8", features = ["LucideArrowLeftCircle", "LucideUpload", "BootstrapFileEarmarkBreak", "BootstrapGithub", "BootstrapFileEarmarkBarGraph", "BootstrapFiles", "BootstrapFolder", "BootstrapFileEarmarkArrowUp", "BootstrapFolderSymlink", "BootstrapPersonCircle", "LucideLogOut", "BootstrapXLg", "BootstrapDiscord", "BootstrapTrash3", "BootstrapFileEarmarkPlay"]}
 stylist = {version = "0.13", features = ["yew_integration"]}
 tauri-sys = { git = "https://github.com/JonasKruckenberg/tauri-sys", branch = "v2", features = ["all"] }
 futures = "0.3.29"

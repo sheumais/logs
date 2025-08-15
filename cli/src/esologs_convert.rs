@@ -6,7 +6,7 @@ use std::fs;
 
 use crate::{esologs_format::*, log_edit::{handle_line, CustomLogData}};
 
-fn event_timestamp(e: &ESOLogsEvent) -> Option<u64> {
+pub fn event_timestamp(e: &ESOLogsEvent) -> Option<u64> {
     match e {
         ESOLogsEvent::BuffLine(e) => Some(e.timestamp),
         ESOLogsEvent::CastLine(e) => Some(e.timestamp),
@@ -1373,7 +1373,7 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir>(input_path: InputPath, o
     Ok(())
 }
 
-fn write_zip_with_logtxt<P: AsRef<Path>>(zip_path: P, data: &[u8]) -> Result<(), String> {
+pub fn write_zip_with_logtxt<P: AsRef<Path>>(zip_path: P, data: &[u8]) -> Result<(), String> {
     let file = File::create(&zip_path)
         .map_err(|e| format!("Failed to create `{}`: {e}", zip_path.as_ref().display()))?;
     let buf = BufWriter::new(file);

@@ -78,11 +78,10 @@ pub fn homepage() -> Html {
                     if login_ctx.is_some() {
                         <IconButton
                             icon_id={IconId::LucideUpload}
-                            description={"Upload to esologs.com"}
+                            description={"Upload to esologs.com (BETA)"}
                             onclick={Some(upload.clone())}
                             class={icon_style()}
                         />
-                        // BootstrapFileEarmarkPlay
                     } else {
                         <IconButton
                             icon_id={IconId::BootstrapFileEarmarkBreak}
