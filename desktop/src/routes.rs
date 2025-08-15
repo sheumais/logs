@@ -10,4 +10,10 @@ pub enum Route {
     Split,
     #[at("/live")]
     LiveLog,
+    #[at("/login")]
+    Login,
+    #[at("/upload")]
+    Upload,
+    #[at("/terms")]
+    Terms,
 }

@@ -1,5 +1,6 @@
 use std::env;
 use std::path::Path;
+use cli::esologs_convert::{build_master_table, split_and_zip_log_by_fight, ESOLogProcessor};
 use cli::log_edit::modify_log_file;
 use cli::read_file;
 use cli::split_log::split_encounter_file_into_log_files;
@@ -21,6 +22,44 @@ fn main() {
         "split" => {
             if let Err(e) = split_encounter_file_into_log_files(Path::new(file_path)) {
                 eprintln!("Error splitting log file: {}", e);
+            }
+        }
+        "esolog" => {
+            let mut eso_log_processor = ESOLogProcessor::new();
+            if let Err(e) = eso_log_processor.convert_log_file_to_esolog_format(Path::new(file_path)) {
+                eprintln!("Error splitting log file: {}", e);
+            }
+            use std::fs::File;
+            use std::io::Write;
+            let mut file = match File::create("C:/Users/H/Downloads/esolog_output.txt") {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("Error creating output file: {}", e);
+                    return;
+                }
+            };
+            let master_table = build_master_table(&mut eso_log_processor);
+            write!(file, "{master_table}").expect("master_table write failed");
+            println!("master table written");
+            // println!("{:?}", eso_log_processor.eso_logs_log.unit_id_to_units_index);
+            // println!("{:?}", eso_log_processor.eso_logs_log.owner_id_pairs_index);
+            let mut file = match File::create("C:/Users/H/Downloads/esolog_output2.txt") {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("Error creating output file: {}", e);
+                    return;
+                }
+            };
+            for line in eso_log_processor.eso_logs_log.events.iter() {
+                if let Err(e) = writeln!(file, "{line}") {
+                    eprintln!("Error writing to file: {}", e);
+                }
+            }
+        }
+        "esologzip" => {
+            match split_and_zip_log_by_fight(Path::new(file_path), Path::new("C:/Users/H/Downloads/esologzipoutput/")) {
+                Ok(_) => {println!("Done split + zip")},
+                Err(e) => println!("{e}"),
             }
         }
         "fights" => {
@@ -62,28 +101,7 @@ fn main() {
                 }
             }
         }
-        _ => {
-            let logs = read_file(Path::new(file_path)).unwrap();
-            let query_id: u32 = query.parse::<u32>().unwrap_or(0);
-            let mut effect_name = "Unknown".to_string();
-            let log_analysis = &logs[2];
-
-            if query_id != 0 {
-                for (_index, effect) in &log_analysis.abilities {
-                    if effect.id == query_id {
-                        effect_name = effect.name.clone();
-                    }
-                }
-                
-                println!("Uptime of {}", effect_name);
-                for fight in &log_analysis.fights {
-                    for player in fight.players.iter() {
-                        let uptime = parser::effect::buff_uptime_over_fight(query_id, player.unit_id, fight);
-                        println!("{} {} {:.2}%", fight.name, player.display_name, 100.0 * uptime);
-                    }
-                };
-            }
-        }
+        _ => {}
     }
 }
 

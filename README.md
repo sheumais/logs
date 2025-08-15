@@ -3,22 +3,69 @@
 [![Release](https://github.com/sheumais/logs/actions/workflows/release.yml/badge.svg?branch=release)](https://github.com/sheumais/logs/actions/workflows/release.yml)
 [![Chat](https://img.shields.io/badge/chat-discord-5865f2.svg?logo=discord&logoColor=fff)](https://discord.gg/FjJjXHjUQ4)
 
-This desktop tool is designed to help you manage and process your ESO log files. 
-
-While it doesn’t handle uploading, it makes file handling faster and fixes your logs for uploading to [esologs.com](https://esologs.com/).
+This application is designed to help you manage and process your Elder Scrolls Online Encounter log files. 
 
 ## Features & Roadmap
 
+- [x] No ads, 90% less RAM usage, faster processing
 - [x] Scan log file for fixes
-- [x] Split encounter log (10x faster)
-- [x] Merge encounter logs
+- [x] Split & merge encounter log (10x faster)
 - [x] Live logging with fixes
-- [ ] Log analysis page
+- [x] esologs.com integration (work in progress)
+- [ ] esologs parser parity (work in progress)
 
 ### Current Fixes
 - [x] Shows casts of Fatecarver
-- [x] Blockade of Elements shows correct icon
 - [x] Touch of Z'en stacks
-- [ ] Kills showing as 0.0% wipes where possible
+- [x] Scribing skills show their scripts
+- [x] Blockade of Elements shows correct icon
+- [x] Bahsei taint stacks
 
-The [Easy Stalking](https://www.esoui.com/downloads/info2511-EasyStalking.html) AddOn is recommended for automatically logging trials.
+### Other useful log tools: 
+Easy Stalking AddOn for automatically logging trials, dungeons & more
+
+[![Easy Stalking](https://img.shields.io/badge/AddOn-Easy%20Stalking-f03f36.svg?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCA2MCA2MCI+PGcgY2xpcC1wYXRoPSJ1cmwoI2EpIj48cGF0aCBmaWxsPSJ1cmwoI2IpIiBkPSJNNDkgMS41SDExQTkuNSA5LjUgMCAwIDAgMS41IDExdjM4YTkuNSA5LjUgMCAwIDAgOS41IDkuNWgzOGE5LjUgOS41IDAgMCAwIDkuNS05LjVWMTFBOS41IDkuNSAwIDAgMCA0OSAxLjUiLz48cGF0aCBmaWxsPSJ1cmwoI2MpIiBkPSJNMzAgNDRjMTEuNiAwIDIxLTcuODQgMjEtMTcuNVM0MS42IDkgMzAgOSA5IDE2Ljg0IDkgMjYuNSAxOC40IDQ0IDMwIDQ0Ii8+PHBhdGggZmlsbD0iIzAwMCIgZD0iTTMwIDMxYTYgNiAwIDEgMCAwLTEyIDYgNiAwIDAgMCAwIDEyIi8+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTI4LjUgMjZhMi41IDIuNSAwIDEgMCAwLTUgMi41IDIuNSAwIDAgMCAwIDUiLz48bWFzayBpZD0iZSIgd2lkdGg9IjYwIiBoZWlnaHQ9IjYwIiB4PSIwIiB5PSIwIiBtYXNrVW5pdHM9InVzZXJTcGFjZU9uVXNlIiBzdHlsZT0ibWFzay10eXBlOmFscGhhIj48cGF0aCBmaWxsPSJ1cmwoI2QpIiBzdHJva2U9IiMwMDAiIHN0cm9rZS13aWR0aD0iMyIgZD0iTTQ5IDEuNUgxMUE5LjUgOS41IDAgMCAwIDEuNSAxMXYzOGE5LjUgOS41IDAgMCAwIDkuNSA5LjVoMzhhOS41IDkuNSAwIDAgMCA5LjUtOS41VjExQTkuNSA5LjUgMCAwIDAgNDkgMS41WiIvPjwvbWFzaz48ZyBmaWxsPSIjQkEyRDI0IiBtYXNrPSJ1cmwoI2UpIj48cGF0aCBkPSJNOCA0MGEzIDMgMCAxIDAgMC02IDMgMyAwIDAgMCAwIDZtLTQgNGEyIDIgMCAxIDAgMC00IDIgMiAwIDAgMCAwIDRtNTAgNWE1IDUgMCAxIDAgMC0xMCA1IDUgMCAwIDAgMCAxMCIvPjxwYXRoIGQ9Ik00OSA2MmE4IDggMCAxIDAgMC0xNiA4IDggMCAwIDAgMCAxNm0tMTQuNS01YTIuNSAyLjUgMCAxIDAgMC01IDIuNSAyLjUgMCAwIDAgMCA1Ii8+PC9nPjxwYXRoIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLXdpZHRoPSIzIiBkPSJNNDkgMS41SDExQTkuNSA5LjUgMCAwIDAgMS41IDExdjM4YTkuNSA5LjUgMCAwIDAgOS41IDkuNWgzOGE5LjUgOS41IDAgMCAwIDkuNS05LjVWMTFBOS41IDkuNSAwIDAgMCA0OSAxLjVaIi8+PHBhdGggc3Ryb2tlPSIjZmZmIiBkPSJNNSAxMmMuMzMtMi4zMyAyLjItNyA3LTdtNDMgN2MtLjMzLTIuMzMtMi4yLTctNy03Ii8+PHBhdGggZmlsbD0iI2ZmZiIgZD0ibTE3IDQ1LTUgNCA2IDN6Ii8+PHBhdGggc3Ryb2tlPSIjNzAxNDA2IiBzdHJva2Utd2lkdGg9IjEuNSIgZD0iTTkgNDZjLjMzIDIuNSA1IDcuNSAyMSA3LjUiLz48L2c+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJiIiB4MT0iMzAiIHgyPSIzMCIgeTE9IjAiIHkyPSI2MCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPjxzdG9wIHN0b3AtY29sb3I9IiNGNjkzOEQiLz48c3RvcCBvZmZzZXQ9Ii4yNCIgc3RvcC1jb2xvcj0iI0YwM0YzNiIvPjxzdG9wIG9mZnNldD0iLjg2IiBzdG9wLWNvbG9yPSIjRjAzRjM2Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjODAyMzFFIi8+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9ImMiIHgxPSIzNyIgeDI9IjI0IiB5MT0iMTAiIHkyPSI0Mi41IiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHN0b3Agc3RvcC1jb2xvcj0iI2ZmZiIvPjxzdG9wIG9mZnNldD0iLjc3IiBzdG9wLWNvbG9yPSIjZmZmIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjRTdFOEU5Ii8+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9ImQiIHgxPSIzMCIgeDI9IjMwIiB5MT0iMCIgeTI9IjYwIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHN0b3Agc3RvcC1jb2xvcj0iI0Y2OTM4RCIvPjxzdG9wIG9mZnNldD0iLjI0IiBzdG9wLWNvbG9yPSIjRjAzRjM2Ii8+PHN0b3Agb2Zmc2V0PSIuODYiIHN0b3AtY29sb3I9IiNGMDNGMzYiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM4MDIzMUUiLz48L2xpbmVhckdyYWRpZW50PjxjbGlwUGF0aCBpZD0iYSI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTAgMGg2MHY2MEgweiIvPjwvY2xpcFBhdGg+PC9kZWZzPjwvc3ZnPg==)](https://www.esoui.com/downloads/info2332-EasyStalking-Encounterlog.html)
+
+Taste for Blood's Log Insights tool for analysing group and individual player performance and setups in logs
+
+[![Taste for Blood Log Insights](https://img.shields.io/badge/TFB-Log%20Insights-b50e1a.svg?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9IjAgMCAzNzYgMzc2Ij48cGF0aCBmaWxsPSIjQjUwRTFBIiBkPSJNNzcgMjk5QzEwIDI1My0xMCAxNjUgMjggOTMgNTggMzQgMTI0LTMgMTkwIDBhMjAyIDIwMiAwIDAgMSA5MSAzMXYzaC0ybC0yOC0xNGMtMjUtOS01MS0xNS03Ny0xMy02OCA1LTEyOCA1Ni0xNDYgMTIxLTE3IDYyIDQgMTI1IDQ5IDE3MVoiLz48cGF0aCBmaWxsPSIjQjUwRTFBIiBkPSJNMzI3IDIxOWMyMS04MS0yNy0xNjEtMTA4LTE4MmExNjIgMTYyIDAgMCAwLTc4IDEgMTQ1IDE0NSAwIDAgMC05NyAxOTFjLTktMjItMTEtNDYtOS03MCA3LTU2IDQ3LTEwNCAxMDAtMTIzIDE1LTUgMzAtMTAgNDUtMTEgODEtOCAxNTkgNDYgMTcxIDEyOSAzIDIzIDEgNDgtNyA3MC01IDEwLTIwIDYtMTctNVpNMiAxNjBhMjEwIDIxMCAwIDAgMCAxMTEgMjAwaC0xQTE5MCAxOTAgMCAwIDEgMiAxNjBaIi8+PHBhdGggZmlsbD0iI0I1MEUxQSIgZD0iTTI5NiAzMzFjMTAzLTc5IDk3LTIzNS0xMi0zMDZhMTc4IDE3OCAwIDAgMSA4MyAyMTJjLTEyIDM5LTM4IDczLTcxIDk0Wk0xMzQgODNzMyA2IDMgMTVjMCA0NS01MiA2OS01MiAxMDkgMCAzNiA1MCA2NiA2MSA4MS0xNy0xNi03OC0yNi03OC03NCAwLTM5IDQxLTU3IDYyLTk0IDktMTYgNC0zNyA0LTM3Wk02MCAyNDZzOSAxOCAyMyAyNmMxMyA4IDUwIDMwIDYyIDUxIDEzIDIyIDE5IDM4IDEzIDUzIDAgMCAyMy0yNS00LTYzLTIzLTM0LTczLTM0LTk0LTY3WiIvPjxwYXRoIGZpbGw9IiNCNTBFMUEiIGQ9Ik0zMTYgMjQ2cy05IDE4LTIzIDI2Yy0xMyA4LTUwIDMwLTYyIDUxLTEzIDIyLTE5IDM4LTEzIDUzIDAgMC0yMy0yNSA0LTYzIDIzLTM0IDczLTM0IDk0LTY3Wk0yNDIgODNzLTMgNi0zIDE1YzAgNDUgNTIgNjkgNTIgMTA5IDAgMzYtNDkgNjYtNjEgODEgMTctMTYgNzgtMjYgNzgtNzQgMC0zOS00MS01Ny02Mi05NC05LTE2LTQtMzctNC0zN1oiLz48cGF0aCBmaWxsPSIjNUEwRjE0IiBkPSJNMjU0IDIyMGMwIDI5LTI4IDQ0LTQ1IDY0LTE2IDE5LTIxIDQxLTIxIDkyIDAtNTEtNS03My0yMS05Mi0xNy0yMC00NS0zNS00NS02NCAwLTkgMi0xOCA2LTI2IDctMTkgMjEtMzMgMjQtMzcgMi0yIDgtOCAxNS0xOSAxMC0xNiAyMS00MiAyMS03NyAwIDU5IDMyIDkxIDM2IDk2IDUgNiAzMCAzMyAzMCA2M1oiLz48cGF0aCBmaWxsPSIjQjUwRTFBIiBkPSJNMjMzIDE5N2MwIDYgMCAxOC0xMiAyNi0xMyA3LTE3IDUtMjQgMTAtNiA0LTE1IDIzLTM1IDIzcy0zNy0xOC0zNy0zN2wzLTI1YzctMTkgMjEtMzMgMjQtMzcgMi0yIDgtOCAxNS0xOSA4LTEwIDE2LTI0IDIxLTQzIDAgMCA2IDM2IDI2IDYwIDIwIDIzIDE5IDM3IDE5IDQyWiIvPjxwYXRoIGZpbGw9IiNGMEYwRjAiIGQ9Ik0xNzMgMTM5cy00IDE5LTE5IDM1YTUyIDUyIDAgMCAwLTE4IDM1YzAgMTEgOSAyMSAxNiAxOCA4LTMgMi0xMiAyLTIxIDAtMTggMTktMzYgMTktNjdaIi8+PC9zdmc+)](https://tfb.gg/log-insights)
+
+## Building & Contributing
+
+Download and install [Rust](https://rustup.rs/)
+
+Install the [Tauri CLI](https://v2.tauri.app/reference/cli/) using Cargo
+```sh
+cargo install tauri-cli --version "^2.0.0" --locked
+```
+
+Install [trunk](https://trunkrs.dev/)
+```sh
+cargo install --locked trunk
+```
+
+Add the WebAssembly target
+```sh
+rustup target add wasm32-unknown-unknown
+```
+
+Run the desktop application
+```sh
+cargo tauri dev
+```
+
+If you have any questions, concerns or suggestions feel free to join the discord.
+
+# Disclaimer
+
+By downloading or using this software, you acknowledge and agree to the following terms:
+
+- Good Faith Effort: I have made a reasonable attempt to ensure that this application is safe, functional, and free of major bugs. However, due to the nature of software development, it is impossible to guarantee that the app will always work flawlessly in every environment or scenario.
+
+- No Warranty: This software is provided "as-is," without any warranties or guarantees, express or implied. I do not guarantee that the application will be free from errors, bugs, or interruptions, nor that it will always meet your specific needs or expectations.
+
+- Usage at Your Own Risk: While I have taken precautions to ensure the app works properly, you are solely responsible for any consequences that arise from using it. I am not liable for any direct, indirect, incidental, special, or consequential damages, including data loss or system issues, that may result from using or not being able to use the application.
+
+- No Responsibility for Third-Party Interactions: The application may interact with third-party services, websites, or tools. I cannot guarantee the availability or safety of those external services, and I am not responsible for any issues that arise from their use.
+
+- Compliance with Laws: It is your responsibility to ensure that using this software complies with any relevant laws, regulations, and policies in your region.

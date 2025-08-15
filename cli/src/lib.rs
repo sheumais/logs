@@ -2,6 +2,8 @@ use std::{fs::File, io::{self, BufRead, BufReader}, path::Path};
 use parser::log::Log;
 pub mod log_edit;
 pub mod split_log;
+pub mod esologs_format;
+pub mod esologs_convert;
 
 pub fn read_file(file_path: &Path) -> io::Result<Vec<Log>> {
     let file = File::open(file_path)?;
@@ -14,32 +16,55 @@ pub fn read_file(file_path: &Path) -> io::Result<Vec<Log>> {
     while let Some(line) = lines.next() {
         let line = line?;
         let mut in_brackets = false;
-        let mut current_segment_start = 0;
-        let mut parts = Vec::new();
-    
-        for (i, char) in line.char_indices() {
-            match char {
-                '[' => {
-                    in_brackets = true;
-                    current_segment_start = i + 1;
-                }
-                ']' => {
+        let mut in_quotes = false;
+        let mut start = 0;
+        let mut just_closed_quote = false; 
+        let mut parts: Vec<&str> = Vec::new();
+
+        let mut iter = line.char_indices().peekable();
+        while let Some((i, ch)) = iter.next() {
+            match ch {
+                '[' if !in_quotes => { in_brackets = true;  start = i + 1; }
+                ']' if !in_quotes => {
                     in_brackets = false;
-                    parts.push(&line[current_segment_start..i]);
-                    current_segment_start = i + 1;
+                    parts.push(&line[start..i]);
+                    start = i + 1;
                 }
-                ',' if !in_brackets => {
-                    parts.push(&line[current_segment_start..i]);
-                    current_segment_start = i + 1; 
+
+                '"' => {
+                    if in_quotes && iter.peek().map(|(_,c)| *c) == Some('"') {
+                        iter.next();
+                        continue;
+                    }
+
+                    if in_quotes {
+                        parts.push(&line[start..i]);
+                        in_quotes = false;
+                        just_closed_quote = true;
+                        start = i + 1;
+                    } else {
+                        in_quotes = true;
+                        start = i + 1;
+                    }
                 }
+
+                ',' if !in_brackets && !in_quotes => {
+                    if just_closed_quote {
+                        just_closed_quote = false;
+                        start = i + 1;
+                    } else {
+                        parts.push(&line[start..i]);
+                        start = i + 1;
+                    }
+                }
+
                 _ => {}
             }
         }
-    
-        if current_segment_start < line.len() {
-            parts.push(&line[current_segment_start..]);
+
+        if start < line.len() || just_closed_quote {
+            parts.push(&line[start..]);
         }
-        parts.retain(|part| !part.is_empty());
         let second_value = parts[1];
 
         match second_value {

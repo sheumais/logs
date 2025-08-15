@@ -3,10 +3,32 @@ use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Write, BufRead};
 use std::path::Path;
-use parser::effect::{is_zen_dot, ZEN_DEBUFF_ID};
-use parser::log::Log;
+use parser::effect::{is_zen_dot, MOULDERING_TAINT_ID, MOULDERING_TAINT_TIME, ZEN_DEBUFF_ID};
+use parser::event::{self, EventResult};
+use parser::parse::{self, gear_piece, unit_state};
 use parser::player::GearSlot;
 use parser::set::{get_item_type_from_hashmap, ItemType};
+use parser::unit::UnitState;
+
+pub struct CustomLogData {
+    pub zen_stacks: HashMap<u32, ZenDebuffState>,
+    pub scribing_abilities: Vec<ScribingAbility>,
+    pub scribing_map: HashMap<u32, usize>,
+    pub scribing_unit_map: HashMap<(u32, u32), usize>,
+    pub taint_stacks: HashMap<u32, MoulderingTaintState>,
+}
+
+impl CustomLogData {
+    pub fn new() -> Self {
+        CustomLogData {
+            zen_stacks: HashMap::new(),
+            scribing_abilities: Vec::new(),
+            scribing_map: HashMap::new(),
+            scribing_unit_map: HashMap::new(),
+            taint_stacks: HashMap::new(),
+        }
+    }
+}
 
 pub struct ZenDebuffState {
     active: bool,
@@ -14,13 +36,30 @@ pub struct ZenDebuffState {
     contributing_ability_ids: Vec<u32>,
 }
 
+pub struct MoulderingTaintState {
+    stacks: u8,
+    last_timestamp: u64,
+    last_source_unit_state: UnitState,
+    last_target_unit_state: UnitState,
+    last_cast_id: u32,
+}
+
+const BEGIN_SCRIBING_ABILITIES: u32 = 1000;
+
+#[derive(Debug, Clone)]
+pub struct ScribingAbility {
+    pub id: u32,
+    pub name: String,
+    pub icon: String,
+    pub scribing: Option<Vec<String>>,
+}
 
 pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
     let file: File = File::open(file_path)?;
     let reader = BufReader::new(file);
 
     let mut modified_lines: Vec<String> = Vec::new();
-    let mut zen_status: HashMap<u32, ZenDebuffState> = HashMap::new();
+    let mut custom_log_data = CustomLogData::new();
 
     for line_result in reader.lines() {
         let line = match line_result {
@@ -30,7 +69,7 @@ pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
                 continue;
             }
         };
-        modified_lines.extend(handle_line(line, &mut zen_status));
+        modified_lines.extend(handle_line(line, &mut custom_log_data));
     }
 
     let mut new_path = file_path.with_extension("");
@@ -56,41 +95,56 @@ pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn handle_line(line: String, mut zen_hashmap: &mut HashMap<u32, ZenDebuffState>) -> Vec<String> {
-    let mut modified_lines: Vec<String> = Vec::new();
-    let mut in_brackets = false;
-    let mut current_segment_start = 0;
-    let mut parts = Vec::new();
+pub fn handle_line(line: String, mut custom_log_data: &mut CustomLogData) -> Vec<String> {
+    let mut parts: Vec<&str> = Vec::new();
+    let mut start = 0usize;
+    let mut bracket_level = 0u32;
+    let bytes = line.as_bytes();
 
-    for (i, char) in line.char_indices() {
-        match char {
-            '[' => {
-                in_brackets = true;
-                current_segment_start = i + 1;
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'[' => {
+                bracket_level += 1;
+                if i + 1 < bytes.len() && bytes[i + 1] == b'[' {
+                    i += 1;
+                }
             }
-            ']' => {
-                in_brackets = false;
-                parts.push(&line[current_segment_start..i]);
-                current_segment_start = i + 1;
+            b']' => {
+                if bracket_level > 0 {
+                    bracket_level -= 1;
+                }
+                if i + 1 < bytes.len() && bytes[i + 1] == b']' {
+                    i += 1;
+                }
             }
-            ',' if !in_brackets => {
-                parts.push(&line[current_segment_start..i]);
-                current_segment_start = i + 1; 
+            b',' if bracket_level == 0 => {
+                let field = line[start..i].trim_matches(&['[', ']'][..]).trim();
+                if !field.is_empty() {
+                    parts.push(field);
+                }
+                start = i + 1;
             }
             _ => {}
         }
+        i += 1;
     }
 
-    if current_segment_start < line.len() {
-        parts.push(&line[current_segment_start..]);
+    if start < line.len() {
+        let field = line[start..].trim_matches(&['[', ']'][..]).trim();
+        if !field.is_empty() {
+            parts.push(field);
+        }
     }
-    parts.retain(|part| !part.is_empty());
 
     let parts_clone = parts.clone();
     if parts_clone.get(1) == Some(&"BEGIN_COMBAT") {
-        zen_hashmap.clear();
+        custom_log_data.zen_stacks.clear();
     }
-    let new_addition = check_line_for_edits(parts, &mut zen_hashmap);
+    let new_addition = check_line_for_edits(parts, &mut custom_log_data);
+
+    let mut modified_lines = Vec::new();
+
     if let Some(new_lines) = new_addition {
         if parts_clone.get(1) != Some(&"ABILITY_INFO")
             && parts_clone.get(1) != Some(&"EFFECT_INFO")
@@ -99,6 +153,7 @@ pub fn handle_line(line: String, mut zen_hashmap: &mut HashMap<u32, ZenDebuffSta
         {
             modified_lines.push(line.clone());
         }
+
         modified_lines.extend(new_lines);
     } else {
         modified_lines.push(line.clone());
@@ -106,15 +161,16 @@ pub fn handle_line(line: String, mut zen_hashmap: &mut HashMap<u32, ZenDebuffSta
     return modified_lines
 }
 
-pub fn check_line_for_edits(parts: Vec<&str>, zen_hashmap: &mut HashMap<u32, ZenDebuffState>) -> Option<Vec<String>> {
+pub fn check_line_for_edits(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
     if parts.len() < 2 {
         return None;
     }
     match parts[1] {
-        "EFFECT_CHANGED" => check_effect_changed(parts, zen_hashmap),
-        "ABILITY_INFO" => check_ability_info(parts),
+        "EFFECT_CHANGED" => check_effect_changed(parts, &mut custom_log_data.zen_stacks),
+        "ABILITY_INFO" => check_ability_info(parts, custom_log_data),
         "EFFECT_INFO" => add_arcanist_beam_effect_information(parts),
-        "PLAYER_INFO" => modify_player_data(parts),
+        "PLAYER_INFO" => modify_player_data(parts, custom_log_data),
+        "COMBAT_EVENT" => modify_combat_event(parts, custom_log_data),
         _ => None,
     }
 }
@@ -137,11 +193,11 @@ fn check_effect_changed(parts: Vec<&str>, zen_hashmap: &mut HashMap<u32, ZenDebu
 const MAX_ZEN_STACKS: u8 = 5;
 
 fn add_zen_stacks(parts: Vec<&str>, zen_status: &mut HashMap<u32, ZenDebuffState>) -> Option<Vec<String>> {
-    let source_unit_state = parser::log::Log::parse_unit_state(parts.clone(), 6);
+    let source_unit_state = unit_state(&parts, 6);
     let target_unit_state = if parts[16] == "*" {
         source_unit_state.clone()
     } else {
-        parser::log::Log::parse_unit_state(parts.clone(), 16)
+        unit_state(&parts, 16)
     };
 
     let source_unit_id = source_unit_state.unit_id;
@@ -244,8 +300,28 @@ fn add_arcanist_beam_cast(parts: Vec<&str>) -> Option<Vec<String>> {
     return None;
 }
 
-fn check_ability_info(parts: Vec<&str>) -> Option<Vec<String>> {
-    if parts[2] == PRAGMATIC || parts[2] == EXHAUSTING {
+fn check_ability_info(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
+    let ability = parse::ability(&parts);
+    if ability.scribing.is_some() {
+        let ability_name_clone = ability.name.clone();
+        let ability_id_clone = ability.id;
+        let scribing_ability = ScribingAbility {
+            id: BEGIN_SCRIBING_ABILITIES + custom_log_data.scribing_abilities.len() as u32,
+            name: ability.name,
+            icon: ability.icon,
+            scribing: ability.scribing,
+        };
+        custom_log_data.scribing_abilities.push(scribing_ability);
+        let index = custom_log_data.scribing_abilities.len() - 1;
+        let scribing_ability = &custom_log_data.scribing_abilities[index];
+        custom_log_data.scribing_map.insert(ability.id, index);
+        let focus_script = &scribing_ability.scribing.as_ref().unwrap()[0];
+        let signature_script = &scribing_ability.scribing.as_ref().unwrap()[1];
+        let affix_script = &scribing_ability.scribing.as_ref().unwrap()[2];
+        let new_name = format!("{} ({} / {})", &scribing_ability.name, signature_script, affix_script);
+        return Some(vec![format!("{},{},{},\"{}\",\"{}\",{},{},\"{}\",\"{}\",\"{}\"", parts[0], "ABILITY_INFO", scribing_ability.id, new_name, scribing_ability.icon, "F", "T", focus_script, signature_script, affix_script),
+        format!("{},{},{},\"{}\",\"{}\",{},{},\"{}\",\"{}\",\"{}\"", parts[0], "ABILITY_INFO", ability_id_clone, ability_name_clone, scribing_ability.icon, "F", "T", focus_script, signature_script, affix_script)]);
+    } else if parts[2] == PRAGMATIC || parts[2] == EXHAUSTING {
         add_arcanist_beam_information(parts)
     } else if parts[2].parse::<u32>().ok() == Some(BLOCKADE_DEFAULT) {
         add_blockade_versions(parts)     
@@ -298,8 +374,10 @@ fn add_blockade_versions(parts: Vec<&str>) -> Option<Vec<String>> {
     return Some(lines);
 }
 
-fn modify_player_data(parts: Vec<&str>) -> Option<Vec<String>> {
+fn modify_player_data(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
     
+    // println!("Modifying player data: {:?}", parts);
+
     if parts.len() < 7 { // this can occur if either the player is wearing nothing and has no skills, or they're not in the trial.
         return None;
     }
@@ -311,7 +389,7 @@ fn modify_player_data(parts: Vec<&str>) -> Option<Vec<String>> {
     let mut frontbar_type = ItemType::Unknown;
     let mut backbar_type = ItemType::Unknown;
     for i in 5..gear_parts {
-        let gear_piece = Log::handle_equipment_info(parts[i]);
+        let gear_piece = gear_piece(parts[i]);
         let item_slot = gear_piece.slot;
         let item_type = get_item_type_from_hashmap(gear_piece.item_id);
         if item_slot == GearSlot::MainHand {
@@ -320,26 +398,49 @@ fn modify_player_data(parts: Vec<&str>) -> Option<Vec<String>> {
             backbar_type = item_type;
         }
     }
+    // println!("{}", custom_log_data.scribing_map.len());
+    // println!("{}", custom_log_data.scribing_map.keys().map(|k| k.to_string()).collect::<Vec<_>>().join(", "));
+    // println!("{}", custom_log_data.scribing_abilities.iter().map(|a| a.id.to_string()).collect::<Vec<_>>().join(", "));
+    // println!("{:?}", custom_log_data.scribing_abilities);
+
+    let player_id = parts[2].parse::<u32>().unwrap();
 
     for id in &mut primary_ability_id_list {
-        if *id == BLOCKADE_DEFAULT || *id == BLOCKADE_FIRE || *id == BLOCKADE_FROST || *id == BLOCKADE_STORMS {
+        // println!("Checking id: {}", id);
+        // println!("Current scribing_map: {:?}", custom_log_data.scribing_map);
+        if matches!(*id, BLOCKADE_DEFAULT | BLOCKADE_FIRE | BLOCKADE_FROST | BLOCKADE_STORMS) {
             *id = match frontbar_type {
                 ItemType::FrostStaff => BLOCKADE_FROST,
                 ItemType::FireStaff => BLOCKADE_FIRE,
                 ItemType::LightningStaff => BLOCKADE_STORMS,
                 _ => BLOCKADE_DEFAULT,
             };
+        } else if let Some(index) = custom_log_data.scribing_unit_map.get(&(player_id, *id)) {
+            // println!("Setting {} to originally existing index {} for {}", player_id, index, id);
+            *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
+        } else if custom_log_data.scribing_map.contains_key(id) {
+            if let Some(index) = custom_log_data.scribing_map.get(id) {
+                custom_log_data.scribing_unit_map.insert((player_id, *id), *index);
+                *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
+            }
         }
     }
 
     for id in &mut backup_ability_id_list {
-        if *id == BLOCKADE_DEFAULT || *id == BLOCKADE_FIRE || *id == BLOCKADE_FROST || *id == BLOCKADE_STORMS {
+        if matches!(*id, BLOCKADE_DEFAULT | BLOCKADE_FIRE | BLOCKADE_FROST | BLOCKADE_STORMS) {
             *id = match backbar_type {
                 ItemType::FrostStaff => BLOCKADE_FROST,
                 ItemType::FireStaff => BLOCKADE_FIRE,
                 ItemType::LightningStaff => BLOCKADE_STORMS,
                 _ => BLOCKADE_DEFAULT,
             };
+        } else if let Some(index) = custom_log_data.scribing_unit_map.get(&(player_id, *id)) {
+            *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
+        } else if custom_log_data.scribing_map.contains_key(id) {
+            if let Some(index) = custom_log_data.scribing_map.get(id) {
+                custom_log_data.scribing_unit_map.insert((player_id, *id), *index);
+                *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
+            }
         }
     }
     
@@ -366,4 +467,91 @@ fn modify_player_data(parts: Vec<&str>) -> Option<Vec<String>> {
 
 
     Some(vec![new_parts.join(",")])
+}
+
+fn modify_combat_event(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
+    let ability_id = parts[8].parse::<u32>().unwrap();
+    // println!("ability_id: {}", ability_id);
+    let time = parts[0].parse().unwrap();
+    if ability_id == *MOULDERING_TAINT_ID {
+        // println!("{:?}", parts);
+        let source = parse::unit_state(&parts, 9);
+        let target = parse::unit_state(&parts, 19);
+        let cast_track_id = parts[7].parse::<u32>().unwrap(); 
+        let entry = custom_log_data.taint_stacks.entry(target.unit_id).or_insert_with(|| MoulderingTaintState {
+            stacks: 0,
+            last_timestamp: time,
+            last_source_unit_state: source,
+            last_cast_id: cast_track_id,
+            last_target_unit_state: target,
+        });
+        entry.stacks += 1;
+        entry.last_timestamp = time;
+        entry.last_source_unit_state = source;
+        entry.last_cast_id = cast_track_id;
+        entry.last_target_unit_state = target;
+        let mut lines: Vec<String> = vec![];
+        if entry.stacks == 1 {
+            let mut gained_line = format!(
+                "{},{},{},{},{},{},",
+                time, "EFFECT_CHANGED", "GAINED", "1", cast_track_id, MOULDERING_TAINT_ID.to_string()
+            );
+            let rest = parts[9..].join(",");
+            gained_line.push_str(&rest);
+            lines.push(gained_line);
+        }
+        let mut line = format!(
+            "{},{},{},{},{},{},",
+            time, "EFFECT_CHANGED", "UPDATED", entry.stacks, cast_track_id, MOULDERING_TAINT_ID.to_string()
+        );
+        let rest = parts[9..].join(",");
+        line.push_str(&rest);
+        lines.push(line);
+        // println!("{}", line);
+        return Some(lines);
+    } else {
+        let mut removed = Vec::new();
+        for (id, entry) in custom_log_data.taint_stacks.iter_mut() {
+            if parts[19] != "*" {
+                let target = parse::unit_state(&parts, 19);
+                if target.unit_id == *id {
+                    if (time > entry.last_timestamp + *MOULDERING_TAINT_TIME as u64 || (event::parse_event_result(parts[2]).unwrap() == EventResult::Died || target.health == 0)) && entry.stacks > 0 {
+                        entry.last_timestamp = time;
+                        entry.stacks = 0;
+                        let e = entry.last_source_unit_state;
+                        let mut line = format!(
+                            "{},{},{},{},{},{},{},{}/{},{}/{},{}/{},{}/{},{}/{},{},{},{},{},",
+                            time, "EFFECT_CHANGED", "FADED", "1", entry.last_cast_id, MOULDERING_TAINT_ID.to_string(),
+                            e.unit_id, e.health, e.max_health, e.magicka, e.max_magicka, e.stamina, e.max_stamina, e.ultimate, e.max_ultimate, e.werewolf, e.werewolf_max, e.shield, e.map_x, e.map_y, e.heading
+                        );
+                        let rest = parts[19..].join(",");
+                        line.push_str(&rest);
+                        // println!("{}", line);
+                        removed.push(id.clone());
+                        return Some(vec![line]);
+                    }
+                }
+            }
+            if time > entry.last_timestamp + 500 + *MOULDERING_TAINT_TIME as u64 && entry.stacks > 0 {
+                entry.last_timestamp = time;
+                entry.stacks = 0;
+                let e = entry.last_source_unit_state;
+                let t = entry.last_target_unit_state;
+                let line = format!(
+                    "{},{},{},{},{},{},{},{}/{},{}/{},{}/{},{}/{},{}/{},{},{},{},{},{},{}/{},{}/{},{}/{},{}/{},{}/{},{},{},{},{}",
+                    time, "EFFECT_CHANGED", "FADED", "1", entry.last_cast_id, MOULDERING_TAINT_ID.to_string(),
+                    e.unit_id, e.health, e.max_health, e.magicka, e.max_magicka, e.stamina, e.max_stamina, e.ultimate, e.max_ultimate, e.werewolf, e.werewolf_max, e.shield, e.map_x, e.map_y, e.heading,
+                    t.unit_id, "0", t.max_health, "0", "0", "0", "0", "0", "0", "0", "0", "0", t.map_x, t.map_y, t.heading
+                );
+                removed.push(id.clone());
+                return Some(vec![line]);
+            }
+        }
+        for k in removed {
+            custom_log_data.taint_stacks.remove_entry(&k);
+        }
+        
+    }
+
+    return None
 }

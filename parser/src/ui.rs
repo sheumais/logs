@@ -1,4 +1,4 @@
-use crate::{event::DamageType, player::{self, ClassId, EnchantType, GearEnchant, GearPiece, GearQuality, GearTrait, Loadout}};
+use crate::{event::DamageType, player::{self, Class, EnchantType, GearEnchant, GearPiece, GearQuality, GearTrait, Loadout}};
 use std::fmt;
 use crate::set;
 
@@ -63,7 +63,7 @@ impl Colour {
             DamageType::Cold => Colour::from_tuple(Self::COLD),
             DamageType::Disease => Colour::from_tuple(Self::DISEASE),
             DamageType::Fire => Colour::from_tuple(Self::FIRE),
-            DamageType::Generic => Colour::from_tuple(Self::GENERIC),
+            DamageType::Heal => Colour::from_tuple(Self::GENERIC),
             DamageType::Magic => Colour::from_tuple(Self::MAGIC_DAMAGE),
             DamageType::Oblivion => Colour::from_tuple(Self::OBLIVION),
             DamageType::Physical => Colour::from_tuple(Self::PHYSICAL),
@@ -73,15 +73,16 @@ impl Colour {
         }
     }
 
-    pub fn from_class_id(class_id: ClassId) -> Self {
+    pub fn from_class_id(class_id: Class) -> Self {
         match class_id {
-            ClassId::Arcanist => Colour::from_tuple(Self::ARCANIST),
-            ClassId::Dragonknight => Colour::from_tuple(Self::DRAGONKNIGHT),
-            ClassId::Necromancer => Colour::from_tuple(Self::NECROMANCER),
-            ClassId::Nightblade => Colour::from_tuple(Self::NIGHTBLADE),
-            ClassId::Sorcerer => Colour::from_tuple(Self::SORCERER),
-            ClassId::Templar => Colour::from_tuple(Self::TEMPLAR),
-            ClassId::Warden => Colour::from_tuple(Self::WARDEN),
+            Class::Arcanist => Colour::from_tuple(Self::ARCANIST),
+            Class::Dragonknight => Colour::from_tuple(Self::DRAGONKNIGHT),
+            Class::Necromancer => Colour::from_tuple(Self::NECROMANCER),
+            Class::Nightblade => Colour::from_tuple(Self::NIGHTBLADE),
+            Class::Sorcerer => Colour::from_tuple(Self::SORCERER),
+            Class::Templar => Colour::from_tuple(Self::TEMPLAR),
+            Class::Warden => Colour::from_tuple(Self::WARDEN),
+            _ => Colour::from_tuple(Self::GENERIC),
         }
     }
 
@@ -111,7 +112,7 @@ pub fn print_colour_test() {
         DamageType::Cold,
         DamageType::Disease,
         DamageType::Fire,
-        DamageType::Generic,
+        DamageType::Heal,
         DamageType::Magic,
         DamageType::Oblivion,
         DamageType::Physical,
@@ -120,13 +121,13 @@ pub fn print_colour_test() {
     ];
 
     let class_ids = [
-        ClassId::Arcanist,
-        ClassId::Dragonknight,
-        ClassId::Necromancer,
-        ClassId::Nightblade,
-        ClassId::Sorcerer,
-        ClassId::Templar,
-        ClassId::Warden,
+        Class::Arcanist,
+        Class::Dragonknight,
+        Class::Necromancer,
+        Class::Nightblade,
+        Class::Sorcerer,
+        Class::Templar,
+        Class::Warden,
     ];
 
     println!("Gear Quality Colours:");
