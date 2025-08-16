@@ -291,7 +291,6 @@ pub fn is_damage_event(event_result: EventResult) -> bool {
     }
 }
 
-#[allow(dead_code)]
 pub fn is_heal_event(event_result: EventResult) -> bool {
     match event_result {
         EventResult::Heal => true,
@@ -310,7 +309,7 @@ pub enum DamageType {
     Drown,
     Earth,
     Fire,
-    Generic,
+    Heal,
     Magic,
     None,
     Oblivion,
@@ -327,7 +326,7 @@ pub fn parse_damage_type(damage_type: &str) -> DamageType {
         "DROWN" => DamageType::Drown,
         "EARTH" => DamageType::Earth,
         "FIRE" => DamageType::Fire,
-        "GENERIC" => DamageType::Generic,
+        "GENERIC" => DamageType::Heal,
         "MAGIC" => DamageType::Magic,
         "NONE" => DamageType::None,
         "OBLIVION" => DamageType::Oblivion,

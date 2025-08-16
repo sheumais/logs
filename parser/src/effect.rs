@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
-
-use crate::{fight::Fight, player::Player, set::get_item_type_from_hashmap, unit::UnitState};
+use crate::{player::Player, set::get_item_type_from_hashmap, unit::UnitState};
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Ability {
@@ -33,7 +32,7 @@ pub struct EffectEvent {
     pub player_initiated_remove_cast_track_id: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum EffectChangeType {
     Faded,
     Gained,
@@ -78,12 +77,10 @@ pub fn parse_status_effect_type(string: &str) -> StatusEffectType {
     }
 }
 
-#[allow(dead_code)]
 pub const ZEN_DEBUFF_ID: &'static u32 = &126597;
-#[allow(dead_code)]
-const CRITICAL_CHANCE_MAXIMUM: &'static f32 = &21912.00097656250181;
+pub const MOULDERING_TAINT_ID: &'static u32 = &150002;
+pub const MOULDERING_TAINT_TIME: &'static u16 = &2500;
 
-#[allow(dead_code)]
 pub fn is_zen_dot(effect_id: u32) -> bool {
     match effect_id {
             // class abilities
@@ -163,52 +160,45 @@ pub fn is_zen_dot(effect_id: u32) -> bool {
     }
 }
 
-#[allow(dead_code)]
-/// Calculate percentage of fight that unit had buff
-/// 
-/// Returns float with value 0 to 1
-pub fn buff_uptime_over_fight(buff_id: u32, unit_id: u32, fight: &Fight) -> f32 {
-    let mut time_with_buff = 0;
-    let mut gained_buff_timestamp = fight.start_time;
-    let mut has_buff: bool = false;
-    for player in &fight.players {
-        if player.unit_id == unit_id {
-            if player.effects.contains(&buff_id) {
-                has_buff = true;
-            }
-        }
-    }
-    for monster in &fight.monsters {
-        if monster.unit_id == unit_id {
-            if monster.effects.contains(&buff_id) {
-                has_buff = true;
-            }
-        }
-    }
-    for effect_event in &fight.effect_events {
-        if effect_event.target_unit_state.unit_id == unit_id && effect_event.ability_id == buff_id {
-            if effect_event.change_type == EffectChangeType::Gained && !has_buff {
-                gained_buff_timestamp = effect_event.time;
-                has_buff = true;
-            } else if effect_event.change_type == EffectChangeType::Faded && has_buff {
-                let time_difference = effect_event.time - gained_buff_timestamp;
-                time_with_buff += time_difference;
-                has_buff = false;
-            }
-        }
-    }
-    if has_buff {
-        let time_difference = fight.end_time - gained_buff_timestamp;
-        time_with_buff += time_difference;
-    }
-
-    let fight_duration = fight.end_time - fight.start_time;
-    if fight_duration > 0 {
-        // println!("Time: {} / Duration {}", time_with_buff, fight_duration);
-        (time_with_buff as f32) / (fight_duration as f32)
-    } else {
-        0.0
-    }
+pub enum SummonablePets {
+    // Sorcerer
+    UnstableFamiliar = 23304,
+    VolatileFamiliar = 23316,
+    UnstableClannfear = 23319,
+    GreaterStormAtronach = 23492,
+    ChargedAtronach = 23495,
+    StormAtronach = 23634,
+    WingedTwilight = 24613,
+    TwilightMatriach = 24639,
+    TwilightTormenter = 24636,
+    // Nightblade
+    Shade = 33211,
+    DarkShade = 35434,
+    ShadowImage = 35441,
+    // Undaunted
+    // TrappingWebs =,
+    // ShadowSilk =,
+    // TanglingWebs =,
+    // Werewolf
+    // Pack leader ultimate ???
+    // Warden
+    ViolentGuardian = 85982,
+    EternalGuardian = 85986,
+    WildGuardian = 85990,
+    // Necromancer
+    SpiritMender = 115710,
+    IntensiveMender = 118840,
+    SpiritGuardian = 118912,
+    SacrificialBones = 114860,
+    GraveLordsSacrifice = 117749,
+    BlightedBlastbones = 117690,
+    SkeletalMage = 114317,
+    SkeletalArcher = 118680,
+    SkeletonArcanist = 118726,
+    // Arcanist
+    VitalizingGlyphic = 183709,
+    GlyphicOfTheTides = 193794,
+    ResonatingGlyphic = 193558, // Hostile!
 }
 
 fn update_blockade_ability(ability: &mut Ability, item_type: &crate::set::ItemType) {

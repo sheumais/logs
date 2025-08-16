@@ -1,20 +1,13 @@
 use tauri_sys::{core::invoke, event};
 use yew::prelude::*;
 use yew_router::hooks::use_navigator;
-use yew_icons::{Icon, IconId};
+use yew_icons::IconId;
 use futures::StreamExt;
-use crate::{routes::Route, ui::style::*};
+use crate::{routes::Route, ui::{icon_button::{BackArrow, IconButton}, style::*}};
 
 #[function_component(ModifyScreen)]
 pub fn modify_screen() -> Html {
     let navigator = use_navigator().unwrap();
-    let go_home = {
-        let navigator = navigator.clone();
-        Callback::from(move |_| {
-            navigator.push(&Route::Home);
-        })
-    };
-
     let is_modifying = use_state(|| false);
     let progress = use_state(|| 0u32);
     let has_chosen_file = use_state(|| false);
@@ -58,18 +51,18 @@ pub fn modify_screen() -> Html {
 
     html! {
         <>
-            <div class={classes!(if *is_modifying {hide_style().clone()} else {none_style().clone()}, "back-arrow-hover")}>
-                <Icon class={back_arrow_style().clone()} icon_id={IconId::LucideArrowLeftCircle} onclick={go_home} />
+            <div class={classes!(if *is_modifying {hide_style().clone()} else {none_style().clone()})}>
+                <BackArrow/>
             </div>
             <div class={container_style().clone()}>
-                <div class={classes!(icon_wrapper_style().clone(), "icon-wrapper")}>
+                <div class={classes!(icon_wrapper_style().clone())}>
                     if !*has_chosen_file {
-                        <Icon 
-                            width={"5em".to_owned()} height={"5em".to_owned()} class={icon_border_style().clone()} icon_id={IconId::LucideUpload} onclick={select_log} 
+                        <IconButton
+                            icon_id={IconId::LucideUpload}
+                            description={"Select an encounter log"}
+                            onclick={Some(select_log.clone())}
+                            class={icon_border_style()}
                         />
-                        <div class={icon_description().clone()}>
-                            {"Select an encounter log"}
-                        </div>
                     }
                 </div>
                 <div class={

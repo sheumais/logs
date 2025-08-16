@@ -19,11 +19,10 @@ pub fn icon_style() -> Style {
     "#)).expect("Error creating style")
 }
 
-pub fn icon_style_inactive() -> Style {
+pub fn icon_style_small() -> Style {
     Style::new(css!(r#"
         position: relative;
-        opacity: 0.5;
-        cursor: not-allowed;
+        cursor: pointer;
     "#)).expect("Error creating style")
 }
 
@@ -80,16 +79,16 @@ pub fn icon_border_style() -> Style {
 
 pub fn back_arrow_style() -> Style {
     Style::new(css!(r#"
-        position: absolute;
+        position: fixed;
         opacity: 0.5;
         top: 0px;
         left: 0px;
         width: 2em;
         height: 2em;
-        padding: 0.5em;
+        margin-left: 1em;
         cursor: pointer;
 
-        back-arrow-hover:hover & {
+        &:hover {
             opacity: 1.0;
         }
     "#)).expect("Error creating style")
@@ -136,6 +135,7 @@ pub fn header_style() -> Style {
         user-select: none;
         margin: 1.5vw;
         margin-bottom: 3vw;
+        text-shadow: 2px 2px 2px black;
     "#)).expect("Error creating style")
 }
 
@@ -146,17 +146,140 @@ pub fn subheader_style() -> Style {
         font-size: 3vh;
         top: 0.32em;
         left: 100%;
-        color: #777;
+        color: #999;
+        text-shadow: 1px 1px 1px black;
     "#)).expect("Error creating style")
 }
 
 pub fn paragraph_style() -> Style {
     Style::new(css!(r#"
-        margin-bottom: 1em;
-        margin-top: 1em;
+        margin-bottom: 1.25em;
+        text-shadow: 1px 1px 1px black;
     "#)).expect("Error creating style")
 }
 
 pub fn none_style() -> Style {
     Style::new(css!(r#""#)).expect("Error creating style")
+}
+
+pub fn login_box_style() -> Style {
+    Style::new(css!(r#"
+        position: absolute;
+        white-space: nowrap;
+        bottom: 2vh;
+        right: 2vh;
+        padding: 2vh;
+        width: auto;
+        max-height: 10vh;
+        display: flex;
+        font-size: 4vh;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+        overflow: hidden;
+        transition: width 0.3s, background 0.3s, border-radius 0.3s;
+        background: rgba(0,0,0,0.2);
+        cursor: pointer;
+        border-radius: 25px;
+    
+        .login-name {
+            opacity: 0;
+            max-width: 0;
+            transition: opacity 0.3s, max-width 0.3s, margin-right 0.3s;
+            overflow: hidden;
+        }
+    
+        &:hover {
+            background: rgba(0,0,0,0.5);
+            border-radius: 10px;
+        }
+        &:hover .login-name {
+            opacity: 1;
+            max-width: 300px;
+            margin-right: 10px;
+        }
+    "#)).expect("Error creating style")
+}
+
+pub fn fancy_link_style() -> Style {
+    Style::new(css!(r#"
+        cursor: pointer;
+        display: inline-block;
+        color: #fff;
+        margin-left: 0.25em;
+        margin-right: 0.25em;
+
+        &:hover {
+            animation: slide-gradient 3s linear infinite;
+            color: transparent;
+            background-image: linear-gradient(45deg,rgb(253, 216, 53),rgb(236, 64, 122), rgb(98, 0, 234), rgb(236, 64, 122), rgb(253, 216, 53));
+            -webkit-background-clip: text; 
+            background-clip: text;
+            cursor: pointer;
+            display: inline-block;
+            background-position: 100% 0;
+            transition: none;
+            background-size: 300% 100%;
+            text-shadow: none;
+        }
+
+        @keyframes slide-gradient {
+            0% {
+                background-position: 0 0;
+            }
+            100% {
+                background-position: 300% 0;
+            }
+        }
+    "#)).expect("Error creating style")
+}
+
+pub fn text_link_style() -> Style {
+    Style::new(css!(r#"
+        cursor: pointer;
+        display: inline-block;
+        color: #fff;
+    "#)).expect("Error creating style")
+}
+
+pub fn angel_style() -> Style {
+    Style::new(css!(r#"
+        background: linear-gradient(45deg,rgba(224, 195, 215, 1), rgba(255, 0, 179, 1), rgba(126, 0, 176, 1), rgba(255, 0, 179, 1), rgba(224, 195, 215, 1));
+        background-size: 300% 100%;
+        background-position: 0 0;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: none;
+        animation: slide-gradient 3s linear infinite;
+
+        @keyframes slide-gradient {
+            0% {
+                background-position: 0 0;
+            }
+            100% {
+                background-position: 300% 0;
+            }
+        }
+    "#)).expect("Failed to create Angel style")
+}
+
+pub fn pancake_style() -> Style {
+    Style::new(css!(r#"
+        background: linear-gradient(45deg,rgba(0, 255, 140, 1) 0%, rgba(112, 87, 255, 1) 25%, rgba(0, 183, 255, 1) 50%, rgba(112, 87, 255, 1) 75%, rgba(0, 255, 140, 1) 100%);
+        background-size: 300% 100%;
+        background-position: 0 0;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: none;
+        animation: slide-gradient 3s linear infinite;
+
+        @keyframes slide-gradient {
+            0% {
+                background-position: 0 0;
+            }
+            100% {
+                background-position: 300% 0;
+            }
+        }
+    "#)).expect("Failed to create Pancake style")
 }

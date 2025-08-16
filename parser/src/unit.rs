@@ -5,12 +5,13 @@ pub enum UnitType {
 }
 
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Reaction {
     PlayerAlly,
     NpcAlly,
     Hostile,
     Neutral,
+    Friendly,
     None,
 }
 
@@ -20,6 +21,7 @@ pub fn match_reaction(string: &str) -> Reaction {
         "NPC_ALLY" => Reaction::NpcAlly,
         "HOSTILE" => Reaction::Hostile,
         "NEUTRAL" => Reaction::Neutral,
+        "FRIENDLY" => Reaction::Friendly,
         _ => Reaction::None,
     }
 }

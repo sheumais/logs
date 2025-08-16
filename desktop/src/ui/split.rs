@@ -2,13 +2,11 @@ use futures::StreamExt;
 use stylist::css;
 use tauri_sys::{core::invoke, event};
 use yew::prelude::*;
-use yew_router::hooks::use_navigator;
-use yew_icons::{Icon, IconId};
+use yew_icons::IconId;
 
-use crate::{routes::Route, ui::style::*};
+use crate::ui::{icon_button::{BackArrow, IconButton}, style::*};
 
 struct SplitCombineState {
-    hovered: UseStateHandle<Option<usize>>,
     is_splitting: UseStateHandle<bool>,
     is_combining: UseStateHandle<bool>,
     progress: UseStateHandle<u32>,
@@ -16,21 +14,13 @@ struct SplitCombineState {
 
 #[function_component(SplitCombineScreen)]
 pub fn split_combine_screen() -> Html {
-    let navigator = use_navigator().unwrap();
-    let hovered = use_state(|| None::<usize>);
     let is_splitting = use_state(|| false);
     let is_combining = use_state(|| false);
     let progress = use_state(|| 0);
     let state = SplitCombineState {
-        hovered,
         is_splitting,
         is_combining,
         progress,
-    };
-
-    let go_home = {
-        let navigator = navigator.clone();
-        Callback::from(move |_| navigator.push(&Route::Home))
     };
 
     let split_log = {
@@ -93,21 +83,9 @@ pub fn split_combine_screen() -> Html {
         });
     }
 
-    let buttons = vec![
-        (IconId::BootstrapFileEarmarkArrowUp, icon_style().clone(), Some(split_log.clone()), "Split log"),
-        (IconId::BootstrapFolder, icon_style().clone(), Some(combine_log.clone()), "Combine logs"),
-    ];
-
     html! {
         <>
-            <Icon
-                class={classes!(
-                    if *state.is_combining || *state.is_splitting { hide_style().clone() } else { none_style().clone() },
-                    back_arrow_style()
-                )}
-                icon_id={IconId::LucideArrowLeftCircle}
-                onclick={go_home}
-            />
+            if *state.is_combining || *state.is_splitting { } else { <BackArrow/> }
             <div class={container_style().clone()}>
                 <div class={classes!(
                     css!(r#"margin-top: 2em;"#),
@@ -116,38 +94,18 @@ pub fn split_combine_screen() -> Html {
                     {format!("{}%", *state.progress)}
                 </div>
                 <div class={icon_wrapper_style().clone()}>
-                    {
-                        for buttons.iter().enumerate().map(|(i, (icon_id, style, onclick, desc))| {
-                            let hovered = state.hovered.clone();
-                            let onmouseover = {
-                                let hovered = hovered.clone();
-                                Callback::from(move |_| hovered.set(Some(i)))
-                            };
-                            let onmouseout = {
-                                let hovered = hovered.clone();
-                                Callback::from(move |_| hovered.set(None))
-                            };
-                            html! {
-                                <div class={classes!(style.clone(), "icon-button")}
-                                     {onmouseover}
-                                     {onmouseout}
-                                >
-                                    <Icon
-                                        width={"5em".to_owned()}
-                                        height={"5em".to_owned()}
-                                        class={style.clone()}
-                                        icon_id={icon_id.clone()}
-                                        onclick={onclick.clone()}
-                                    />
-                                    <div class={
-                                        if hovered.as_ref() == Some(&i) {icon_description_visible().clone()} else {icon_description().clone()}
-                                    }>
-                                        {desc}
-                                    </div>
-                                </div>
-                            }
-                        })
-                    }
+                    <IconButton
+                        icon_id={IconId::BootstrapFileEarmarkArrowUp}
+                        description={"Split log"}
+                        onclick={Some(split_log.clone())}
+                        class={icon_style()}
+                    />
+                    <IconButton
+                        icon_id={IconId::BootstrapFolder}
+                        description={"Combine logs"}
+                        onclick={Some(combine_log.clone())}
+                        class={icon_style()}
+                    />
                 </div>
             </div>
         </>

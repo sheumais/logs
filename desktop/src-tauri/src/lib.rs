@@ -1,11 +1,15 @@
-use cli::log_edit::{handle_line, ZenDebuffState};
+use cli::{esologs_convert::{build_master_table, build_report_segment, event_timestamp, split_and_zip_log_by_fight, write_zip_with_logtxt, ESOLogProcessor}, esologs_format::{EncounterReportCode, LoginResponse, UploadSettings, ESO_LOGS_COM_VERSION, ESO_LOGS_PARSER_VERSION}, log_edit::{handle_line, CustomLogData}};
+use reqwest::{multipart::{Form, Part}, Client};
+use serde_json::json;
 use state::AppState;
 use tauri_plugin_updater::UpdaterExt;
 use std::{
-    collections::HashMap, fs::{File, OpenOptions}, io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write}, path::Path, thread, time::Duration
+    env::temp_dir, fs::{self, create_dir_all, File, OpenOptions}, io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write}, path::{Path, PathBuf}, sync::atomic::Ordering::SeqCst, thread, time::{Duration, SystemTime, UNIX_EPOCH}
 };
-use tauri::{path::BaseDirectory, Emitter, Manager, State, Window};
+use tauri::{async_runtime::spawn_blocking, path::BaseDirectory, Emitter, Manager, State, Window};
 use tauri_plugin_dialog::DialogExt;
+
+use crate::state::cookie_file_path;
 mod state;
 
 const LINE_COUNT_FOR_PROGRESS: usize = 25000usize;
@@ -34,7 +38,7 @@ fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), Str
         .open(&new_path)
         .map_err(|e| format!("Failed to create output file: {}", e))?;
     let mut writer = BufWriter::new(file);
-    let mut zen_status: HashMap<u32, ZenDebuffState> = HashMap::new();
+    let mut custom_log_data = CustomLogData::new();
 
     let mut processed = 0;
     for line_result in reader.lines() {
@@ -45,7 +49,7 @@ fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), Str
                 continue;
             }
         };
-        let modified_line = handle_line(line, &mut zen_status);
+        let modified_line = handle_line(line, &mut custom_log_data);
         for entry in modified_line {
             writeln!(writer, "{entry}").ok();
         }
@@ -256,11 +260,11 @@ fn live_log_from_folder(window: Window, app_state: State<'_, AppState>) -> Resul
             if let Some(last_newline_offset) = buffer.iter().rposition(|&b| b == b'\n') {
                 let complete_data = &buffer[..=last_newline_offset];
                 let text = String::from_utf8_lossy(complete_data);
-                let mut zen_status: HashMap<u32, ZenDebuffState> = HashMap::new();
+                let mut custom_log_data = CustomLogData::new();
                 let mut new_lines = 0;
 
                 for line in text.lines() {
-                    let line = handle_line(line.to_string(), &mut zen_status);
+                    let line = handle_line(line.to_string(), &mut custom_log_data);
                     for entry in line {
                         writeln!(writer, "{entry}").ok();
                         new_lines += 1;
@@ -328,8 +332,8 @@ fn pick_files_internal(
 
 
     let picked_files = match picker_type {
-        PickerType::SingleFile => dialog.blocking_pick_files(),
-        PickerType::MultipleFiles => dialog.blocking_pick_file().map(|f| vec![f]),
+        PickerType::SingleFile => dialog.blocking_pick_file().map(|f| vec![f]),
+        PickerType::MultipleFiles => dialog.blocking_pick_files(),
         PickerType::Folder => folder_dialog.blocking_pick_folder().map(|f| vec![f]),
         PickerType::MultipleFolders => folder_dialog.blocking_pick_folders(),
     };
@@ -373,6 +377,597 @@ fn pick_and_load_folder(window: Window, state: State<'_, AppState>) -> Result<()
     pick_files_internal(&window, PickerType::Folder, &state)
 }
 
+#[tauri::command]
+fn delete_log_file(state: State<'_, AppState>) -> Result<(), String> {
+    let paths_guard = state.log_files.read().unwrap();
+    let file_paths = paths_guard.as_ref().ok_or("No file paths set")?;
+    let file_path = file_paths.get(0).ok_or("No file path in vector")?;
+    let path_ref = file_path.as_path().ok_or("Invalid file path")?;
+    std::fs::remove_file(path_ref).map_err(|e| format!("Failed to delete file: {}", e))?;
+    Ok(())
+}
+
+fn save_login_response(resp: &LoginResponse) {
+    let path = cookie_file_path().with_file_name("login_response.json");
+    if let Ok(json) = serde_json::to_string(resp) {
+        println!("Saving login response");
+        let _ = fs::write(path, json);
+    }
+}
+
+fn load_login_response() -> Option<LoginResponse> {
+    let path = cookie_file_path().with_file_name("login_response.json");
+    if let Ok(data) = fs::read_to_string(path) {
+        serde_json::from_str(&data).ok()
+    } else {
+        None
+    }
+}
+
+#[tauri::command]
+fn get_saved_login_response() -> Option<LoginResponse> {
+    load_login_response()
+}
+
+fn save_upload_settings(resp: &UploadSettings) {
+    let path = cookie_file_path().with_file_name("user-settings.json");
+    if let Ok(json) = serde_json::to_string(&resp) {
+        println!("Saving upload settings {}", json);
+        let _ = fs::write(path, json);
+    }
+}
+
+fn load_upload_settings() -> Option<UploadSettings> {
+    let path = cookie_file_path().with_file_name("user-settings.json");
+    if let Ok(data) = fs::read_to_string(path) {
+        println!("Returning saved settings {}", data);
+        serde_json::from_str(&data).ok()
+    } else {
+        None
+    }
+}
+
+#[tauri::command]
+fn get_saved_upload_settings() -> Option<UploadSettings> {
+    load_upload_settings()
+}
+
+#[tauri::command]
+async fn login(state: tauri::State<'_, AppState>, username: String, password: String) -> Result<LoginResponse, String> {
+    let payload = serde_json::json!({ "email": username, "password": password, "version": ESO_LOGS_COM_VERSION });
+
+    let client = {
+        let client_guard = state.http.read().map_err(|e| e.to_string())?;
+        client_guard.client.clone()
+    };
+    let resp = client
+        .post("https://www.esologs.com/desktop-client/log-in")
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Err(format!("Server returned {}", resp.status()));
+    }
+    println!("{:?}", resp.headers());
+    let text = resp.text().await.map_err(|e| format!("Failed to read response text: {e}"))?;
+    let body: LoginResponse = serde_json::from_str(&text).map_err(|e| format!("Invalid JSON: {e}"))?;
+    {
+        let http = state.http.read().unwrap();
+        let store = http.cookie_store.lock().unwrap();
+        for cookie in store.iter_any() {
+            println!("{:?}", cookie);
+        }
+    }
+
+    state.http.write().unwrap().save_cookies();
+    save_login_response(&body);
+    Ok(body)
+}
+
+#[tauri::command]
+fn logout(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let http = state.http.write().map_err(|e| e.to_string())?;
+    if let Ok(mut store) = http.cookie_store.lock() {
+        store.clear();
+        if let Ok(json) = serde_json::to_string(&*store) {
+            let _ = fs::write(cookie_file_path(), json);
+        }
+    }
+    let login_response_path = cookie_file_path().with_file_name("login_response.json");
+    if let Err(e) = fs::remove_file(login_response_path) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            println!("Failed to remove login_response.json: {}", e);
+        }
+    }
+    let settings_path = cookie_file_path().with_file_name("user-settings.json");
+    if let Err(e) = fs::remove_file(settings_path) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            println!("Failed to remove user-settings.json: {}", e);
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn cancel_upload_log(state: State<'_, AppState>) -> Result<(), String> {
+    state.upload_cancel_flag.store(true, SeqCst);
+    Ok(())
+}
+
+async fn create_report(
+    state: &State<'_, AppState>,
+    client: &Client,
+    settings: &UploadSettings,
+) -> Result<EncounterReportCode, String> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_millis();
+
+    let payload = json!({
+        "clientVersion": ESO_LOGS_COM_VERSION,
+        "parserVersion": ESO_LOGS_PARSER_VERSION,
+        "startTime": now,
+        "endTime": now,
+        "fileName": "Encounter.log",
+        "serverOrRegion": settings.region,
+        "visibility": settings.visibility,
+        "reportTagId": null,
+        "description": settings.description,
+        "guildId": if settings.guild == -1 { None } else { Some(settings.guild) },
+    });
+    println!("Create-report payload: {payload}");
+
+    println!("POST https://www.esologs.com/desktop-client/create-report");
+
+    let response = client
+        .post("https://www.esologs.com/desktop-client/create-report")
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Request error: {e}"))?;
+
+    let status = response.status();
+    let raw_body = response.text().await.map_err(|e| format!("Failed to read response text: {e}"))?;
+
+    println!("Received response status: {}", status);
+    println!("Raw response body: {}", raw_body);
+
+    if !status.is_success() {
+        return Err(format!("Server returned error status: {} with body: {}", status, raw_body));
+    }
+
+    state.http.write().unwrap().save_cookies();
+
+    let report: EncounterReportCode = serde_json::from_str(&raw_body)
+        .map_err(|e| format!("Invalid JSON: {e}\nRaw body: {raw_body}"))?;
+
+    println!("Parsed report: {:?}", report);
+
+    let code = report.code.clone();
+    *state.esolog_code.write().map_err(|e| e.to_string())? = Some(code.clone());
+    Ok(report)
+}
+
+#[tauri::command]
+async fn upload_log(state: State<'_, AppState>, upload_settings: UploadSettings) -> Result<EncounterReportCode, String> {
+    state.upload_cancel_flag.store(false, SeqCst);
+    let log_path_opt = {
+        let lock = state.log_files.read().map_err(|e| e.to_string())?;
+        println!("log_files = {:?}", *lock);
+        lock.clone()
+    };
+    let log_path = log_path_opt
+        .and_then(|v| v.get(0).cloned())
+        .ok_or("No log file selected")?;
+    println!("Using log file: {:?}", log_path);
+
+    let client = {
+        let g = state.http.read().map_err(|e| e.to_string())?;
+        g.client.clone()
+    };
+    println!("Spawning split/zip task …");
+    
+    let tmp_dir = temp_dir().join("esologtool_temporary");
+    println!("Temp dir: {:?}", tmp_dir);
+    create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
+
+    let tmp_dir_for_spawn = tmp_dir.clone();
+    let log_path_clone = log_path.clone();
+    let upload_cancel_flag = state.upload_cancel_flag.clone();
+
+    let pairs = spawn_blocking(move || -> Result<Vec<(PathBuf,PathBuf,u16)>, String> {
+        if upload_cancel_flag.load(SeqCst) {
+            return Err("Upload cancelled".to_string());
+        }
+        split_and_zip_log_by_fight(
+            log_path_clone.as_path().ok_or("Invalid log file path")?,
+            tmp_dir_for_spawn.as_path()
+        )?;
+        println!("Finished split_and_zip_log_by_fight");
+
+        let mut out = Vec::new();
+        for idx in 1u16.. {
+            let tbl = tmp_dir_for_spawn.join(format!("master_table_{idx}.zip"));
+            let seg = tmp_dir_for_spawn.join(format!("report_segment_{idx}.zip"));
+            if tbl.exists() && seg.exists() {
+                println!("Found pair idx={idx}: {:?}, {:?}", tbl, seg);
+                out.push((tbl, seg, idx));
+            } else {
+                break;
+            }
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking error: {e}"))??;
+
+    let report_code = create_report(&state, &client, &upload_settings).await?;
+    let code = report_code.code.clone();
+
+    let base = "https://www.esologs.com/desktop-client";
+    let mut segment_id = 1u16;
+
+    let ts_path = tmp_dir.join("timestamps");
+    let timestamps   = read_timestamps(&ts_path)?;
+
+    for ((tbl, seg, _), (start, end)) in pairs.iter().zip(timestamps.iter()) {
+        if state.upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err("Upload cancelled".to_string());
+        }
+        upload_master_table(
+            &client,
+            &format!("{base}/set-report-master-table/{code}"),
+            segment_id,
+            tbl,
+        ).await?;
+        segment_id = upload_segment_and_get_next_id(
+            &client,
+            &format!("{base}/add-report-segment/{code}"),
+            seg,
+            segment_id,
+            *start,
+            *end,
+        ).await?;
+    }
+
+    println!("POST {base}/terminate-report/{code}");
+    client.post(&format!("{base}/terminate-report/{code}"))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    println!("Report terminated OK");
+
+    end_report(&client, code.clone()).await;
+
+    if let Err(e) = fs::remove_dir_all(&tmp_dir) {
+        println!("Failed to remove temp dir {:?}: {}", tmp_dir, e);
+    }
+    
+    save_upload_settings(&upload_settings);
+
+    Ok(report_code)
+}
+
+async fn upload_master_table(
+    client: &reqwest::Client,
+    url: &str,
+    segment_id: u16,
+    zip_path: &Path,
+) -> Result<(), String> {
+    println!("→ upload_master_table(): segment_id = {segment_id}");
+    println!("  ZIP path = {:?}", zip_path);
+    println!("  POST {}", url);
+
+    let bytes = fs::read(zip_path)
+        .map_err(|e| format!("Failed to read master_table zip: {e}"))?;
+    println!("  size = {} bytes", bytes.len());
+
+    let part = Part::bytes(bytes)
+        .file_name(zip_path.file_name().unwrap().to_string_lossy().to_string())
+        .mime_str("application/zip")
+        .map_err(|e| format!("Invalid MIME type: {e}"))?;
+
+    let form = Form::new()
+        .text("segmentId", segment_id.to_string())
+        .text("isRealTime", "false")
+        .part("logfile", part);
+
+    let resp = client.post(url).multipart(form).send()
+        .await
+        .map_err(|e| format!("Request error: {e}"))?;
+
+    let status = resp.status();
+
+    println!("  status = {}", status);
+
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        println!("  body   = {body}");
+        return Err(format!("Master table upload failed: {} – {body}", status));
+    }
+
+    println!("  ✔ master table upload OK");
+    Ok(())
+}
+
+async fn upload_segment_and_get_next_id(
+    client: &reqwest::Client,
+    url: &str,
+    zip_path: &Path,
+    segment_id: u16,
+    start_time: u64,
+    end_time: u64,
+) -> Result<u16, String> {
+    println!("→ upload_segment_and_get_next_id()");
+    println!("  segment_id = {segment_id}");
+    println!("  ZIP path   = {:?}", zip_path);
+    println!("  POST       = {url}");
+
+    let bytes = fs::read(zip_path)
+        .map_err(|e| format!("Failed to read segment zip: {e}"))?;
+    println!("  size       = {} bytes", bytes.len());
+
+    let params = serde_json::json!({
+        "startTime":            start_time,
+        "endTime":              end_time,
+        "mythic":               0,
+        "isLiveLog":            false,
+        "isRealTime":           false,
+        "inProgressEventCount": 0,
+        "segmentId":            segment_id,
+    });
+    println!("{}", params);
+
+    let logfile_part = Part::bytes(bytes)
+        .file_name(zip_path.file_name().unwrap().to_string_lossy().to_string())
+        .mime_str("application/zip")
+        .map_err(|e| format!("Invalid MIME type: {e}"))?;
+
+    let parameters_part = Part::text(params.to_string())
+        .mime_str("application/json")
+        .map_err(|e| format!("Invalid MIME type: {e}"))?;
+
+    let form = Form::new()
+        .part("logfile", logfile_part)
+        .part("parameters", parameters_part);
+
+    let resp = client.post(url).multipart(form).send()
+        .await
+        .map_err(|e| format!("Request error: {e}"))?;
+
+    let status = resp.status();
+    let body   = resp.text().await
+        .map_err(|e| format!("Failed to read response text: {e}"))?;
+
+    println!("  status     = {}", status);
+    println!("  raw body   = {}", body);
+
+    if !status.is_success() {
+        return Err(format!("Segment upload failed: {status} - {body}"));
+    }
+
+    let next_id = serde_json::from_str::<serde_json::Value>(&body)
+        .map_err(|e| format!("Bad JSON: {e}\nRaw body: {body}"))?
+        .get("nextSegmentId")
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| format!("Missing `nextSegmentId` in response: {body}"))?;
+
+    println!("  ✔ nextSegmentId = {next_id}");
+    Ok(next_id as u16)
+}
+
+async fn end_report(client: &reqwest::Client, code: String) {
+    println!("POST https://www.esologs.com/desktop-client/terminate-report");
+
+    let _response = client
+        .post(format!("https://www.esologs.com/desktop-client/terminate-report/{}", code))
+        .send()
+        .await
+        .map_err(|e| format!("Request error: {e}"));
+}
+
+fn read_timestamps(path: &Path) -> Result<Vec<(u64, u64)>, String> {
+    use std::io::{BufRead, BufReader};
+    let f = File::open(path)
+        .map_err(|e| format!("Failed to open {path:?}: {e}"))?;
+    let mut out = Vec::new();
+
+    for (i, line) in BufReader::new(f).lines().enumerate() {
+        let line = line.map_err(|e| format!("Read error at line {i}: {e}"))?;
+        let mut split = line.splitn(2, ',');
+        let start = split.next()
+            .ok_or("Missing startTime")?
+            .parse::<u64>()
+            .map_err(|e| format!("Bad startTime at line {i}: {e}"))?;
+        let end = split.next()
+            .ok_or("Missing endTime")?
+            .parse::<u64>()
+            .map_err(|e| format!("Bad endTime at line {i}: {e}"))?;
+        out.push((start, end));
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_settings: UploadSettings) -> Result<EncounterReportCode, String> {
+    let input_path: PathBuf = {
+        let guard = app_state.live_log_folder.read().map_err(|e| e.to_string())?;
+        let folder = guard.as_ref().ok_or("No folder selected")?.clone();
+        folder.as_path().ok_or("Invalid path")?.join("Encounter.log")
+    };
+
+    let client = {
+        let g = app_state.http.read().map_err(|e| e.to_string())?;
+        g.client.clone()
+    };
+
+    let report_code = create_report(&app_state, &client, &upload_settings).await?;
+    let code: String = report_code.code.clone();
+    window.emit("live_log_code", code.clone()).map_err(|e| format!("Failed to emit live log code: {}", e))?;
+
+    let base = "https://www.esologs.com/desktop-client".to_string();
+    let tmp_dir = std::env::temp_dir().join(format!("esologtool_live_{code}"));
+    std::fs::create_dir_all(&tmp_dir).map_err(|e| format!("Failed to create temp dir: {e}"))?;
+
+    let window = window.clone();
+    let upload_cancel_flag = app_state.upload_cancel_flag.clone();
+
+    let handle = tauri::async_runtime::spawn(async move {
+        let mut input_file = loop {
+            match std::fs::OpenOptions::new().read(true).open(&input_path) {
+                Ok(f) => break f,
+                Err(_) => {
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    continue;
+                }
+            }
+        };
+
+        let mut pos = input_file
+            .seek(std::io::SeekFrom::Start(0))
+            .expect("seek failed");
+
+        let mut elp = ESOLogProcessor::new();
+        let mut custom_state = CustomLogData::new();
+        let mut first_timestamp: Option<u64> = None;
+        let mut segment_id: u16 = 1;
+
+        loop {
+            if upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
+                break;
+            }
+
+            input_file
+                .seek(std::io::SeekFrom::Start(pos))
+                .expect("seek failed");
+
+            let mut buffer = Vec::new();
+            let mut reader = std::io::BufReader::new(&input_file);
+            let bytes_read = reader.read_to_end(&mut buffer).expect("read failed");
+
+            if bytes_read == 0 {
+                std::thread::sleep(std::time::Duration::from_secs(5));
+                continue;
+            }
+
+            if let Some(last_nl) = buffer.iter().rposition(|&b| b == b'\n') {
+                let text = String::from_utf8_lossy(&buffer[..=last_nl]);
+                let mut processed = 0usize;
+
+                for line in text.lines() {
+                    let mut split = line.splitn(4, ',');
+                    let _first = split.next();
+                    let second = split.next();
+                    let third = split.next();
+
+                    if let Some("BEGIN_LOG") = second {
+                        if let Some(third_str) = third {
+                            if let Ok(ts) = third_str.parse::<u64>() {
+                                first_timestamp = Some(ts);
+                                elp = ESOLogProcessor::new();
+                                custom_state = CustomLogData::new();
+                            }
+                        }
+                    }
+
+                    let is_end_combat = matches!(second, Some("END_COMBAT"));
+
+                    for l in handle_line(line.to_string(), &mut custom_state) {
+                        elp.handle_line(l.to_string());
+                    }
+
+                    if is_end_combat {
+                        let seg_zip =
+                            tmp_dir.join(format!("report_segment_{segment_id}.zip"));
+                        let tbl_zip =
+                            tmp_dir.join(format!("master_table_{segment_id}.zip"));
+
+                        let seg_data = build_report_segment(&elp);
+                        write_zip_with_logtxt(&seg_zip, seg_data.as_bytes())
+                            .expect("seg zip write failed");
+
+                        let tbl_data = build_master_table(&mut elp);
+                        write_zip_with_logtxt(&tbl_zip, tbl_data.as_bytes())
+                            .expect("tbl zip write failed");
+
+                        let (start_ts, end_ts) = {
+                            let events = &elp.eso_logs_log.events;
+                            if !events.is_empty() {
+                                let mut last_ts =
+                                    event_timestamp(&events[events.len() - 1]);
+                                if last_ts.is_some() && first_timestamp.is_some() {
+                                    last_ts = Some(
+                                        last_ts.unwrap() + first_timestamp.unwrap(),
+                                    );
+                                }
+                                match (first_timestamp, last_ts) {
+                                    (Some(first), Some(last)) => (first, last),
+                                    _ => (0, 0),
+                                }
+                            } else {
+                                (0, 0)
+                            }
+                        };
+
+                        if let Err(e) = upload_master_table(
+                            &client,
+                            &format!("{base}/set-report-master-table/{code}"),
+                            segment_id,
+                            &tbl_zip,
+                        ).await {
+                            eprintln!("Master table upload failed: {e}");
+                        }
+
+                        match upload_segment_and_get_next_id(
+                            &client,
+                            &format!("{base}/add-report-segment/{code}"),
+                            &seg_zip,
+                            segment_id,
+                            start_ts,
+                            end_ts,
+                        ).await {
+                            Ok(next) => segment_id = next,
+                            Err(e) => {
+                                eprintln!("Segment upload failed: {e}");
+                                segment_id += 1;
+                            }
+                        }
+
+                        elp.eso_logs_log.events.clear();
+                    }
+
+                    processed += 1;
+                }
+
+                if processed > 0 {
+                    println!("Processed: {}", processed);
+                    let _ = window.emit("live_log_progress", processed as u32);
+                }
+
+                pos += (last_nl + 1) as u64;
+            }
+
+            std::thread::sleep(std::time::Duration::from_secs(5));
+        }
+
+        let _ = client
+            .post(&format!("{base}/terminate-report/{code}"))
+            .send()
+            .await;
+
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+    });
+
+    if let Err(e) = handle.await {
+        return Err(format!("Live log task failed: {e}"));
+    }
+
+    Ok(report_code)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -394,7 +989,15 @@ pub fn run() {
             modify_log_file,
             split_encounter_file_into_log_files,
             combine_encounter_log_files,
-            live_log_from_folder
+            live_log_from_folder,
+            login,
+            logout,
+            upload_log,
+            live_log_upload,
+            cancel_upload_log,
+            delete_log_file,
+            get_saved_login_response,
+            get_saved_upload_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
