@@ -216,8 +216,11 @@ impl fmt::Display for GearPiece {
             display_text.push_str(&format!("{:?} ", self.gear_trait));
         }
 
-        if self.enchant.enchant_type != EnchantType::Invalid {
-            display_text.push_str(&format!("{} ", self.enchant));
+        if self.enchant.is_some() {
+            let enchant_unwrapped = self.enchant.clone().unwrap();
+            if enchant_unwrapped.enchant_type != EnchantType::Invalid {
+                display_text.push_str(&format!("{} ", enchant_unwrapped));
+            }
         }
 
         // display_text.push_str(&format!("({})", self.item_id));

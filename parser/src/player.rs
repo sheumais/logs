@@ -82,12 +82,7 @@ pub fn empty_gear_piece() -> GearPiece {
         gear_trait: GearTrait::None,
         quality: GearQuality::None,
         set_id: 0,
-        enchant: GearEnchant {
-            enchant_type: EnchantType::None,
-            is_cp: false,
-            enchant_level: 0,
-            enchant_quality: GearQuality::None,
-        },
+        enchant: None,
     }
 }
 
@@ -190,15 +185,15 @@ impl fmt::Display for Race {
 pub fn match_race(string: &str) -> Race {
     match string {
         "1" => Race::Breton,
-        "2" => Race::Redguard, // ???
+        "2" => Race::Redguard,
         "3" => Race::Orc,
         "4" => Race::DarkElf,
         "5" => Race::Nord,
-        "6" => Race::Argonian, // ???
+        "6" => Race::Argonian,
         "7" => Race::HighElf,
-        "8" => Race::WoodElf, // ???
+        "8" => Race::WoodElf,
         "9" => Race::Khajiit,
-        "10" => Race::Imperial, // ???
+        "10" => Race::Imperial,
         _ => Race::None,
     }
 }
@@ -434,12 +429,12 @@ pub struct GearPiece {
     pub gear_trait: GearTrait,
     pub quality: GearQuality,
     pub set_id: u16,
-    pub enchant: GearEnchant,
+    pub enchant: Option<GearEnchant>,
 }
 
 pub fn veteran_level_to_cp(level: u8, is_cp: bool) -> u8 {
     if is_cp {
-        level * 10
+        (level.saturating_mul(10)).min(u8::MAX)
     } else {
         level
     }
@@ -456,4 +451,108 @@ pub fn is_appropriate_level(level: u8, is_cp: bool) -> bool {
 
 pub fn is_maximum_item_level(level: u8, is_cp: bool) -> bool {
     veteran_level_to_cp(level, is_cp) == maximum_item_level()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::unit::blank_unit_state;
+
+    use super::*;
+
+    #[test]
+    fn test_insert_gear_piece() {
+        let mut player = Player {
+            unit_id: 1,
+            is_local_player: true,
+            player_per_session_id: 1,
+            class_id: Class::Dragonknight,
+            race_id: Race::Breton,
+            name: "Test Player".to_string(),
+            display_name: "Test".to_string(),
+            character_id: 12345,
+            level: 10,
+            champion_points: 0,
+            is_grouped_with_local_player: false,
+            unit_state: blank_unit_state(),
+            effects: vec![],
+            gear: empty_loadout(),
+            primary_abilities: vec![],
+            backup_abilities: vec![],
+        };
+
+        let gear_piece = GearPiece {
+            slot: GearSlot::Head,
+            item_id: 42,
+            is_cp: false,
+            level: 50,
+            gear_trait: GearTrait::Sturdy,
+            quality: GearQuality::Legendary,
+            set_id: 100,
+            enchant: None,
+        };
+
+        player.insert_gear_piece(gear_piece.clone());
+
+        assert_eq!(player.gear.head, gear_piece);
+    }
+
+    #[test]
+    fn test_match_class() {
+        assert_eq!(match_class("1"), Class::Dragonknight);
+        assert_eq!(match_class("117"), Class::Arcanist);
+        assert_eq!(match_class("7"), Class::None);
+    }
+
+    #[test]
+    fn test_match_race() {
+        assert_eq!(match_race("5"), Race::Nord);
+        assert_eq!(match_race("10"), Race::Imperial);
+        assert_eq!(match_race("11"), Race::None);
+    }
+
+    #[test]
+    fn test_match_gear_slot() {
+        assert_eq!(match_gear_slot("HEAD"), GearSlot::Head);
+        assert_eq!(match_gear_slot("BACKUP_OFF"), GearSlot::OffHandBackup);
+        assert_eq!(match_gear_slot("INVALID"), GearSlot::None);
+    }
+
+    #[test]
+    fn test_match_gear_quality() {
+        assert_eq!(match_gear_quality("LEGENDARY"), GearQuality::Legendary);
+        assert_eq!(match_gear_quality("NONE"), GearQuality::None);
+    }
+
+    #[test]
+    fn test_match_gear_trait() {
+        assert_eq!(match_gear_trait("ARMOR_STURDY"), GearTrait::Sturdy);
+        assert_eq!(match_gear_trait("JEWELRY_BLOODTHIRSTY"), GearTrait::Bloodthirsty);
+        assert_eq!(match_gear_trait("UNKNOWN"), GearTrait::None);
+    }
+
+    #[test]
+    fn test_veteran_level_to_cp() {
+        assert_eq!(veteran_level_to_cp(10, true), 100);
+        assert_eq!(veteran_level_to_cp(10, false), 10);
+    }
+
+    #[test]
+    fn test_is_appropriate_level() {
+        assert_eq!(is_appropriate_level(50, false), true);
+        assert_eq!(is_appropriate_level(0, false), false);
+        assert_eq!(is_appropriate_level(200, true), false);
+    }
+
+    #[test]
+    fn test_is_maximum_item_level() {
+        assert!(is_maximum_item_level(16, true));
+        assert!(!is_maximum_item_level(150, false));
+    }
+
+    #[test]
+    fn test_empty_loadout() {
+        let loadout = empty_loadout();
+        assert_eq!(loadout.head.slot, GearSlot::None);
+        assert_eq!(loadout.main_hand.item_id, 0);
+    }
 }
