@@ -119,9 +119,9 @@ impl ESOLogsLog {
         index
     }
 
-    pub fn unit_index(&self, unit_id: u32) -> Option<usize> {
+    pub fn unit_index(&self, unit_id: &u32) -> Option<usize> {
         // println!("{:?}", self.unit_id_to_session_id);
-        let res = self.unit_id_to_units_index.get(&unit_id).copied();
+        let res = self.unit_id_to_units_index.get(unit_id).copied();
         res
     }
 
@@ -160,7 +160,7 @@ impl ESOLogsLog {
         0
     }
 
-    pub fn index_in_session(&mut self, unit_id: u32) -> Option<usize> {
+    pub fn index_in_session(&mut self, unit_id: &u32) -> Option<usize> {
         let session_id = *self.unit_id_to_session_id.get(&unit_id)?;
         if let Some(is_player) = self.players.get(&unit_id) {
             if *is_player {
@@ -179,8 +179,8 @@ impl ESOLogsLog {
         if let Some(&idx) = self.unit_index_in_session.get(&unit_id) {return Some(idx)}
 
         let new_idx = entry.len();
-        entry.push(unit_id);
-        self.unit_index_in_session.insert(unit_id, new_idx);
+        entry.push(*unit_id);
+        self.unit_index_in_session.insert(*unit_id, new_idx);
         Some(new_idx)
     }
 

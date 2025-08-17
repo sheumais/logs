@@ -603,7 +603,9 @@ async fn upload_log(state: State<'_, AppState>, upload_settings: UploadSettings)
     })
     .await
     .map_err(|e| format!("spawn_blocking error: {e}"))??;
-
+    if state.upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
+        return Err("Upload cancelled".to_string());
+    }
     let report_code = create_report(&state, &client, &upload_settings).await?;
     let code = report_code.code.clone();
 
@@ -976,11 +978,11 @@ pub fn run() {
         .manage(AppState::new())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-        let handle = app.handle().clone();
-        tauri::async_runtime::spawn(async move {
-            update(handle).await.unwrap();
-        });
-        Ok(())
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                update(handle).await.unwrap();
+            });
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             pick_and_load_file,
@@ -1020,7 +1022,7 @@ async fn update(app: tauri::AppHandle) -> tauri_plugin_updater::Result<()> {
       .await?;
 
     println!("update installed");
-    app.restart();
+    // app.restart();
   }
 
   Ok(())

@@ -9,6 +9,7 @@ use parser::parse::{self, gear_piece, unit_state};
 use parser::player::GearSlot;
 use parser::set::{get_item_type_from_hashmap, ItemType};
 use parser::unit::UnitState;
+use parser::{EffectChangedEventType, EventType};
 
 pub struct CustomLogData {
     pub zen_stacks: HashMap<u32, ZenDebuffState>,
@@ -95,96 +96,62 @@ pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn handle_line(line: String, mut custom_log_data: &mut CustomLogData) -> Vec<String> {
-    let mut parts: Vec<&str> = Vec::new();
-    let mut start = 0usize;
-    let mut bracket_level = 0u32;
-    let bytes = line.as_bytes();
-
-    let mut i = 0;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'[' => {
-                bracket_level += 1;
-                if i + 1 < bytes.len() && bytes[i + 1] == b'[' {
-                    i += 1;
-                }
-            }
-            b']' => {
-                if bracket_level > 0 {
-                    bracket_level -= 1;
-                }
-                if i + 1 < bytes.len() && bytes[i + 1] == b']' {
-                    i += 1;
-                }
-            }
-            b',' if bracket_level == 0 => {
-                let field = line[start..i].trim_matches(&['[', ']'][..]).trim();
-                if !field.is_empty() {
-                    parts.push(field);
-                }
-                start = i + 1;
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-
-    if start < line.len() {
-        let field = line[start..].trim_matches(&['[', ']'][..]).trim();
-        if !field.is_empty() {
-            parts.push(field);
-        }
-    }
-
-    let parts_clone = parts.clone();
-    if parts_clone.get(1) == Some(&"BEGIN_COMBAT") {
+pub fn handle_line(line: String, custom_log_data: &mut CustomLogData) -> Vec<String> {
+    let parts: Vec<String> = parser::parse::handle_line(&line);
+    
+    if parts.get(1).map(|s| s.as_str()) == Some("BEGIN_COMBAT") {
         custom_log_data.zen_stacks.clear();
     }
-    let new_addition = check_line_for_edits(parts, &mut custom_log_data);
+
+    let new_addition = check_line_for_edits(&parts, custom_log_data);
 
     let mut modified_lines = Vec::new();
 
     if let Some(new_lines) = new_addition {
-        if parts_clone.get(1) != Some(&"ABILITY_INFO")
-            && parts_clone.get(1) != Some(&"EFFECT_INFO")
-            && parts_clone.get(1) != Some(&"PLAYER_INFO")
-            && parts_clone.get(5) != Some(&ZEN_DEBUFF_ID.to_string().as_str())
-        {
-            modified_lines.push(line.clone());
+        let is_ability = parts.get(1).map(|s| s.as_str()) == Some("ABILITY_INFO");
+        let is_effect  = parts.get(1).map(|s| s.as_str()) == Some("EFFECT_INFO");
+        let is_player  = parts.get(1).map(|s| s.as_str()) == Some("PLAYER_INFO");
+
+        let is_zen_debuff = parts
+            .get(5)
+            .and_then(|s| s.parse::<u32>().ok())
+            == Some(*ZEN_DEBUFF_ID);
+
+        if !is_ability && !is_effect && !is_player && !is_zen_debuff {
+            modified_lines.push(line);
         }
 
         modified_lines.extend(new_lines);
     } else {
-        modified_lines.push(line.clone());
+        modified_lines.push(line);
     }
-    return modified_lines
+
+    modified_lines
 }
 
-pub fn check_line_for_edits(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
-    if parts.len() < 2 {
-        return None;
-    }
-    match parts[1] {
-        "EFFECT_CHANGED" => check_effect_changed(parts, &mut custom_log_data.zen_stacks),
-        "ABILITY_INFO" => check_ability_info(parts, custom_log_data),
-        "EFFECT_INFO" => add_arcanist_beam_effect_information(parts),
-        "PLAYER_INFO" => modify_player_data(parts, custom_log_data),
-        "COMBAT_EVENT" => modify_combat_event(parts, custom_log_data),
+fn check_line_for_edits(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
+    let event = parts.get(1).map(|s| EventType::from(s.as_str())).unwrap_or(EventType::Unknown);
+    match event {
+        EventType::EffectChanged => check_effect_changed(parts, &mut custom_log_data.zen_stacks),
+        EventType::AbilityInfo => check_ability_info(parts, custom_log_data),
+        EventType::EffectInfo => add_arcanist_beam_effect_information(parts),
+        EventType::PlayerInfo => modify_player_data(parts, custom_log_data),
+        EventType::CombatEvent => modify_combat_event(parts, custom_log_data),
         _ => None,
     }
 }
 
-const PRAGMATIC: &str = "186369";
-const EXHAUSTING: &str = "186780";
+const PRAGMATIC: &'static u32 = &186369;
+const EXHAUSTING: &'static u32 = &186780;
 
-fn check_effect_changed(parts: Vec<&str>, zen_hashmap: &mut HashMap<u32, ZenDebuffState>) -> Option<Vec<String>> {
+fn check_effect_changed(parts: &[String], zen_hashmap: &mut HashMap<u32, ZenDebuffState>) -> Option<Vec<String>> {
     if parts.len() < 17 {
         return None;
     }
-    match parts[5] {
-        PRAGMATIC | EXHAUSTING => return add_arcanist_beam_cast(parts),
-        id if id == ZEN_DEBUFF_ID.to_string() => return add_zen_stacks(parts, zen_hashmap),
+    match &parts[5] {
+        id if *id == PRAGMATIC.to_string() => return add_arcanist_beam_cast(parts),
+        id if *id == EXHAUSTING.to_string() => return add_arcanist_beam_cast(parts),
+        id if *id == ZEN_DEBUFF_ID.to_string() => return add_zen_stacks(parts, zen_hashmap),
         id if is_zen_dot(id.parse::<u32>().unwrap_or(0)) => return add_zen_stacks(parts, zen_hashmap),
         _ => return None,
     }
@@ -192,7 +159,7 @@ fn check_effect_changed(parts: Vec<&str>, zen_hashmap: &mut HashMap<u32, ZenDebu
 
 const MAX_ZEN_STACKS: u8 = 5;
 
-fn add_zen_stacks(parts: Vec<&str>, zen_status: &mut HashMap<u32, ZenDebuffState>) -> Option<Vec<String>> {
+fn add_zen_stacks(parts: &[String], zen_status: &mut HashMap<u32, ZenDebuffState>) -> Option<Vec<String>> {
     let source_unit_state = unit_state(&parts, 6);
     let target_unit_state = if parts[16] == "*" {
         source_unit_state.clone()
@@ -204,7 +171,7 @@ fn add_zen_stacks(parts: Vec<&str>, zen_status: &mut HashMap<u32, ZenDebuffState
     let target_unit_id = target_unit_state.unit_id;
 
     let is_zen_debuff = parts[5] == ZEN_DEBUFF_ID.to_string();
-    let event_type = parts[2];
+    let event_type = parts.get(2).map(|s| EffectChangedEventType::from(s.as_str())).unwrap_or(EffectChangedEventType::Unknown);
     let ability_id = parts[5].parse::<u32>().unwrap_or(0);
 
     let entry = zen_status.entry(target_unit_id).or_insert_with(|| ZenDebuffState {
@@ -215,16 +182,16 @@ fn add_zen_stacks(parts: Vec<&str>, zen_status: &mut HashMap<u32, ZenDebuffState
 
     if is_zen_debuff {
         match event_type {
-            "GAINED" => {
+            EffectChangedEventType::Gained => {
                 entry.active = true;
                 entry.source_id = source_unit_id;
             }
-            "FADED" => {
+            EffectChangedEventType::Faded => {
                 if source_unit_id == entry.source_id || source_unit_id == target_unit_id {
                     entry.active = false;
                 }
             }
-            "UPDATED" => {
+            EffectChangedEventType::Updated => {
                 if source_unit_id == entry.source_id || source_unit_id == target_unit_id {
                     entry.active = true;
                 }
@@ -235,7 +202,7 @@ fn add_zen_stacks(parts: Vec<&str>, zen_status: &mut HashMap<u32, ZenDebuffState
         let stacks = entry.contributing_ability_ids.len().min(MAX_ZEN_STACKS as usize);
         let mut line = format!(
             "{},{},{},{},{},{},",
-            parts[0], parts[1], event_type, stacks, parts[4], ZEN_DEBUFF_ID.to_string()
+            parts[0], parts[1], parts[2], stacks, parts[4], ZEN_DEBUFF_ID.to_string()
         );
         let rest = parts[6..].join(",");
         line.push_str(&rest);
@@ -243,7 +210,7 @@ fn add_zen_stacks(parts: Vec<&str>, zen_status: &mut HashMap<u32, ZenDebuffState
     } else {
         if source_unit_id == entry.source_id || source_unit_id == target_unit_id {
             match event_type {
-                "GAINED" => {
+                EffectChangedEventType::Gained => {
                     if !entry.contributing_ability_ids.contains(&ability_id) {
                         entry.contributing_ability_ids.push(ability_id);
                         if entry.active {
@@ -258,7 +225,7 @@ fn add_zen_stacks(parts: Vec<&str>, zen_status: &mut HashMap<u32, ZenDebuffState
                         }
                     }
                 }
-                "FADED" => {
+                EffectChangedEventType::Faded => {
                     if entry.contributing_ability_ids.contains(&ability_id) {
                         entry.contributing_ability_ids.retain(|&id| id != ability_id);
                         if entry.active {
@@ -280,10 +247,10 @@ fn add_zen_stacks(parts: Vec<&str>, zen_status: &mut HashMap<u32, ZenDebuffState
     None
 }
 
-fn add_arcanist_beam_cast(parts: Vec<&str>) -> Option<Vec<String>> {
-    if parts[5] == PRAGMATIC || parts[5] == EXHAUSTING {
+fn add_arcanist_beam_cast(parts: &[String]) -> Option<Vec<String>> {
+    if parts[5] == PRAGMATIC.to_string() || parts[5] == EXHAUSTING.to_string() {
         if parts[2] == "GAINED" {
-            let duration = 4500 + if parts[5] == EXHAUSTING { 1000 } else { 0 };
+            let duration = 4500 + if parts[5] == EXHAUSTING.to_string() { 1000 } else { 0 };
             let mut lines = Vec::new();
             let mut line = format!("{},{},{},{},", parts[0], "BEGIN_CAST", 0, "F");
             let rest = parts[4..].join(",");
@@ -300,8 +267,8 @@ fn add_arcanist_beam_cast(parts: Vec<&str>) -> Option<Vec<String>> {
     return None;
 }
 
-fn check_ability_info(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
-    let ability = parse::ability(&parts);
+fn check_ability_info(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
+    let ability = parse::ability(parts);
     if ability.scribing.is_some() {
         let ability_name_clone = ability.name.clone();
         let ability_id_clone = ability.id;
@@ -321,7 +288,7 @@ fn check_ability_info(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> 
         let new_name = format!("{} ({} / {})", &scribing_ability.name, signature_script, affix_script);
         return Some(vec![format!("{},{},{},\"{}\",\"{}\",{},{},\"{}\",\"{}\",\"{}\"", parts[0], "ABILITY_INFO", scribing_ability.id, new_name, scribing_ability.icon, "F", "T", focus_script, signature_script, affix_script),
         format!("{},{},{},\"{}\",\"{}\",{},{},\"{}\",\"{}\",\"{}\"", parts[0], "ABILITY_INFO", ability_id_clone, ability_name_clone, scribing_ability.icon, "F", "T", focus_script, signature_script, affix_script)]);
-    } else if parts[2] == PRAGMATIC || parts[2] == EXHAUSTING {
+    } else if parts[2] == PRAGMATIC.to_string() || parts[2] == EXHAUSTING.to_string() {
         add_arcanist_beam_information(parts)
     } else if parts[2].parse::<u32>().ok() == Some(BLOCKADE_DEFAULT) {
         add_blockade_versions(parts)     
@@ -330,24 +297,24 @@ fn check_ability_info(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> 
     }
 }
 
-fn add_arcanist_beam_information(parts: Vec<&str>) -> Option<Vec<String>> {
+fn add_arcanist_beam_information(parts: &[String]) -> Option<Vec<String>> {
     let mut lines = Vec::new();
-    if parts[2] == PRAGMATIC {
+    if parts[2] == PRAGMATIC.to_string() {
         lines.push(format!("{},{},{},{},{},{},{}", parts[0], parts[1], PRAGMATIC, parts[3], "\"/esoui/art/icons/ability_arcanist_002_b.dds\"", "F", "T"));
         return Some(lines);
-    } else if parts[2] == EXHAUSTING {
+    } else if parts[2] == EXHAUSTING.to_string() {
         lines.push(format!("{},{},{},{},{},{},{}", parts[0], parts[1], EXHAUSTING, parts[3], "\"/esoui/art/icons/ability_arcanist_002_a.dds\"", "F", "T"));
         return Some(lines);
     }
     return None;
 }
 
-fn add_arcanist_beam_effect_information(parts: Vec<&str>) -> Option<Vec<String>> {
+fn add_arcanist_beam_effect_information(parts: &[String]) -> Option<Vec<String>> {
     let mut lines = Vec::new();
-    if parts[2] == PRAGMATIC {
+    if parts[2] == PRAGMATIC.to_string() {
         lines.push(format!("{},{},{},{},{},{}", parts[0], "EFFECT_INFO", PRAGMATIC, "BUFF", "NONE", "NEVER"));
         return Some(lines);
-    } else if parts[2] == EXHAUSTING {
+    } else if parts[2] == EXHAUSTING.to_string() {
         lines.push(format!("{},{},{},{},{},{}", parts[0], "EFFECT_INFO", EXHAUSTING, "BUFF", "NONE", "NEVER"));
         return Some(lines);
     }
@@ -359,7 +326,7 @@ const BLOCKADE_STORMS: u32 = 39018;
 const BLOCKADE_FROST: u32 = 39028;
 const BLOCKADE_DEFAULT: u32 = 39011;
 
-fn add_blockade_versions(parts: Vec<&str>) -> Option<Vec<String>> {
+fn add_blockade_versions(parts: &[String]) -> Option<Vec<String>> {
     let mut lines = Vec::new();
     // ABILITY_INFO,39011,"Elemental Blockade","/esoui/art/icons/ability_destructionstaff_002a.dds",T,T
     // ABILITY_INFO,39028,"Blockade of Frost","/esoui/art/icons/ability_destructionstaff_002b.dds",F,T
@@ -374,7 +341,7 @@ fn add_blockade_versions(parts: Vec<&str>) -> Option<Vec<String>> {
     return Some(lines);
 }
 
-fn modify_player_data(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
+fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
     
     // println!("Modifying player data: {:?}", parts);
 
@@ -385,11 +352,14 @@ fn modify_player_data(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> 
     let mut primary_ability_id_list: Vec<u32> = parts[parts.len() - 2].split(',').map(|x| x.parse::<u32>().unwrap_or_default()).collect();
     let mut backup_ability_id_list: Vec<u32> = parts[parts.len() - 1].split(',').map(|x| x.parse::<u32>().unwrap_or_default()).collect();
 
-    let gear_parts = parts.len() - 2;
     let mut frontbar_type = ItemType::Unknown;
     let mut backbar_type = ItemType::Unknown;
-    for i in 5..gear_parts {
-        let gear_piece = gear_piece(parts[i]);
+    let gear_parts: Vec<&str> = parts[5].trim_matches(|c| c == '[' || c == ']')
+    .split("],[")
+    .collect();
+
+    for i in gear_parts{
+        let gear_piece = gear_piece(i);
         let item_slot = gear_piece.slot;
         let item_type = get_item_type_from_hashmap(gear_piece.item_id);
         if item_slot == GearSlot::MainHand {
@@ -469,7 +439,7 @@ fn modify_player_data(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> 
     Some(vec![new_parts.join(",")])
 }
 
-fn modify_combat_event(parts: Vec<&str>, custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
+fn modify_combat_event(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
     let ability_id = parts[8].parse::<u32>().unwrap();
     // println!("ability_id: {}", ability_id);
     let time = parts[0].parse().unwrap();
@@ -515,7 +485,7 @@ fn modify_combat_event(parts: Vec<&str>, custom_log_data: &mut CustomLogData) ->
             if parts[19] != "*" {
                 let target = parse::unit_state(&parts, 19);
                 if target.unit_id == *id {
-                    if (time > entry.last_timestamp + *MOULDERING_TAINT_TIME as u64 || (event::parse_event_result(parts[2]).unwrap() == EventResult::Died || target.health == 0)) && entry.stacks > 0 {
+                    if (time > entry.last_timestamp + *MOULDERING_TAINT_TIME as u64 || (event::parse_event_result(&parts[2]).unwrap() == EventResult::Died || target.health == 0)) && entry.stacks > 0 {
                         entry.last_timestamp = time;
                         entry.stacks = 0;
                         let e = entry.last_source_unit_state;

@@ -1,8 +1,9 @@
 use std::env;
+use std::fs::File;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use cli::esologs_convert::{build_master_table, split_and_zip_log_by_fight, ESOLogProcessor};
 use cli::log_edit::modify_log_file;
-use cli::read_file;
 use cli::split_log::split_encounter_file_into_log_files;
 use parser::ui::*;
 
@@ -29,76 +30,41 @@ fn main() {
             if let Err(e) = eso_log_processor.convert_log_file_to_esolog_format(Path::new(file_path)) {
                 eprintln!("Error splitting log file: {}", e);
             }
-            use std::fs::File;
-            use std::io::Write;
-            let mut file = match File::create("C:/Users/H/Downloads/esolog_output.txt") {
-                Ok(f) => f,
-                Err(e) => {
-                    eprintln!("Error creating output file: {}", e);
-                    return;
+
+            if let Ok(file) = File::create("C:/Users/H/Downloads/esolog_output.txt") {
+                let mut writer = BufWriter::new(file);
+                let master_table = build_master_table(&mut eso_log_processor);
+                if let Err(e) = write!(writer, "{master_table}") {
+                    eprintln!("Error writing master_table: {}", e);
                 }
-            };
-            let master_table = build_master_table(&mut eso_log_processor);
-            write!(file, "{master_table}").expect("master_table write failed");
+            } else {
+                eprintln!("Error creating output file: esolog_output.txt");
+                return;
+            }
+
             println!("master table written");
-            // println!("{:?}", eso_log_processor.eso_logs_log.unit_id_to_units_index);
-            // println!("{:?}", eso_log_processor.eso_logs_log.owner_id_pairs_index);
-            let mut file = match File::create("C:/Users/H/Downloads/esolog_output2.txt") {
-                Ok(f) => f,
-                Err(e) => {
-                    eprintln!("Error creating output file: {}", e);
-                    return;
+            if let Ok(file) = File::create("C:/Users/H/Downloads/esolog_output2.txt") {
+                let mut writer = BufWriter::new(file);
+
+                for line in &eso_log_processor.eso_logs_log.events {
+                    if let Err(e) = writeln!(writer, "{line}") {
+                        eprintln!("Error writing events: {}", e);
+                        break;
+                    }
                 }
-            };
-            for line in eso_log_processor.eso_logs_log.events.iter() {
-                if let Err(e) = writeln!(file, "{line}") {
-                    eprintln!("Error writing to file: {}", e);
+
+                if let Err(e) = writer.flush() {
+                    eprintln!("Error flushing writer: {}", e);
                 }
+            } else {
+                eprintln!("Error creating output file: esolog_output2.txt");
+                return;
             }
         }
         "esologzip" => {
             match split_and_zip_log_by_fight(Path::new(file_path), Path::new("C:/Users/H/Downloads/esologzipoutput/")) {
                 Ok(_) => {println!("Done split + zip")},
                 Err(e) => println!("{e}"),
-            }
-        }
-        "fights" => {
-            let logs = read_file(Path::new(file_path)).unwrap();
-            for log in logs {
-                for fight in log.fights {
-                    let duration_secs = (fight.end_time - fight.start_time) / 1000;
-                    let minutes = duration_secs / 60;
-                    let seconds = duration_secs % 60;
-                    let boss_health_opt = fight.get_average_boss_health_percentage();
-                    if let Some(boss_health) = boss_health_opt {
-                        if boss_health == 0.0 {
-                            println!("{:2} - {} ({}:{:02}) KILL", fight.id, fight.name, minutes, seconds);
-                        } else {
-                            println!("{:2} - {} ({}:{:02}) {:.0}%", fight.id, fight.name, minutes, seconds, boss_health);
-                        }
-                    } else {
-                        println!("{:2} - {} ({}:{:02})", fight.id, fight.name, minutes, seconds);
-                    }
-                }
-            }
-        }
-        "gear" => {
-            let logs = read_file(Path::new(file_path)).unwrap();
-            for log in logs {
-                for fight in log.fights {
-                    for player in &fight.players {
-                        if player.gear != parser::player::empty_loadout() {
-                            println!("-------------------");
-                            let name = foreground_rgb(&player.display_name, Colour::from_class_id(player.class_id));
-                            println!("{}\n{}", name, player.gear);
-                            for skill_set in [&player.primary_abilities, &player.backup_abilities] {
-                                for ability in skill_set {
-                                    println!("{:?}", ability);
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
         _ => {}
