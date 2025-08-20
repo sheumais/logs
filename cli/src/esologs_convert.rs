@@ -974,9 +974,9 @@ impl ESOLogProcessor {
         let ability_id = parts[5].parse().unwrap();
         let mut buff_event= ESOLogsBuffEvent {
             unique_index: 0,
-            source_unit_index: self.unit_index(source.unit_id).expect("Effect changed: source_unit_index should never be nothing"),
-            target_unit_index: self.unit_index(target.unit_id).expect("Effect changed: target_unit_index should never be nothing"),
-            buff_index: self.buff_index(ability_id).expect("Effect changed: buff_index should never be nothing"),
+            source_unit_index: self.unit_index(source.unit_id).unwrap_or_else(|| panic!("Effect changed: source_unit_index should never be nothing. {:?}\n{:?}",parts, self.eso_logs_log.units)),
+            target_unit_index: self.unit_index(target.unit_id).unwrap_or_else(|| panic!("Effect changed: target_unit_index should never be nothing. {:?}\n{:?}",parts, self.eso_logs_log.units)),
+            buff_index: self.buff_index(ability_id).unwrap_or_else(|| panic!("Effect changed: buff_index should never be nothing. {:?}\n{:?}", parts, self.eso_logs_log.buffs)),
         };
         let cast_id: u32 = parts[4].parse().unwrap();
         buff_event.unique_index = self.add_buff_event(buff_event);
@@ -1228,9 +1228,11 @@ impl ESOLogProcessor {
             let buff_index = self.eso_logs_log.cast_id_hashmap.get(&ability_cast_id).unwrap_or(&usize::MAX); // "buff from cast_id should always be something" except when it isn't
             if *buff_index == usize::MAX {return;}
             let buff = self.eso_logs_log.effects.get(*buff_index).expect("buff_index should always point to a buff event inside effects").clone();
-            let caster_id = self.eso_logs_log.cast_id_source_unit_id
-                .get(&ability_cast_id)
-                .expect(&format!("every cast id should have a source: {:?}", parts).to_string()).clone();
+            let caster_id_option = self.eso_logs_log.cast_id_source_unit_id.get(&ability_cast_id);
+            
+            if caster_id_option.is_none() {return}
+
+            let caster_id = caster_id_option.unwrap().clone();
             let caster_index = self.eso_logs_log.unit_index(&caster_id)
                 .expect("every target id should map to a unit");
             let caster = self.eso_logs_log.units

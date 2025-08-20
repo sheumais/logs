@@ -303,7 +303,7 @@ impl Display for ESOLogsBuff {
             DamageType::Magic => 64,
             DamageType::Disease => 256,
             DamageType::Shock => 512,
-            DamageType::Heal | DamageType::Poison => 8, // heal
+            DamageType::Heal | DamageType::Poison => 8,
             _ => 2,
         };
         if damage_type == 2 && self.status_type == StatusEffectType::Magic {damage_type = 64}

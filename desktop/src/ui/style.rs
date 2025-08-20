@@ -283,3 +283,11 @@ pub fn pancake_style() -> Style {
         }
     "#)).expect("Failed to create Pancake style")
 }
+
+pub fn custom_user_style(username: &str) -> Style {
+    match username {
+        "Angel.xo" | "Watermelón" => angel_style().clone(),
+        "Pancake" | "XenoNox" | "JakeX1V" | "Scarece" | "Coeus-Metis" | "brainsnorkel" => pancake_style().clone(), // contributors
+        _ => Style::new(css!(r#""#)).expect("Failed to create empty style"),
+    }
+}

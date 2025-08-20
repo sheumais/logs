@@ -836,6 +836,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
         let mut custom_state = CustomLogData::new();
         let mut first_timestamp: Option<u64> = None;
         let mut segment_id: u16 = 1;
+        let mut processed = 0usize;
 
         loop {
             if upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
@@ -857,7 +858,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
 
             if let Some(last_nl) = buffer.iter().rposition(|&b| b == b'\n') {
                 let text = String::from_utf8_lossy(&buffer[..=last_nl]);
-                let mut processed = 0usize;
+
 
                 for line in text.lines() {
                     let mut split = line.splitn(4, ',');
@@ -865,12 +866,12 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                     let second = split.next();
                     let third = split.next();
 
-                    if let Some("BEGIN_LOG") = second {
+                    if matches!(second, Some("BEGIN_LOG")) {
+                        elp = ESOLogProcessor::new();
+                        custom_state = CustomLogData::new();
                         if let Some(third_str) = third {
                             if let Ok(ts) = third_str.parse::<u64>() {
                                 first_timestamp = Some(ts);
-                                elp = ESOLogProcessor::new();
-                                custom_state = CustomLogData::new();
                             }
                         }
                     }
