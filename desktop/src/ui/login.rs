@@ -38,12 +38,7 @@ pub fn login_component() -> Html {
     html! {
         <div class={login_box_style().clone()} onclick={go_to_login.clone()}>
             if let Some(login) = &*login_ctx {
-                <span class={classes!("login-name", 
-                match login.user.username.as_str() {
-                    "Angel.xo" => angel_style().clone(),
-                    "Pancake" | "XenoNox" | "JakeX1V" | "Scarece" | "Coeus-Metis" => pancake_style().clone(),
-                    _ => Style::new(css!(r#""#)).unwrap(),
-                })}>{ login.user.username.clone() }</span>
+                <span class={classes!("login-name", custom_user_style(&login.user.username))}>{ login.user.username.clone() }</span>
             } else {
                 <span class="login-name">{ "Login" }</span>
             }
