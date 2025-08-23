@@ -26,13 +26,16 @@ fn format_timestamp(timestamp: u64) -> String {
     local_datetime.format("%Y%m%d-%H%M").to_string()
 }
 
-fn convert_game_timestamp_to_unix(_game_timestamp: u64) -> u64 {
-    // ESO game timestamps are relative to the start of the session, not Unix timestamps
-    // For live logs, we use current system time since BEGIN_LOG happens "now"
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
+fn convert_game_timestamp_to_unix(game_timestamp: u64, _begin_log_system_time: Option<u64>) -> u64 {
+    // ESO game timestamps appear to be in milliseconds since Unix epoch
+    // Convert from milliseconds to seconds
+    if game_timestamp > 1000000000000 {
+        // If timestamp is in milliseconds (> ~2001 in seconds), convert to seconds
+        game_timestamp / 1000
+    } else {
+        // If timestamp appears to be in seconds already, use as-is
+        game_timestamp
+    }
 }
 
 #[tauri::command]
@@ -267,6 +270,7 @@ fn live_log_from_folder(window: Window, app_state: State<'_, AppState>) -> Resul
         let mut current_zone_name: Option<String> = None;
         let mut waiting_for_combat = false;
         let mut log_timestamp: Option<u64> = None;
+        let mut begin_log_system_time: Option<u64> = None;
 
         loop {
             input_file
@@ -302,9 +306,15 @@ fn live_log_from_folder(window: Window, app_state: State<'_, AppState>) -> Resul
                                 w.flush().ok();
                             }
                             
-                            // Parse timestamp
+                            // Parse timestamp and capture current system time
                             if let Ok(ts) = timestamp_str.parse::<u64>() {
                                 log_timestamp = Some(ts);
+                                let current_system_time = SystemTime::now()
+                                    .duration_since(UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_secs();
+                                begin_log_system_time = Some(current_system_time);
+                                println!("BEGIN_LOG: game_ts={}, system_ts={}", ts, current_system_time);
                             }
                             
                             waiting_for_combat = true;
@@ -337,7 +347,7 @@ fn live_log_from_folder(window: Window, app_state: State<'_, AppState>) -> Resul
                             
                             // Create new log file with timestamp and zone name
                             let unix_timestamp = log_timestamp
-                                .map(|game_ts| convert_game_timestamp_to_unix(game_ts))
+                                .map(|game_ts| convert_game_timestamp_to_unix(game_ts, begin_log_system_time))
                                 .unwrap_or_else(|| {
                                     SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
                                 });
@@ -1025,6 +1035,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
         let mut tmp_dir: Option<PathBuf> = None;
         let start_time = std::time::SystemTime::now();
         let mut pending_zone_name: Option<String> = None;
+        let mut begin_log_system_time: Option<u64> = None;
 
         loop {
             if upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
@@ -1083,6 +1094,13 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                         if let Some(third_str) = third {
                             if let Ok(ts) = third_str.parse::<u64>() {
                                 first_timestamp = Some(ts);
+                                // Capture system time when BEGIN_LOG occurs
+                                let current_system_time = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_secs();
+                                begin_log_system_time = Some(current_system_time);
+                                println!("BEGIN_LOG UPLOAD: game_ts={}, system_ts={}", ts, current_system_time);
                             }
                         }
                     }
@@ -1112,7 +1130,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                         let zone_for_report = pending_zone_name.as_ref().unwrap_or(&current_zone_name);
                         // Use the BEGIN_LOG timestamp converted to Unix timestamp
                         let unix_timestamp = first_timestamp
-                            .map(|game_ts| convert_game_timestamp_to_unix(game_ts))
+                            .map(|game_ts| convert_game_timestamp_to_unix(game_ts, begin_log_system_time))
                             .unwrap_or_else(|| {
                                 std::time::SystemTime::now()
                                     .duration_since(std::time::UNIX_EPOCH)
@@ -1120,6 +1138,12 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                                     .as_secs()
                             });
                         let timestamp_str = format_timestamp(unix_timestamp);
+                        println!("CREATING REPORT: game_ts={:?}, begin_log_sys_time={:?}, unix_ts={}, formatted={}", 
+                                first_timestamp, begin_log_system_time, unix_timestamp, timestamp_str);
+                        if let Some(game_ts) = first_timestamp {
+                            let converted = convert_game_timestamp_to_unix(game_ts, begin_log_system_time);
+                            println!("TIMESTAMP CONVERSION: {} -> {} ({})", game_ts, converted, format_timestamp(converted));
+                        }
                         let zone_suffix = if zone_for_report != "Unknown Zone" {
                             format!(" ({})", zone_for_report)
                         } else {
