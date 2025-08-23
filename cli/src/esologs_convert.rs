@@ -1277,6 +1277,14 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir>(input_path: InputPath, o
             return Err(format!("Failed to clear timestamps file: {e}"));
         }
     }
+    
+    let zone_names_path = output_dir.as_ref().join("zone_names");
+    if let Err(e) = fs::remove_file(&zone_names_path) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            return Err(format!("Failed to clear zone_names file: {e}"));
+        }
+    }
+    
     let input_file = File::open(&input_path)
         .map_err(|e| format!("Failed to open input file: {e}"))?;
     let mut lines = BufReader::new(input_file).lines();
@@ -1284,6 +1292,7 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir>(input_path: InputPath, o
     let mut elp = ESOLogProcessor::new();
     let mut custom_state = CustomLogData::new();
     let mut fight_index: u16 = 1;
+    let mut current_zone_name = String::from("Unknown Zone");
 
     let mut first_timestamp: Option<u64> = None;
     while let Some(line) = lines.next() {
@@ -1300,6 +1309,19 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir>(input_path: InputPath, o
                     println!("setting first_timestamp to {}", first_timestamp.unwrap());
                     elp = ESOLogProcessor::new();
                 }
+            }
+        }
+
+        // Track zone changes
+        if matches!(second, Some("ZONE_CHANGED")) {
+            // ZONE_CHANGED format: timestamp,ZONE_CHANGED,zone_id,zone_name,difficulty
+            let mut parts = line.splitn(5, ',');
+            parts.next(); // timestamp
+            parts.next(); // ZONE_CHANGED
+            parts.next(); // zone_id
+            if let Some(zone_name) = parts.next() {
+                current_zone_name = zone_name.trim_matches('"').to_string();
+                println!("Zone changed to: {}", current_zone_name);
             }
         }
 
@@ -1337,6 +1359,16 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir>(input_path: InputPath, o
                         .map_err(|e| format!("Failed to open timestamps file: {e}"))?;
                     writeln!(file, "{},{}", first, last)
                         .map_err(|e| format!("Failed to write timestamps: {e}"))?;
+
+                    // Write zone names to a separate file
+                    let zone_names_path = output_dir.as_ref().join("zone_names");
+                    let mut zone_names_file = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(zone_names_path)
+                        .map_err(|e| format!("Failed to open zone_names file: {e}"))?;
+                    writeln!(zone_names_file, "{}", current_zone_name)
+                        .map_err(|e| format!("Failed to write zone name: {e}"))?;
                 }
             }
 

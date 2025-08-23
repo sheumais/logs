@@ -14,6 +14,14 @@ mod state;
 
 const LINE_COUNT_FOR_PROGRESS: usize = 25000usize;
 
+fn format_timestamp(_timestamp: u64) -> String {
+    // Use chrono for proper local time handling
+    use chrono::prelude::*;
+    
+    let local_time = Local::now();
+    local_time.format("%H:%M:%S").to_string()
+}
+
 #[tauri::command]
 fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), String> {
     let paths_guard = state.log_files.read().unwrap();
@@ -552,7 +560,7 @@ async fn create_report(
 }
 
 #[tauri::command]
-async fn upload_log(state: State<'_, AppState>, upload_settings: UploadSettings) -> Result<EncounterReportCode, String> {
+async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings: UploadSettings) -> Result<EncounterReportCode, String> {
     state.upload_cancel_flag.store(false, SeqCst);
     let log_path_opt = {
         let lock = state.log_files.read().map_err(|e| e.to_string())?;
@@ -613,9 +621,31 @@ async fn upload_log(state: State<'_, AppState>, upload_settings: UploadSettings)
     let mut segment_id = 1u16;
 
     let ts_path = tmp_dir.join("timestamps");
-    let timestamps   = read_timestamps(&ts_path)?;
+    let timestamps = read_timestamps(&ts_path)?;
+    
+    let zone_names_path = tmp_dir.join("zone_names");
+    let zone_names = read_zone_names(&zone_names_path).unwrap_or_else(|_| {
+        vec!["Unknown Zone".to_string(); timestamps.len()]
+    });
 
-    for ((tbl, seg, _), (start, end)) in pairs.iter().zip(timestamps.iter()) {
+    // Calculate total data size and emit initial status
+    let total_segments = pairs.len();
+    let total_size: u64 = pairs.iter().map(|(tbl, seg, _)| {
+        let tbl_size = std::fs::metadata(tbl).map(|m| m.len()).unwrap_or(0);
+        let seg_size = std::fs::metadata(seg).map(|m| m.len()).unwrap_or(0);
+        tbl_size + seg_size
+    }).sum();
+    
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let size_mb = total_size as f64 / (1024.0 * 1024.0);
+    let initial_status = format!("Starting upload of {} segments ({:.1} MB total) - {}", 
+        total_segments, size_mb, format_timestamp(timestamp));
+    let _ = window.emit("upload_status", initial_status);
+
+    for (((tbl, seg, _), (start, end)), zone_name) in pairs.iter().zip(timestamps.iter()).zip(zone_names.iter()) {
         if state.upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
             return Err("Upload cancelled".to_string());
         }
@@ -624,6 +654,8 @@ async fn upload_log(state: State<'_, AppState>, upload_settings: UploadSettings)
             &format!("{base}/set-report-master-table/{code}"),
             segment_id,
             tbl,
+            Some(&window),
+            Some(zone_name),
         ).await?;
         segment_id = upload_segment_and_get_next_id(
             &client,
@@ -632,6 +664,8 @@ async fn upload_log(state: State<'_, AppState>, upload_settings: UploadSettings)
             segment_id,
             *start,
             *end,
+            Some(&window),
+            Some(zone_name),
         ).await?;
     }
 
@@ -658,6 +692,8 @@ async fn upload_master_table(
     url: &str,
     segment_id: u16,
     zip_path: &Path,
+    window: Option<&Window>,
+    fight_name: Option<&str>,
 ) -> Result<(), String> {
     println!("→ upload_master_table(): segment_id = {segment_id}");
     println!("  ZIP path = {:?}", zip_path);
@@ -692,6 +728,20 @@ async fn upload_master_table(
     }
 
     println!("  ✔ master table upload OK");
+    if let Some(w) = window {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let status_msg = match fight_name {
+            Some(name) => format!("Uploaded master table for segment {} [{}] - {}", 
+                segment_id, name, format_timestamp(timestamp)),
+            None => format!("Uploaded master table for segment {} - {}", 
+                segment_id, format_timestamp(timestamp))
+        };
+        println!("EMITTING MASTER TABLE STATUS: {}", status_msg);
+        let _ = w.emit("upload_status", status_msg);
+    }
     Ok(())
 }
 
@@ -702,6 +752,8 @@ async fn upload_segment_and_get_next_id(
     segment_id: u16,
     start_time: u64,
     end_time: u64,
+    window: Option<&Window>,
+    fight_name: Option<&str>,
 ) -> Result<u16, String> {
     println!("→ upload_segment_and_get_next_id()");
     println!("  segment_id = {segment_id}");
@@ -723,6 +775,7 @@ async fn upload_segment_and_get_next_id(
     });
     println!("{}", params);
 
+    let bytes_len = bytes.len();
     let logfile_part = Part::bytes(bytes)
         .file_name(zip_path.file_name().unwrap().to_string_lossy().to_string())
         .mime_str("application/zip")
@@ -758,6 +811,20 @@ async fn upload_segment_and_get_next_id(
         .ok_or_else(|| format!("Missing `nextSegmentId` in response: {body}"))?;
 
     println!("  ✔ nextSegmentId = {next_id}");
+    if let Some(w) = window {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let status_msg = match fight_name {
+            Some(name) => format!("Uploaded segment {} ({} bytes) [{}] to esologs - {}", 
+                segment_id, bytes_len, name, format_timestamp(timestamp)),
+            None => format!("Uploaded segment {} ({} bytes) to esologs - {}", 
+                segment_id, bytes_len, format_timestamp(timestamp))
+        };
+        println!("EMITTING SEGMENT STATUS: {}", status_msg);
+        let _ = w.emit("upload_status", status_msg);
+    }
     Ok(next_id as u16)
 }
 
@@ -789,6 +856,19 @@ fn read_timestamps(path: &Path) -> Result<Vec<(u64, u64)>, String> {
             .parse::<u64>()
             .map_err(|e| format!("Bad endTime at line {i}: {e}"))?;
         out.push((start, end));
+    }
+    Ok(out)
+}
+
+fn read_zone_names(path: &Path) -> Result<Vec<String>, String> {
+    use std::io::{BufRead, BufReader};
+    let f = File::open(path)
+        .map_err(|e| format!("Failed to open {path:?}: {e}"))?;
+    let mut out = Vec::new();
+
+    for (i, line) in BufReader::new(f).lines().enumerate() {
+        let line = line.map_err(|e| format!("Read error at line {i}: {e}"))?;
+        out.push(line.trim().to_string());
     }
     Ok(out)
 }
@@ -836,7 +916,9 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
         let mut custom_state = CustomLogData::new();
         let mut first_timestamp: Option<u64> = None;
         let mut segment_id: u16 = 1;
-        let mut processed = 0usize;
+        let mut processed;
+        let mut current_zone_name = String::from("Unknown Zone");
+        let start_time = std::time::SystemTime::now();
 
         loop {
             if upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
@@ -850,6 +932,9 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
             let mut buffer = Vec::new();
             let mut reader = std::io::BufReader::new(&input_file);
             let bytes_read = reader.read_to_end(&mut buffer).expect("read failed");
+            
+            // Reset processed count for this batch
+            processed = 0;
 
             if bytes_read == 0 {
                 std::thread::sleep(std::time::Duration::from_secs(5));
@@ -876,6 +961,19 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                         }
                     }
 
+                    // Track zone changes for status messages
+                    if matches!(second, Some("ZONE_CHANGED")) {
+                        // ZONE_CHANGED format: timestamp,ZONE_CHANGED,zone_id,zone_name,difficulty
+                        let mut parts = line.splitn(5, ',');
+                        parts.next(); // timestamp
+                        parts.next(); // ZONE_CHANGED
+                        parts.next(); // zone_id
+                        if let Some(zone_name) = parts.next() {
+                            current_zone_name = zone_name.trim_matches('"').to_string();
+                            println!("Zone changed to: {}", current_zone_name);
+                        }
+                    }
+
                     let is_end_combat = matches!(second, Some("END_COMBAT"));
 
                     for l in handle_line(line.to_string(), &mut custom_state) {
@@ -883,6 +981,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                     }
 
                     if is_end_combat {
+
                         let seg_zip =
                             tmp_dir.join(format!("report_segment_{segment_id}.zip"));
                         let tbl_zip =
@@ -920,6 +1019,8 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                             &format!("{base}/set-report-master-table/{code}"),
                             segment_id,
                             &tbl_zip,
+                            Some(&window),
+                            Some(&current_zone_name),
                         ).await {
                             eprintln!("Master table upload failed: {e}");
                         }
@@ -931,6 +1032,8 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                             segment_id,
                             start_ts,
                             end_ts,
+                            Some(&window),
+                            Some(&current_zone_name),
                         ).await {
                             Ok(next) => segment_id = next,
                             Err(e) => {
@@ -948,6 +1051,18 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                 if processed > 0 {
                     println!("Processed: {}", processed);
                     let _ = window.emit("live_log_progress", processed as u32);
+                    
+                    // Send detailed status with count and timestamp
+                    let _elapsed = start_time.elapsed().unwrap_or_default();
+                    let now = std::time::SystemTime::now();
+                    let timestamp = now.duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    let status_message = format!("Processing {} new entries in {} - {}", 
+                            processed, current_zone_name,
+                            format_timestamp(timestamp));
+                    println!("EMITTING STATUS: {}", status_message);
+                    let _ = window.emit("upload_status", status_message);
                 }
 
                 pos += (last_nl + 1) as u64;
