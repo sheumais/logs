@@ -13,7 +13,8 @@
       "Bash(cargo tauri:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(cargo:*)"
+      "Bash(cargo:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []
