@@ -38,6 +38,12 @@ fn convert_game_timestamp_to_unix(game_timestamp: u64, _begin_log_system_time: O
     }
 }
 
+fn format_status_timestamp() -> String {
+    use chrono::prelude::*;
+    let now: DateTime<Local> = Local::now();
+    format!("{}: ", now.format("%Y-%m-%d %H:%M:%S"))
+}
+
 #[tauri::command]
 fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), String> {
     let paths_guard = state.log_files.read().unwrap();
@@ -678,46 +684,200 @@ async fn create_report_with_custom_desc(
 #[tauri::command]
 async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings: UploadSettings) -> Result<EncounterReportCode, String> {
     state.upload_cancel_flag.store(false, SeqCst);
+    
     let log_path_opt = {
         let lock = state.log_files.read().map_err(|e| e.to_string())?;
         println!("log_files = {:?}", *lock);
         lock.clone()
     };
+    
     let log_path = log_path_opt
         .and_then(|v| v.get(0).cloned())
         .ok_or("No log file selected")?;
     println!("Using log file: {:?}", log_path);
+    
+    // Emit status message with the full path of the selected log file
+    if let Some(path_str) = log_path.as_path().and_then(|p| p.to_str()) {
+        window.emit("upload_status", format!("{}Processing log file: {}", format_status_timestamp(), path_str)).ok();
+    }
 
     let client = {
         let g = state.http.read().map_err(|e| e.to_string())?;
         g.client.clone()
     };
-    println!("Spawning split/zip task …");
-    
-    let tmp_dir = temp_dir().join("esologtool_temporary");
-    println!("Temp dir: {:?}", tmp_dir);
-    create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
 
-    let tmp_dir_for_spawn = tmp_dir.clone();
-    let log_path_clone = log_path.clone();
+    let base = "https://www.esologs.com/desktop-client";
     let upload_cancel_flag = state.upload_cancel_flag.clone();
-
-    let pairs = spawn_blocking(move || -> Result<Vec<(PathBuf,PathBuf,u16)>, String> {
+    
+    // Open and process the file
+    let input_file = File::open(log_path.as_path().ok_or("Invalid path")?).map_err(|e| format!("Failed to open file: {}", e))?;
+    
+    let mut reader = BufReader::new(input_file);
+    let mut current_zone_name = String::from("Unknown Zone");
+    let mut first_timestamp: Option<u64> = None;
+    let mut begin_log_system_time: Option<u64> = None;
+    let mut all_report_codes = Vec::new();
+    let mut current_lines = Vec::new();
+    let mut elp = ESOLogProcessor::new();
+    let mut custom_state = CustomLogData::new();
+    
+    window.emit("upload_status", format!("{}Analyzing log file for encounters...", format_status_timestamp())).ok();
+    
+    // Read through the file
+    for line in reader.lines() {
         if upload_cancel_flag.load(SeqCst) {
             return Err("Upload cancelled".to_string());
         }
-        split_and_zip_log_by_fight(
-            log_path_clone.as_path().ok_or("Invalid log file path")?,
-            tmp_dir_for_spawn.as_path()
-        )?;
-        println!("Finished split_and_zip_log_by_fight");
+        
+        let line = line.map_err(|e| format!("Error reading file: {}", e))?;
+        
+        let mut split = line.splitn(4, ',');
+        let _first = split.next();
+        let second = split.next();
+        let third = split.next();
+        
+        // Track zone changes
+        if matches!(second, Some("ZONE_CHANGED")) {
+            let mut parts = line.splitn(5, ',');
+            parts.next(); // timestamp
+            parts.next(); // ZONE_CHANGED
+            parts.next(); // zone_id
+            if let Some(zone_name) = parts.next() {
+                current_zone_name = zone_name.trim_matches('"').to_string();
+                println!("Zone changed to: {}", current_zone_name);
+            }
+        }
+        
+        // Handle BEGIN_LOG
+        if matches!(second, Some("BEGIN_LOG")) {
+            // Process previous section if we have data
+            if !current_lines.is_empty() && first_timestamp.is_some() {
+                // Create report for previous section
+                let report = process_log_section(
+                    &window,
+                    &client,
+                    &upload_settings,
+                    &current_lines,
+                    first_timestamp,
+                    begin_log_system_time,
+                    &current_zone_name,
+                ).await?;
+                
+                all_report_codes.push(report);
+                current_lines.clear();
+            }
+            
+            // Start new section
+            if let Some(third_str) = third {
+                if let Ok(ts) = third_str.parse::<u64>() {
+                    first_timestamp = Some(ts);
+                    let current_system_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+                    begin_log_system_time = Some(current_system_time);
+                    println!("BEGIN_LOG: game_ts={}, system_ts={}", ts, current_system_time);
+                }
+            }
+            
+            // Reset processors for new section
+            elp = ESOLogProcessor::new();
+            custom_state = CustomLogData::new();
+        }
+        
+        // Add line to current section
+        current_lines.push(line.clone());
+        
+        // Process line through the handlers
+        for l in handle_line(line, &mut custom_state) {
+            elp.handle_line(l);
+        }
+    }
+    
+    // Process the last section if we have data
+    if !current_lines.is_empty() && first_timestamp.is_some() {
+        let report = process_log_section(
+            &window,
+            &client,
+            &upload_settings,
+            &current_lines,
+            first_timestamp,
+            begin_log_system_time,
+            &current_zone_name,
+        ).await?;
+        
+        all_report_codes.push(report);
+    }
+    
+    save_upload_settings(&upload_settings);
+    
+    // Return the first report code
+    if let Some(first_report) = all_report_codes.first() {
+        window.emit("upload_status", 
+            format!("{}Successfully uploaded {} separate report(s)", format_status_timestamp(), all_report_codes.len())
+        ).ok();
+        Ok(first_report.clone())
+    } else {
+        Err("No reports were created".to_string())
+    }
+}
 
+async fn process_log_section(
+    window: &Window,
+    client: &reqwest::Client,
+    upload_settings: &UploadSettings,
+    lines: &[String],
+    first_timestamp: Option<u64>,
+    begin_log_system_time: Option<u64>,
+    zone_name: &str,
+) -> Result<EncounterReportCode, String> {
+    use std::env::temp_dir;
+    use std::fs::create_dir_all;
+    
+    // Create timestamp string for description
+    let timestamp_str = first_timestamp
+        .map(|ts| {
+            let unix_ts = convert_game_timestamp_to_unix(ts, begin_log_system_time);
+            format_timestamp(unix_ts)
+        })
+        .unwrap_or_else(|| "Unknown Time".to_string());
+    
+    let zone_suffix = if zone_name != "Unknown Zone" {
+        format!(" ({})", zone_name)
+    } else {
+        String::new()
+    };
+    
+    let description = format!("{}{} - {}", timestamp_str, zone_suffix, upload_settings.description);
+    
+    // Create report
+    let report = create_report_with_custom_desc(client, upload_settings, description.clone()).await?;
+    window.emit("upload_status", format!("{}Created report: {}", format_status_timestamp(), description)).ok();
+    
+    // Write section to temporary file
+    let tmp_dir = temp_dir().join(format!("esologtool_section_{}", report.code));
+    create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
+    
+    let section_file = tmp_dir.join("section.log");
+    {
+        let mut writer = BufWriter::new(
+            File::create(&section_file).map_err(|e| e.to_string())?
+        );
+        for line in lines {
+            writeln!(writer, "{}", line).map_err(|e| e.to_string())?;
+        }
+    }
+    
+    // Process with split_and_zip_log_by_fight
+    let tmp_dir_clone = tmp_dir.clone();
+    let pairs = spawn_blocking(move || -> Result<Vec<(PathBuf, PathBuf, u16)>, String> {
+        split_and_zip_log_by_fight(
+            section_file.as_path(),
+            tmp_dir_clone.as_path()
+        )?;
+        
         let mut out = Vec::new();
         for idx in 1u16.. {
-            let tbl = tmp_dir_for_spawn.join(format!("master_table_{idx}.zip"));
-            let seg = tmp_dir_for_spawn.join(format!("report_segment_{idx}.zip"));
+            let tbl = tmp_dir_clone.join(format!("master_table_{idx}.zip"));
+            let seg = tmp_dir_clone.join(format!("report_segment_{idx}.zip"));
             if tbl.exists() && seg.exists() {
-                println!("Found pair idx={idx}: {:?}, {:?}", tbl, seg);
                 out.push((tbl, seg, idx));
             } else {
                 break;
@@ -727,80 +887,59 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
     })
     .await
     .map_err(|e| format!("spawn_blocking error: {e}"))??;
-    if state.upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
-        return Err("Upload cancelled".to_string());
-    }
-    let report_code = create_report(&state, &client, &upload_settings).await?;
-    let code = report_code.code.clone();
-
+    
+    // Upload segments
     let base = "https://www.esologs.com/desktop-client";
     let mut segment_id = 1u16;
-
+    
     let ts_path = tmp_dir.join("timestamps");
-    let timestamps = read_timestamps(&ts_path)?;
+    let timestamps = read_timestamps(&ts_path).unwrap_or_else(|_| {
+        pairs.iter().map(|_| (0u64, 0u64)).collect()
+    });
     
     let zone_names_path = tmp_dir.join("zone_names");
     let zone_names = read_zone_names(&zone_names_path).unwrap_or_else(|_| {
-        vec!["Unknown Zone".to_string(); timestamps.len()]
+        vec![zone_name.to_string(); pairs.len()]
     });
-
-    // Calculate total data size and emit initial status
-    let total_segments = pairs.len();
-    let total_size: u64 = pairs.iter().map(|(tbl, seg, _)| {
-        let tbl_size = std::fs::metadata(tbl).map(|m| m.len()).unwrap_or(0);
-        let seg_size = std::fs::metadata(seg).map(|m| m.len()).unwrap_or(0);
-        tbl_size + seg_size
-    }).sum();
     
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    let size_mb = total_size as f64 / (1024.0 * 1024.0);
-    let initial_status = format!("{}: Starting upload of {} segments ({:.1} MB total)", 
-        format_timestamp(timestamp), total_segments, size_mb);
-    let _ = window.emit("upload_status", initial_status);
-
-    for (((tbl, seg, _), (start, end)), zone_name) in pairs.iter().zip(timestamps.iter()).zip(zone_names.iter()) {
-        if state.upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
-            return Err("Upload cancelled".to_string());
-        }
+    for (((tbl, seg, _), timestamp_pair), zone) in pairs.iter().zip(timestamps.iter()).zip(zone_names.iter()) {
         upload_master_table(
-            &client,
-            &format!("{base}/set-report-master-table/{code}"),
+            client,
+            &format!("{base}/set-report-master-table/{}", report.code),
             segment_id,
             tbl,
-            Some(&window),
-            Some(zone_name),
+            Some(window),
+            Some(zone),
         ).await?;
+        
         segment_id = upload_segment_and_get_next_id(
-            &client,
-            &format!("{base}/add-report-segment/{code}"),
+            client,
+            &format!("{base}/add-report-segment/{}", report.code),
             seg,
             segment_id,
-            *start,
-            *end,
-            Some(&window),
-            Some(zone_name),
+            timestamp_pair.0,
+            timestamp_pair.1,
+            Some(window),
+            Some(zone),
         ).await?;
     }
-
-    println!("POST {base}/terminate-report/{code}");
-    client.post(&format!("{base}/terminate-report/{code}"))
+    
+    // Terminate report
+    println!("POST {base}/terminate-report/{}", report.code);
+    client.post(&format!("{base}/terminate-report/{}", report.code))
         .send()
         .await
         .map_err(|e| e.to_string())?;
-    println!("Report terminated OK");
-
-    end_report(&client, code.clone()).await;
-
-    if let Err(e) = fs::remove_dir_all(&tmp_dir) {
+    println!("Report {} terminated OK", report.code);
+    
+    // Clean up
+    if let Err(e) = std::fs::remove_dir_all(&tmp_dir) {
         println!("Failed to remove temp dir {:?}: {}", tmp_dir, e);
     }
     
-    save_upload_settings(&upload_settings);
-
-    Ok(report_code)
+    window.emit("upload_status", format!("{}Completed upload for: {}", format_status_timestamp(), description)).ok();
+    
+    Ok(report)
 }
 
 async fn upload_master_table(
@@ -996,6 +1135,11 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
         let folder = guard.as_ref().ok_or("No folder selected")?.clone();
         folder.as_path().ok_or("Invalid path")?.join("Encounter.log")
     };
+
+    // Emit status message with the full path of the Encounter.log file
+    if let Some(path_str) = input_path.to_str() {
+        window.emit("upload_status", format!("{}Waiting for live log file: {}", format_status_timestamp(), path_str)).ok();
+    }
 
     let client = {
         let g = app_state.http.read().map_err(|e| e.to_string())?;

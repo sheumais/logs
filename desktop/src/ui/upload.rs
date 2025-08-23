@@ -92,17 +92,41 @@ pub fn upload() -> Html {
                                     // Check if this console element is currently visible
                                     if let Ok(html_element) = console_element.clone().dyn_into::<web_sys::HtmlElement>() {
                                         if html_element.offset_parent().is_some() {
-                                            // Create new div element for this message
-                                            if let Ok(div) = document.create_element("div") {
-                                                div.set_text_content(Some(&new_message));
-                                                div.set_attribute("style", "margin: 2px 0;").ok();
-                                                
-                                                // Append the new div
-                                                console_element.append_child(&div).ok();
-                                                
-                                                // Auto-scroll to bottom
-                                                html_element.set_scroll_top(html_element.scroll_height());
+                                            // Check if this is a wait message and if we should replace the last one
+                                            let is_wait_message = new_message.contains("waiting") && new_message.contains("minutes for new log entries");
+                                            let should_replace = if is_wait_message {
+                                                // Check if the last child is also a wait message
+                                                if let Some(last_child) = console_element.last_element_child() {
+                                                    if let Some(text) = last_child.text_content() {
+                                                        text.contains("waiting") && text.contains("minutes for new log entries")
+                                                    } else {
+                                                        false
+                                                    }
+                                                } else {
+                                                    false
+                                                }
+                                            } else {
+                                                false
+                                            };
+                                            
+                                            if should_replace {
+                                                // Replace the last child
+                                                if let Some(last_child) = console_element.last_element_child() {
+                                                    last_child.set_text_content(Some(&new_message));
+                                                }
+                                            } else {
+                                                // Create new div element for this message
+                                                if let Ok(div) = document.create_element("div") {
+                                                    div.set_text_content(Some(&new_message));
+                                                    div.set_attribute("style", "margin: 2px 0;").ok();
+                                                    
+                                                    // Append the new div
+                                                    console_element.append_child(&div).ok();
+                                                }
                                             }
+                                            
+                                            // Auto-scroll to bottom
+                                            html_element.set_scroll_top(html_element.scroll_height());
                                             break; // Only append to the first visible console
                                         }
                                     }
@@ -408,7 +432,7 @@ pub fn upload() -> Html {
                                 { visibility_options }
                             </select>
                         </div>
-                        <h3 style="margin-top:2em;">{"Give your log a description:"}</h3>
+                        <h3 style="margin-top:2em;">{"Give your log a description. This will be used in the name of all logs created by the live log option."}</h3>
                         <textarea
                             name={"description"}
                             autocomplete="off"
