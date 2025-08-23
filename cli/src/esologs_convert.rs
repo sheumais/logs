@@ -1382,6 +1382,12 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir>(input_path: InputPath, o
 }
 
 pub fn write_zip_with_logtxt<P: AsRef<Path>>(zip_path: P, data: &[u8]) -> Result<(), String> {
+    // Ensure the parent directory exists before creating the file
+    if let Some(parent) = zip_path.as_ref().parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create directory `{}`: {e}", parent.display()))?;
+    }
+    
     let file = File::create(&zip_path)
         .map_err(|e| format!("Failed to create `{}`: {e}", zip_path.as_ref().display()))?;
     let buf = BufWriter::new(file);

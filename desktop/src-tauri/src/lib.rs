@@ -918,6 +918,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
         let mut segment_id: u16 = 1;
         let mut processed;
         let mut current_zone_name = String::from("Unknown Zone");
+        let mut current_code: Option<String> = Some(code.clone());
         let start_time = std::time::SystemTime::now();
 
         loop {
@@ -969,7 +970,27 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                         parts.next(); // ZONE_CHANGED
                         parts.next(); // zone_id
                         if let Some(zone_name) = parts.next() {
-                            current_zone_name = zone_name.trim_matches('"').to_string();
+                            let new_zone_name = zone_name.trim_matches('"').to_string();
+                            
+                            // If zone changed and we have an active report, terminate it first
+                            if new_zone_name != current_zone_name && current_code.is_some() {
+                                println!("Zone changed from {} to {} - terminating current report", current_zone_name, new_zone_name);
+                                if let Some(ref code_to_terminate) = current_code {
+                                    let client_clone = client.clone();
+                                    let terminate_code = code_to_terminate.clone();
+                                    tokio::spawn(async move {
+                                        let _ = client_clone
+                                            .post(&format!("{}/terminate-report/{}", base, terminate_code))
+                                            .send()
+                                            .await;
+                                    });
+                                }
+                                // Reset for new report in new zone
+                                current_code = None;
+                                segment_id = 1;
+                            }
+                            
+                            current_zone_name = new_zone_name;
                             println!("Zone changed to: {}", current_zone_name);
                         }
                     }
@@ -1058,9 +1079,8 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                     let timestamp = now.duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_secs();
-                    let status_message = format!("Processing {} new entries in {} - {}", 
-                            processed, current_zone_name,
-                            format_timestamp(timestamp));
+                    let status_message = format!("{}: Processing {} new entries in {}", 
+                            format_timestamp(timestamp), processed, current_zone_name);
                     println!("EMITTING STATUS: {}", status_message);
                     let _ = window.emit("upload_status", status_message);
                 }
