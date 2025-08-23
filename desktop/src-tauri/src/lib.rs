@@ -44,6 +44,42 @@ fn format_status_timestamp() -> String {
     format!("{}: ", now.format("%Y-%m-%d %H:%M:%S"))
 }
 
+fn determine_section_zone(lines: &[String]) -> String {
+    let mut current_zone = String::from("Unknown Zone");
+    let mut found_combat = false;
+    
+    for line in lines {
+        let mut split = line.splitn(4, ',');
+        let _first = split.next();
+        let second = split.next();
+        let _third = split.next();
+        
+        // Track zone changes
+        if matches!(second, Some("ZONE_CHANGED")) {
+            let mut parts = line.splitn(5, ',');
+            parts.next(); // timestamp
+            parts.next(); // ZONE_CHANGED
+            parts.next(); // zone_id
+            if let Some(zone_name) = parts.next() {
+                current_zone = zone_name.trim_matches('"').to_string();
+            }
+        }
+        
+        // If we encounter combat events, use the current zone
+        if matches!(second, Some("BEGIN_COMBAT") | Some("COMBAT_EVENT")) {
+            found_combat = true;
+            println!("First combat found in zone: {}", current_zone);
+            return current_zone;
+        }
+    }
+    
+    // If no combat found, return the last zone seen in the section
+    if !found_combat {
+        println!("No combat found in section, using last zone: {}", current_zone);
+    }
+    current_zone
+}
+
 #[tauri::command]
 fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), String> {
     let paths_guard = state.log_files.read().unwrap();
@@ -752,7 +788,9 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
         if matches!(second, Some("BEGIN_LOG")) {
             // Process previous section if we have data
             if !current_lines.is_empty() && first_timestamp.is_some() {
-                // Create report for previous section
+                // Determine the zone for this section based on first combat location
+                let section_zone = determine_section_zone(&current_lines);
+                
                 let report = process_log_section(
                     &window,
                     &client,
@@ -760,7 +798,7 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
                     &current_lines,
                     first_timestamp,
                     begin_log_system_time,
-                    &current_zone_name,
+                    &section_zone,
                 ).await?;
                 
                 all_report_codes.push(report);
@@ -793,6 +831,9 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
     
     // Process the last section if we have data
     if !current_lines.is_empty() && first_timestamp.is_some() {
+        // Determine the zone for this section based on first combat location
+        let section_zone = determine_section_zone(&current_lines);
+        
         let report = process_log_section(
             &window,
             &client,
@@ -800,7 +841,7 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
             &current_lines,
             first_timestamp,
             begin_log_system_time,
-            &current_zone_name,
+            &section_zone,
         ).await?;
         
         all_report_codes.push(report);
