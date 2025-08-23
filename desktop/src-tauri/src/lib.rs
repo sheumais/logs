@@ -14,12 +14,25 @@ mod state;
 
 const LINE_COUNT_FOR_PROGRESS: usize = 25000usize;
 
-fn format_timestamp(_timestamp: u64) -> String {
+fn format_timestamp(timestamp: u64) -> String {
     // Use chrono for proper local time handling
     use chrono::prelude::*;
     
-    let local_time = Local::now();
-    local_time.format("%H:%M:%S").to_string()
+    // Convert Unix timestamp to DateTime using UTC then converting to local
+    let utc_datetime = Utc.timestamp_opt(timestamp as i64, 0).single()
+        .unwrap_or_else(|| Utc::now());
+    let local_datetime: DateTime<Local> = utc_datetime.with_timezone(&Local);
+    
+    local_datetime.format("%Y%m%d-%H%M").to_string()
+}
+
+fn convert_game_timestamp_to_unix(_game_timestamp: u64) -> u64 {
+    // ESO game timestamps are relative to the start of the session, not Unix timestamps
+    // For live logs, we use current system time since BEGIN_LOG happens "now"
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }
 
 #[tauri::command]
@@ -227,9 +240,13 @@ fn live_log_from_folder(window: Window, app_state: State<'_, AppState>) -> Resul
 
     let mut output_folder_pathbuf = folder.as_path().unwrap().to_path_buf();
     output_folder_pathbuf.push("LogToolLive");
+    
+    // Clear the LogToolLive folder before starting
+    if output_folder_pathbuf.exists() {
+        std::fs::remove_dir_all(&output_folder_pathbuf).ok();
+    }
     std::fs::create_dir_all(&output_folder_pathbuf)
         .map_err(|e| format!("Failed to create output folder: {}", e))?;
-    let output_path = output_folder_pathbuf.join("Encounter.log");
 
     let window = window.clone();
     thread::spawn(move || {
@@ -242,14 +259,14 @@ fn live_log_from_folder(window: Window, app_state: State<'_, AppState>) -> Resul
                 }
             }
         };
-        let output_file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&output_path)
-            .expect("Failed to open output file");
-        let mut writer = BufWriter::new(&output_file);
+        
+        let mut writer: Option<BufWriter<File>> = None;
         let mut pos = 0u64;
         let mut buffer = Vec::new();
+        let mut custom_log_data = CustomLogData::new();
+        let mut current_zone_name: Option<String> = None;
+        let mut waiting_for_combat = false;
+        let mut log_timestamp: Option<u64> = None;
 
         loop {
             input_file
@@ -268,16 +285,92 @@ fn live_log_from_folder(window: Window, app_state: State<'_, AppState>) -> Resul
             if let Some(last_newline_offset) = buffer.iter().rposition(|&b| b == b'\n') {
                 let complete_data = &buffer[..=last_newline_offset];
                 let text = String::from_utf8_lossy(complete_data);
-                let mut custom_log_data = CustomLogData::new();
                 let mut new_lines = 0;
 
                 for line in text.lines() {
-                    let line = handle_line(line.to_string(), &mut custom_log_data);
-                    for entry in line {
-                        writeln!(writer, "{entry}").ok();
-                        new_lines += 1;
+                    // Parse the line to check for BEGIN_LOG, ZONE_CHANGED, and BEGIN_COMBAT
+                    let parts: Vec<&str> = line.splitn(4, ',').collect();
+                    
+                    if parts.len() >= 3 {
+                        let line_type = parts[1];
+                        let timestamp_str = parts[2];
+                        
+                        // Handle BEGIN_LOG - start waiting for zone and combat
+                        if line_type == "BEGIN_LOG" {
+                            // Close current log file if exists
+                            if let Some(mut w) = writer.take() {
+                                w.flush().ok();
+                            }
+                            
+                            // Parse timestamp
+                            if let Ok(ts) = timestamp_str.parse::<u64>() {
+                                log_timestamp = Some(ts);
+                            }
+                            
+                            waiting_for_combat = true;
+                            current_zone_name = None;
+                        }
+                        
+                        // Handle ZONE_CHANGED - capture zone name
+                        else if line_type == "ZONE_CHANGED" && waiting_for_combat {
+                            if parts.len() >= 4 {
+                                // Extract zone name from the rest of the line
+                                let zone_data = parts[3];
+                                // Zone name is typically after the zone ID
+                                let zone_parts: Vec<&str> = zone_data.split(',').collect();
+                                if zone_parts.len() >= 2 {
+                                    // Remove quotes if present
+                                    let zone = zone_parts[1].trim_matches('"').to_string();
+                                    current_zone_name = Some(zone);
+                                }
+                            }
+                        }
+                        
+                        // Handle BEGIN_COMBAT - create new log file
+                        else if line_type == "BEGIN_COMBAT" && waiting_for_combat {
+                            waiting_for_combat = false;
+                            
+                            // Close current writer if exists
+                            if let Some(mut w) = writer.take() {
+                                w.flush().ok();
+                            }
+                            
+                            // Create new log file with timestamp and zone name
+                            let unix_timestamp = log_timestamp
+                                .map(|game_ts| convert_game_timestamp_to_unix(game_ts))
+                                .unwrap_or_else(|| {
+                                    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+                                });
+                            
+                            let timestamp_str = format_timestamp(unix_timestamp);
+                            let zone_suffix = current_zone_name.as_ref()
+                                .map(|z| format!(" ({})", z))
+                                .unwrap_or_default();
+                            
+                            let filename = format!("{} Encounter{}.log", timestamp_str, zone_suffix);
+                            let output_path = output_folder_pathbuf.join(filename);
+                            
+                            if let Ok(file) = OpenOptions::new()
+                                .create(true)
+                                .truncate(true)
+                                .write(true)
+                                .open(&output_path) 
+                            {
+                                writer = Some(BufWriter::new(file));
+                            }
+                        }
+                    }
+                    
+                    // Process line through handle_line and write to current log file
+                    let modified_lines = handle_line(line.to_string(), &mut custom_log_data);
+                    for entry in modified_lines {
+                        if let Some(w) = writer.as_mut() {
+                            writeln!(w, "{entry}").ok();
+                            new_lines += 1;
+                        }
                     }
                 }
+                
                 pos += (last_newline_offset + 1) as u64;
 
                 if new_lines > 0 {
@@ -509,6 +602,23 @@ async fn create_report(
     client: &Client,
     settings: &UploadSettings,
 ) -> Result<EncounterReportCode, String> {
+    create_report_with_description(state, client, settings, settings.description.clone()).await
+}
+
+async fn create_report_with_description(
+    state: &State<'_, AppState>,
+    client: &Client,
+    settings: &UploadSettings,
+    description: String,
+) -> Result<EncounterReportCode, String> {
+    create_report_with_custom_desc(client, settings, description).await
+}
+
+async fn create_report_with_custom_desc(
+    client: &Client,
+    settings: &UploadSettings,
+    description: String,
+) -> Result<EncounterReportCode, String> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards")
@@ -523,7 +633,7 @@ async fn create_report(
         "serverOrRegion": settings.region,
         "visibility": settings.visibility,
         "reportTagId": null,
-        "description": settings.description,
+        "description": description,
         "guildId": if settings.guild == -1 { None } else { Some(settings.guild) },
     });
     println!("Create-report payload: {payload}");
@@ -547,15 +657,11 @@ async fn create_report(
         return Err(format!("Server returned error status: {} with body: {}", status, raw_body));
     }
 
-    state.http.write().unwrap().save_cookies();
-
     let report: EncounterReportCode = serde_json::from_str(&raw_body)
         .map_err(|e| format!("Invalid JSON: {e}\nRaw body: {raw_body}"))?;
 
     println!("Parsed report: {:?}", report);
 
-    let code = report.code.clone();
-    *state.esolog_code.write().map_err(|e| e.to_string())? = Some(code.clone());
     Ok(report)
 }
 
@@ -641,8 +747,8 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
         .unwrap_or_default()
         .as_secs();
     let size_mb = total_size as f64 / (1024.0 * 1024.0);
-    let initial_status = format!("Starting upload of {} segments ({:.1} MB total) - {}", 
-        total_segments, size_mb, format_timestamp(timestamp));
+    let initial_status = format!("{}: Starting upload of {} segments ({:.1} MB total)", 
+        format_timestamp(timestamp), total_segments, size_mb);
     let _ = window.emit("upload_status", initial_status);
 
     for (((tbl, seg, _), (start, end)), zone_name) in pairs.iter().zip(timestamps.iter()).zip(zone_names.iter()) {
@@ -734,10 +840,10 @@ async fn upload_master_table(
             .unwrap_or_default()
             .as_secs();
         let status_msg = match fight_name {
-            Some(name) => format!("Uploaded master table for segment {} [{}] - {}", 
-                segment_id, name, format_timestamp(timestamp)),
-            None => format!("Uploaded master table for segment {} - {}", 
-                segment_id, format_timestamp(timestamp))
+            Some(name) => format!("{}: Uploaded master table for segment {} [{}]", 
+                format_timestamp(timestamp), segment_id, name),
+            None => format!("{}: Uploaded master table for segment {}", 
+                format_timestamp(timestamp), segment_id)
         };
         println!("EMITTING MASTER TABLE STATUS: {}", status_msg);
         let _ = w.emit("upload_status", status_msg);
@@ -817,10 +923,10 @@ async fn upload_segment_and_get_next_id(
             .unwrap_or_default()
             .as_secs();
         let status_msg = match fight_name {
-            Some(name) => format!("Uploaded segment {} ({} bytes) [{}] to esologs - {}", 
-                segment_id, bytes_len, name, format_timestamp(timestamp)),
-            None => format!("Uploaded segment {} ({} bytes) to esologs - {}", 
-                segment_id, bytes_len, format_timestamp(timestamp))
+            Some(name) => format!("{}: Uploaded segment {} ({} bytes) [{}] to esologs", 
+                format_timestamp(timestamp), segment_id, bytes_len, name),
+            None => format!("{}: Uploaded segment {} ({} bytes) to esologs", 
+                format_timestamp(timestamp), segment_id, bytes_len)
         };
         println!("EMITTING SEGMENT STATUS: {}", status_msg);
         let _ = w.emit("upload_status", status_msg);
@@ -886,16 +992,13 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
         g.client.clone()
     };
 
-    let report_code = create_report(&app_state, &client, &upload_settings).await?;
-    let code: String = report_code.code.clone();
-    window.emit("live_log_code", code.clone()).map_err(|e| format!("Failed to emit live log code: {}", e))?;
-
+    // Don't create initial report - will create on first BEGIN_LOG
     let base = "https://www.esologs.com/desktop-client".to_string();
-    let tmp_dir = std::env::temp_dir().join(format!("esologtool_live_{code}"));
-    std::fs::create_dir_all(&tmp_dir).map_err(|e| format!("Failed to create temp dir: {e}"))?;
-
+    
     let window = window.clone();
     let upload_cancel_flag = app_state.upload_cancel_flag.clone();
+    let upload_settings = upload_settings.clone();
+    let client = client.clone();
 
     let handle = tauri::async_runtime::spawn(async move {
         let mut input_file = loop {
@@ -918,8 +1021,10 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
         let mut segment_id: u16 = 1;
         let mut processed;
         let mut current_zone_name = String::from("Unknown Zone");
-        let mut current_code: Option<String> = Some(code.clone());
+        let mut current_code: Option<String> = None;
+        let mut tmp_dir: Option<PathBuf> = None;
         let start_time = std::time::SystemTime::now();
+        let mut pending_zone_name: Option<String> = None;
 
         loop {
             if upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
@@ -953,8 +1058,28 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                     let third = split.next();
 
                     if matches!(second, Some("BEGIN_LOG")) {
+                        // Terminate previous report if exists
+                        if let Some(ref code_to_terminate) = current_code {
+                            println!("BEGIN_LOG encountered - terminating previous report");
+                            let client_clone = client.clone();
+                            let terminate_code = code_to_terminate.clone();
+                            let base_clone = base.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let _ = client_clone
+                                    .post(&format!("{}/terminate-report/{}", base_clone, terminate_code))
+                                    .send()
+                                    .await;
+                            });
+                        }
+                        
+                        // Reset for new log
                         elp = ESOLogProcessor::new();
                         custom_state = CustomLogData::new();
+                        segment_id = 1;
+                        current_code = None;
+                        tmp_dir = None;
+                        pending_zone_name = None;
+                        
                         if let Some(third_str) = third {
                             if let Ok(ts) = third_str.parse::<u64>() {
                                 first_timestamp = Some(ts);
@@ -962,7 +1087,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                         }
                     }
 
-                    // Track zone changes for status messages
+                    // Track zone changes - store as pending if we're waiting for a report
                     if matches!(second, Some("ZONE_CHANGED")) {
                         // ZONE_CHANGED format: timestamp,ZONE_CHANGED,zone_id,zone_name,difficulty
                         let mut parts = line.splitn(5, ',');
@@ -972,27 +1097,54 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                         if let Some(zone_name) = parts.next() {
                             let new_zone_name = zone_name.trim_matches('"').to_string();
                             
-                            // If zone changed and we have an active report, terminate it first
-                            if new_zone_name != current_zone_name && current_code.is_some() {
-                                println!("Zone changed from {} to {} - terminating current report", current_zone_name, new_zone_name);
-                                if let Some(ref code_to_terminate) = current_code {
-                                    let client_clone = client.clone();
-                                    let terminate_code = code_to_terminate.clone();
-                                    tokio::spawn(async move {
-                                        let _ = client_clone
-                                            .post(&format!("{}/terminate-report/{}", base, terminate_code))
-                                            .send()
-                                            .await;
-                                    });
-                                }
-                                // Reset for new report in new zone
-                                current_code = None;
-                                segment_id = 1;
+                            // Store as pending zone name if we haven't created a report yet
+                            if current_code.is_none() && first_timestamp.is_some() {
+                                pending_zone_name = Some(new_zone_name.clone());
                             }
                             
                             current_zone_name = new_zone_name;
                             println!("Zone changed to: {}", current_zone_name);
                         }
+                    }
+                    
+                    // When BEGIN_COMBAT happens and we have a pending zone name, create the report now
+                    if matches!(second, Some("BEGIN_COMBAT")) && current_code.is_none() && first_timestamp.is_some() {
+                        let zone_for_report = pending_zone_name.as_ref().unwrap_or(&current_zone_name);
+                        // Use the BEGIN_LOG timestamp converted to Unix timestamp
+                        let unix_timestamp = first_timestamp
+                            .map(|game_ts| convert_game_timestamp_to_unix(game_ts))
+                            .unwrap_or_else(|| {
+                                std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_secs()
+                            });
+                        let timestamp_str = format_timestamp(unix_timestamp);
+                        let zone_suffix = if zone_for_report != "Unknown Zone" {
+                            format!(" ({})", zone_for_report)
+                        } else {
+                            String::new()
+                        };
+                        let description = format!("{}{} - {}", timestamp_str, zone_suffix, upload_settings.description);
+                        
+                        // Create new report with custom description
+                        match create_report_with_custom_desc(&client, &upload_settings, description.clone()).await {
+                            Ok(report_code) => {
+                                current_code = Some(report_code.code.clone());
+                                tmp_dir = Some(std::env::temp_dir().join(format!("esologtool_live_{}", report_code.code)));
+                                if let Some(ref dir) = tmp_dir {
+                                    std::fs::create_dir_all(dir).ok();
+                                }
+                                window.emit("live_log_code", report_code.code.clone()).ok();
+                                println!("Created new report on BEGIN_COMBAT: {} with code: {}", description, report_code.code);
+                            },
+                            Err(e) => {
+                                eprintln!("Failed to create report on BEGIN_COMBAT: {}", e);
+                                current_code = None;
+                                tmp_dir = None;
+                            }
+                        }
+                        pending_zone_name = None;
                     }
 
                     let is_end_combat = matches!(second, Some("END_COMBAT"));
@@ -1001,12 +1153,14 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                         elp.handle_line(l.to_string());
                     }
 
-                    if is_end_combat {
-
+                    if is_end_combat && current_code.is_some() && tmp_dir.is_some() {
+                        let code = current_code.as_ref().unwrap();
+                        let dir = tmp_dir.as_ref().unwrap();
+                        
                         let seg_zip =
-                            tmp_dir.join(format!("report_segment_{segment_id}.zip"));
+                            dir.join(format!("report_segment_{segment_id}.zip"));
                         let tbl_zip =
-                            tmp_dir.join(format!("master_table_{segment_id}.zip"));
+                            dir.join(format!("master_table_{segment_id}.zip"));
 
                         let seg_data = build_report_segment(&elp);
                         write_zip_with_logtxt(&seg_zip, seg_data.as_bytes())
@@ -1091,19 +1245,28 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
             std::thread::sleep(std::time::Duration::from_secs(5));
         }
 
-        let _ = client
-            .post(&format!("{base}/terminate-report/{code}"))
-            .send()
-            .await;
+        // Terminate last report if exists
+        if let Some(ref code) = current_code {
+            let _ = client
+                .post(&format!("{base}/terminate-report/{code}"))
+                .send()
+                .await;
+        }
 
-        let _ = std::fs::remove_dir_all(&tmp_dir);
+        // Clean up temp directory
+        if let Some(ref dir) = tmp_dir {
+            let _ = std::fs::remove_dir_all(dir);
+        }
     });
 
     if let Err(e) = handle.await {
         return Err(format!("Live log task failed: {e}"));
     }
 
-    Ok(report_code)
+    // Return a dummy report code since we're creating multiple reports
+    Ok(EncounterReportCode {
+        code: "live-logging".to_string(),
+    })
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
