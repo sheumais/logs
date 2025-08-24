@@ -1221,6 +1221,8 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
         let start_time = std::time::SystemTime::now();
         let mut pending_zone_name: Option<String> = None;
         let mut begin_log_system_time: Option<u64> = None;
+        let mut last_data_time = std::time::SystemTime::now();
+        let mut last_wait_message_minutes = 0u32;
 
         loop {
             if upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
@@ -1239,8 +1241,24 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
             processed = 0;
 
             if bytes_read == 0 {
+                // Check if we should emit a wait message
+                let elapsed = last_data_time.elapsed().unwrap_or_default();
+                let elapsed_minutes = elapsed.as_secs() / 60;
+                
+                // Show wait messages every 2 minutes (2, 4, 6, 8, ...)
+                if elapsed_minutes >= 2 && elapsed_minutes % 2 == 0 && elapsed_minutes as u32 > last_wait_message_minutes {
+                    let wait_message = format!("{}Waiting {} minutes for new log entries", 
+                        format_status_timestamp(), elapsed_minutes);
+                    window.emit("upload_status", wait_message).ok();
+                    last_wait_message_minutes = elapsed_minutes as u32;
+                }
+                
                 std::thread::sleep(std::time::Duration::from_secs(5));
                 continue;
+            } else {
+                // Reset wait tracking when we get new data
+                last_data_time = std::time::SystemTime::now();
+                last_wait_message_minutes = 0;
             }
 
             if let Some(last_nl) = buffer.iter().rposition(|&b| b == b'\n') {
