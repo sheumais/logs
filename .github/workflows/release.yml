@@ -38,7 +38,7 @@ jobs:
           releaseName: 'v__VERSION__'
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: true
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

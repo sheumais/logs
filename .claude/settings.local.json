@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init:*)",
+      "Bash(git remote add:*)",
+      "Bash(git config:*)",
+      "Read(/C:\\c/**)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git merge:*)",
+      "Bash(cargo check:*)",
+      "Bash(npm run tauri:*)",
+      "Bash(cargo tauri:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(cargo:*)",
+      "Bash(git checkout:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
