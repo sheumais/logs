@@ -45,6 +45,7 @@ pub fn upload() -> Html {
     let region = use_state(|| None::<u8>);
     let visibility = use_state(|| None::<u8>);
     let description = use_state(|| "".to_string());
+    let rewind = use_state(|| None::<bool>);
     let report_code = use_state(|| None::<String>);
     let error = use_state(|| None::<String>);
     let is_uploading = use_state(|| UploadState::None);
@@ -54,6 +55,9 @@ pub fn upload() -> Html {
     let selected_guild = saved_settings.map(|s| s.guild).unwrap_or_else(|| -1);
     let selected_region = saved_settings.map(|s| s.region).unwrap_or_else(|| 1);
     let selected_visibility = saved_settings.map(|s| s.visibility).unwrap_or_else(|| 2);
+    let selected_rewind = saved_settings.map(|s| s.rewind).unwrap_or_else(|| false);
+
+    let upload_progress = use_state(|| None::<String>);
 
     let report_effect = report_code.clone();
     use_effect(move || {
@@ -62,6 +66,18 @@ pub fn upload() -> Html {
             if let Ok(mut events) = event::listen::<String>("live_log_code").await {
                 while let Some(e) = events.next().await {
                     code.set(Some(e.payload));
+                }
+            }
+        });
+        || ()
+    });
+    let upload_effect = upload_progress.clone();
+    use_effect(move || {
+        let upload_progress = upload_effect.clone();
+        wasm_bindgen_futures::spawn_local(async move {
+            if let Ok(mut events) = event::listen::<String>("upload_progress").await {
+                while let Some(e) = events.next().await {
+                    upload_progress.set(Some(e.payload));
                 }
             }
         });
@@ -100,6 +116,13 @@ pub fn upload() -> Html {
             description.set(value);
         })
     };
+    let on_rewind_change = {
+        let rewind = rewind.clone();
+        Callback::from(move |e: Event| {
+            let input: HtmlInputElement = e.target_unchecked_into();
+            rewind.set(Some(input.checked()));
+        })
+    };
 
     let upload_log = {
         let report_code = report_code.clone();
@@ -126,6 +149,7 @@ pub fn upload() -> Html {
                     visibility: visibility.unwrap_or(2), 
                     region: region.unwrap_or(1),
                     description: description.to_string(),
+                    rewind: false,
                 };
                 match invoke_result::<EncounterReportCode, String>("upload_log",  
                     &serde_json::json!({
@@ -147,6 +171,7 @@ pub fn upload() -> Html {
         let region = region.clone();
         let visibility = visibility.clone();
         let description = description.clone();
+        let rewind = rewind.clone();
         move |_| {
             let report_code = report_code.clone();
             let error = error.clone();
@@ -155,6 +180,7 @@ pub fn upload() -> Html {
             let region = region.clone();
             let visibility = visibility.clone();
             let description = description.clone();
+            let rewind = rewind.clone();
             wasm_bindgen_futures::spawn_local(async move {
                 invoke::<()>("pick_and_load_folder", &()).await;
 
@@ -164,6 +190,7 @@ pub fn upload() -> Html {
                     visibility: visibility.unwrap_or(2), 
                     region: region.unwrap_or(1),
                     description: description.to_string(),
+                    rewind: rewind.unwrap_or(selected_rewind),
                 };
                 match invoke_result::<EncounterReportCode, String>("live_log_upload",  
                     &serde_json::json!({
@@ -179,11 +206,14 @@ pub fn upload() -> Html {
 
     let cancel_upload = {
         let is_uploading = is_uploading.clone();
+        let upload_progress = upload_progress.clone();
         Callback::from(move |_| {
             let is_uploading = is_uploading.clone();
+            let upload_progress = upload_progress.clone();
             wasm_bindgen_futures::spawn_local(async move {
                 invoke::<()>("cancel_upload_log", &()).await;
                 is_uploading.set(UploadState::None);
+                upload_progress.set(None);
             });
         })
     };
@@ -194,7 +224,7 @@ pub fn upload() -> Html {
             let has_been_deleted = has_been_deleted.clone();
             wasm_bindgen_futures::spawn_local(async move {
                 invoke::<()>("delete_log_file", &()).await;
-                has_been_deleted.set(true)
+                has_been_deleted.set(true);
             });
         })
     };
@@ -229,6 +259,11 @@ pub fn upload() -> Html {
             <div class={container_style().clone()}>
                 if *is_uploading == UploadState::UploadingLog {
                     <h3 style="margin-top:2em;">{"Please be patient while your log file is processed. This can take multiple minutes."}</h3>
+                    if let Some(progress) = upload_progress.as_ref() {
+                        <div>
+                            { progress }
+                        </div>
+                    }
                     <IconButton
                         icon_id={IconId::BootstrapXLg}
                         description={"Cancel upload"}
@@ -237,13 +272,18 @@ pub fn upload() -> Html {
                         width={"2em"}
                         height={"2em"}
                     />
-                } else if *is_uploading == UploadState::LiveLogging { 
-                    <h3 style="margin-top:2em;">{"You are now live logging! Press the stop button once everything has been uploaded."}</h3>
                     if let Some(code) = report_code.clone().deref() {
-                        <a class={text_link_style().clone()} style={"font-size: large;margin-top:5em;margin-bottom:3em;"} href={format!("https://www.esologs.com/reports/{}", code)} target="_blank" rel="noopener noreferrer">
-                            {"Click to open your live log"}
+                        <a class={text_link_style().clone()} style={"font-size: large;margin-top:1em;margin-bottom:1em;"} href={format!("https://www.esologs.com/reports/{}", code)} target="_blank" rel="noopener noreferrer">
+                            {"Click to open your encounter log"}
                         </a>
                     }
+                } else if *is_uploading == UploadState::LiveLogging { 
+                    <h3 style="margin-top:2em;">{"You are now live logging! Press the stop button once everything has been uploaded."}</h3>
+                    if let Some(progress) = upload_progress.as_ref() {
+                        <div>
+                            { progress }
+                        </div>
+                    } 
                     <IconButton
                         icon_id={IconId::BootstrapXLg}
                         description={"Stop live log"}
@@ -252,24 +292,29 @@ pub fn upload() -> Html {
                         width={"2em"}
                         height={"2em"}
                     />
-                } else if report_code.is_some() {
                     if let Some(code) = report_code.clone().deref() {
-                        <a class={text_link_style().clone()} style={"font-size: large;margin-top:5em;margin-bottom:3em;"} href={format!("https://www.esologs.com/reports/{}", code)} target="_blank" rel="noopener noreferrer">
-                            {"Click to open your encounter log"}
+                        <a class={text_link_style().clone()} style={"font-size: large;margin-top:1em;margin-bottom:1em;"} href={format!("https://www.esologs.com/reports/{}", code)} target="_blank" rel="noopener noreferrer">
+                            {"Click to open your live log"}
                         </a>
-                        if !*has_been_deleted {
-                            <IconButton
-                                icon_id={IconId::BootstrapTrash3}
-                                description={"Delete uploaded file permanently"}
-                                onclick={Some(delete_log_file.clone())}
-                                class={icon_border_style().clone()}
-                                width={"2em"}
-                                height={"2em"}
-                            /> 
-                        }
-                       
                     }
-                } else {
+                }
+                if let Some(_) = report_code.clone().deref() {
+                    if !*has_been_deleted && *is_uploading == UploadState::None {
+                        if let Some(code) = report_code.clone().deref() {
+                            <a class={text_link_style().clone()} style={"font-size: large;margin-top:1em;margin-bottom:1em;"} href={format!("https://www.esologs.com/reports/{}", code)} target="_blank" rel="noopener noreferrer">
+                                {"Click to open your encounter log"}
+                            </a>
+                        }
+                        <IconButton
+                            icon_id={IconId::BootstrapTrash3}
+                            description={"Delete uploaded file permanently"}
+                            onclick={Some(delete_log_file.clone())}
+                            class={icon_border_style().clone()}
+                            width={"2em"}
+                            height={"2em"}
+                        /> 
+                    }
+                } else if *is_uploading == UploadState::None {
                     <div style="width: min-content; margin: 0.5em;">
                         <h3 style="margin-top:2em;">{"Specify how to upload your log:"}</h3>
                         <div style="display:inline-flex;gap:1em;">
@@ -290,7 +335,13 @@ pub fn upload() -> Html {
                             value={(*description).clone()}
                             oninput={on_description_input}
                             placeholder="Description"
-                            style="width:100%;padding:0.2em;border:0px;resize:none;"
+                            style="width:100%;padding:0.2em;border:0px;resize:none;margin-bottom:1.5em;"
+                        />
+                        <h3 style="margin-top:2em;margin-bottom:1.5em;display:inline;margin-right:1em;">{"(Live log) Upload entire file:"}</h3>
+                        <input 
+                            type="checkbox" 
+                            checked={rewind.unwrap_or(selected_rewind)}
+                            onchange={on_rewind_change}
                         />
                     </div>
                     <div class={icon_wrapper_style().clone()}>
@@ -307,9 +358,9 @@ pub fn upload() -> Html {
                             class={icon_style().clone()}
                         />
                     </div>
-                    if let Some(err) = &*error {
-                        <div style="color: red; margin-bottom: 1em;">{ err }</div>
-                    }
+                }
+                if let Some(err) = &*error {
+                    <div style="color: red; margin-bottom: 1em;">{ err }</div>
                 }
             </div>
         </div>

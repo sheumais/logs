@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 pub const ESO_LOGS_COM_VERSION: &'static str = "8.17.18";
 pub const ESO_LOGS_PARSER_VERSION: &'static u8 = &11;
+pub const LINE_COUNT_FOR_PROGRESS: usize = 25000usize;
 
 #[derive(Default)]
 pub struct ESOLogsLog {
@@ -37,33 +38,70 @@ impl ESOLogsLog {
         Self::default()
     }
 
+    pub fn new_log_reset(&mut self) {
+        // self.units = Vec<ESOLogsUnit>;
+        self.session_id_to_units_index = HashMap::new();
+        self.owner_id_pairs_index = HashMap::new();
+        self.unit_id_to_session_id = HashMap::new();
+        self.unit_id_to_units_index = HashMap::new();
+        self.session_units = HashMap::new();
+        self.unit_index_in_session = HashMap::new();
+        self.objects = HashMap::new();
+        self.players = HashMap::new();
+        self.bosses = HashMap::new();
+        // self.buffs = Vec<ESOLogsBuff>;
+        self.buffs_hashmap = HashMap::new();
+        // self.effects = Vec<ESOLogsBuffEvent>;
+        self.effects_hashmap = HashMap::new();
+        self.cast_id_hashmap = HashMap::new();
+        self.cast_id_target_unit_id = HashMap::new();
+        self.cast_id_source_unit_id = HashMap::new();
+        self.cast_with_cast_time = HashSet::new();
+        self.interruption_hashmap = HashMap::new();
+        self.events = Vec::new();
+        // self.pets = Vec<ESOLogsPetRelationship>;
+        self.shields = HashMap::new();
+        self.shield_values = HashMap::new();
+    }
+
     pub fn add_unit(&mut self, unit: ESOLogsUnit) -> usize {
-        let id = unit.unit_id;
+        let mut id = unit.unit_id;
+        if let Some(pd) = &unit.player_data {
+            let char_id = pd.character_id;
+
+            if let Some(existing_index) = self.units.iter().position(|u| {
+                u.player_data.as_ref().map(|p| p.character_id) == Some(char_id)
+            }) {
+                if let Some(existing_unit) = self.units.get_mut(existing_index) {
+                    existing_unit.unit_type = unit.unit_type;
+                }
+                return existing_index;
+            }
+
+            let char_id_str = char_id.to_string();
+            let first_9 = &char_id_str[..char_id_str.len().min(9)];
+            id = first_9.parse::<u32>().unwrap_or(char_id as u32);
+        }
+
         let owner_id = unit.owner_id;
         let session_id = self.unit_id_to_session_id.get(&owner_id).unwrap_or(&0);
         let raw_key = (id, self.session_id_to_units_index.get(session_id).unwrap_or(&0usize));
-        // println!("owner id: {} to session id: {} to raw_key {:?}", owner_id, session_id, raw_key);
         let key = (raw_key.0, *raw_key.1);
-
-        // if unit.player_data.is_some() {
-        //     self.players.insert(id, true);
-        // }
 
         if let Some(existing_index) = self.owner_id_pairs_index.get(&key) {
             if let Some(original_unit) = self.units.get_mut(*existing_index) {
                 original_unit.unit_type = unit.unit_type;
             }
             if *existing_index < self.units.len() {
-                // println!("Existing index: {}", *existing_index);
                 return *existing_index;
             }
         }
 
+        id = unit.unit_id;
         let index = self.units.len();
         self.units.push(unit);
         self.owner_id_pairs_index.insert(key, index);
         self.session_id_to_units_index.insert(id, index);
-        // println!("New index: {}, unit_id: {}", index, id);
         index
     }
 
@@ -953,4 +991,5 @@ pub struct UploadSettings {
     pub visibility: u8,
     pub region: u8,
     pub description: String,
+    pub rewind: bool,
 }

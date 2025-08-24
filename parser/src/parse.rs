@@ -117,7 +117,7 @@ pub fn gear_piece(part: &str) -> GearPiece {
         println!("Unknown gear trait: {part}");
     }
 
-    let enchant = if split.len() > 7 {
+    let enchant = if split.len() > 7  && split[7] != "INVALID" {
         let et = player::match_enchant_type(split[7]);
         if et == player::EnchantType::None && split[7] != "NONE" {
             println!("Unknown enchant type: {part}");
@@ -339,7 +339,7 @@ fn process_nested_segment(chars: &[char], result: &mut Vec<String>) {
 
 #[cfg(test)]
 mod tests {
-    use crate::{effect::{EffectType, StatusEffectType}, player::{veteran_level_to_cp, Class, GearQuality, GearSlot, GearTrait, Race}, set::is_mythic_set};
+    use crate::{effect::{EffectType, StatusEffectType}, player::{veteran_level_to_cp, Class, EnchantType, GearEnchant, GearQuality, GearSlot, GearTrait, Race}, set::{get_item_type_from_hashmap, is_mythic_set, ItemType}};
 
     use super::*;
     use std::collections::HashMap;
@@ -492,7 +492,7 @@ mod tests {
     }
 
     #[test]
-    fn test_simple_vs_nested() {
+    fn test_simple_vs_nested_vs_complex() {
         let simple_line = "[A,B,C,D]";
         let simple_result = handle_line(simple_line);
         assert_eq!(simple_result, vec!["A,B,C,D"]);
@@ -500,6 +500,10 @@ mod tests {
         let nested_line = "[[A,B],[C,D]]";
         let nested_result = handle_line(nested_line);
         assert_eq!(nested_result, vec!["A,B", "C,D"]);
+
+        let complex_line = r#"[[A,B],["C","D,"]]"#;
+        let complex_result = handle_line(complex_line);
+        assert_eq!(complex_result, vec!["A,B", r#""C","D,""#]);
     }
 
     #[test]
@@ -517,5 +521,205 @@ mod tests {
         assert_eq!(result[6], "");
         assert_eq!(result[7], "");
         assert_eq!(result.len(), 8);
+    }
+
+    #[test]
+    fn test_extreme_player_definition() {
+        let line = r#"3597,PLAYER_INFO,1,[142079,78219,72824,150054,147459,46751,39248,35770,46041,33090,70390,117848,45301,63802,13984,34741,61930,135397,203342,215493,122586,120017,61685,120023,61662,120028,61691,120029,61666,120008,61744,120015,109966,177885,147417,93109,120020,88490,120021,120025,120013,61747,177886,120024,120026],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[[HEAD,185032,T,8,ARMOR_PROSPEROUS,ARCANE,640,INVALID,F,0,NORMAL],[NECK,171437,T,16,JEWELRY_ARCANE,LEGENDARY,576,INCREASE_BASH_DAMAGE,F,35,ARCANE],[CHEST,45095,T,16,ARMOR_REINFORCED,LEGENDARY,0,PRISMATIC_DEFENSE,F,5,LEGENDARY],[SHOULDERS,56058,F,12,ARMOR_NIRNHONED,MAGIC,0,INVALID,F,0,NORMAL],[OFF_HAND,184873,T,6,ARMOR_DIVINES,ARCANE,640,INVALID,F,0,NORMAL],[WAIST,184888,F,1,ARMOR_DIVINES,NORMAL,640,INVALID,F,0,NORMAL],[LEGS,45169,T,1,ARMOR_TRAINING,ARCANE,0,MAGICKA,F,35,MAGIC],[FEET,45061,F,50,ARMOR_IMPENETRABLE,ARTIFACT,0,MAGICKA,F,35,ARCANE],[COSTUME,55262,F,1,NONE,ARCANE,0,INVALID,F,0,NORMAL],[RING1,139657,F,1,JEWELRY_BLOODTHIRSTY,ARTIFACT,0,INVALID,F,0,NORMAL],[RING2,44904,F,0,NONE,LEGENDARY,0,INVALID,F,0,NORMAL],[BACKUP_POISON,79690,F,1,NONE,LEGENDARY,0,INVALID,F,0,NORMAL],[HAND,185058,F,28,ARMOR_STURDY,NORMAL,640,HEALTH,F,30,NORMAL],[BACKUP_MAIN,185007,T,12,WEAPON_CHARGED,MAGIC,640,DAMAGE_SHIELD,F,35,ARTIFACT],[BACKUP_OFF,184897,T,12,WEAPON_PRECISE,NORMAL,640,FROZEN_WEAPON,F,35,ARCANE]],[25267,61919,34843,36901,25380,113105],[36935,35419,61507,34727,36028]"#;
+        let result = handle_line(line);
+        assert_eq!(result.len(), 22);
+        {
+            let gear = gear_piece(&result[5]);
+            assert_eq!(gear.slot, GearSlot::Head);
+            assert_eq!(gear.item_id, 185032);
+            assert!(gear.is_cp);
+            assert_eq!(veteran_level_to_cp(gear.level, gear.is_cp), 80);
+            assert_eq!(gear.gear_trait, GearTrait::Invigorating);
+            assert_eq!(gear.quality, GearQuality::Arcane);
+            assert_eq!(gear.set_id, 640);
+            assert!(gear.enchant.is_none());
+            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Medium);
+        }
+
+        {
+            let gear = gear_piece(&result[6]);
+            assert_eq!(gear.slot, GearSlot::Necklace);
+            assert_eq!(gear.item_id, 171437);
+            assert!(gear.is_cp);
+            assert_eq!(gear.level, 16);
+            assert_eq!(gear.gear_trait, GearTrait::Arcane);
+            assert_eq!(gear.quality, GearQuality::Legendary);
+            assert_eq!(gear.set_id, 576);
+            assert_eq!(gear.enchant, Some(GearEnchant {
+                enchant_type: EnchantType::IncreaseBashDamage,
+                is_cp: false,
+                enchant_level: 35,
+                enchant_quality: GearQuality::Arcane
+            }));
+        }
+
+        {
+            let gear = gear_piece(&result[7]);
+            assert_eq!(gear.slot, GearSlot::Chest);
+            assert_eq!(gear.item_id, 45095);
+            assert!(gear.is_cp);
+            assert_eq!(gear.gear_trait, GearTrait::Reinforced);
+            assert_eq!(gear.quality, GearQuality::Legendary);
+            assert_eq!(gear.set_id, 0);
+            assert_eq!(gear.enchant, Some(GearEnchant {
+                enchant_type: EnchantType::PrismaticDefense,
+                is_cp: false,
+                enchant_level: 5,
+                enchant_quality: GearQuality::Legendary
+            }));
+            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Heavy);
+        }
+
+        {
+            let gear = gear_piece(&result[8]);
+            assert_eq!(gear.slot, GearSlot::Shoulders);
+            assert_eq!(gear.item_id, 56058);
+            assert!(!gear.is_cp);
+            assert_eq!(gear.gear_trait, GearTrait::Nirnhoned);
+            assert_eq!(gear.quality, GearQuality::Magic);
+            assert_eq!(gear.set_id, 0);
+            assert!(gear.enchant.is_none());
+            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Medium);
+        }
+
+        {
+            let gear = gear_piece(&result[9]);
+            assert_eq!(gear.slot, GearSlot::OffHand);
+            assert_eq!(gear.item_id, 184873);
+            assert!(gear.is_cp);
+            assert_eq!(gear.gear_trait, GearTrait::Divines);
+            assert_eq!(gear.quality, GearQuality::Arcane);
+            assert_eq!(gear.set_id, 640);
+            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Shield);
+        }
+
+        {
+            let gear = gear_piece(&result[10]);
+            assert_eq!(gear.slot, GearSlot::Waist);
+            assert_eq!(gear.item_id, 184888);
+            assert!(!gear.is_cp);
+            assert_eq!(gear.gear_trait, GearTrait::Divines);
+            assert_eq!(gear.quality, GearQuality::Normal);
+            assert_eq!(gear.set_id, 640);
+            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Light);
+        }
+
+        {
+            let gear = gear_piece(&result[11]);
+            assert_eq!(gear.slot, GearSlot::Legs);
+            assert_eq!(gear.item_id, 45169);
+            assert!(gear.is_cp);
+            assert_eq!(gear.gear_trait, GearTrait::Training);
+            assert_eq!(gear.quality, GearQuality::Arcane);
+            assert_eq!(gear.enchant, Some(GearEnchant {
+                enchant_type: EnchantType::Magicka,
+                is_cp: false,
+                enchant_level: 35,
+                enchant_quality: GearQuality::Magic
+            }));
+            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Heavy);
+        }
+
+        {
+            let gear = gear_piece(&result[12]);
+            assert_eq!(gear.slot, GearSlot::Feet);
+            assert_eq!(gear.item_id, 45061);
+            assert!(!gear.is_cp);
+            assert_eq!(gear.gear_trait, GearTrait::Impenetrable);
+            assert_eq!(gear.quality, GearQuality::Artifact);
+            assert_eq!(gear.enchant, Some(GearEnchant {
+                enchant_type: EnchantType::Magicka,
+                is_cp: false,
+                enchant_level: 35,
+                enchant_quality: GearQuality::Arcane
+            }));
+            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Heavy);
+        }
+
+        {
+            let gear = gear_piece(&result[13]);
+            assert_eq!(gear.slot, GearSlot::Costume);
+            assert_eq!(gear.item_id, 55262);
+            assert_eq!(gear.gear_trait, GearTrait::None);
+            assert_eq!(gear.quality, GearQuality::Arcane);
+            assert!(gear.enchant.is_none());
+        }
+
+        {
+            let gear = gear_piece(&result[14]);
+            assert_eq!(gear.slot, GearSlot::Ring1);
+            assert_eq!(gear.item_id, 139657);
+            assert_eq!(gear.gear_trait, GearTrait::Bloodthirsty);
+            assert_eq!(gear.quality, GearQuality::Artifact);
+        }
+
+        {
+            let gear = gear_piece(&result[15]);
+            assert_eq!(gear.slot, GearSlot::Ring2);
+            assert_eq!(gear.item_id, 44904);
+            assert_eq!(gear.gear_trait, GearTrait::None);
+            assert_eq!(gear.quality, GearQuality::Legendary);
+            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Mara);
+        }
+
+        {
+            let gear = gear_piece(&result[16]);
+            assert_eq!(gear.slot, GearSlot::BackupPoison);
+            assert_eq!(gear.item_id, 79690);
+            assert_eq!(gear.gear_trait, GearTrait::None);
+            assert_eq!(gear.quality, GearQuality::Legendary);
+        }
+
+        {
+            let gear = gear_piece(&result[17]);
+            assert_eq!(gear.slot, GearSlot::Hands);
+            assert_eq!(gear.item_id, 185058);
+            assert_eq!(gear.gear_trait, GearTrait::Sturdy);
+            assert_eq!(gear.quality, GearQuality::Normal);
+            assert_eq!(gear.enchant, Some(GearEnchant {
+                enchant_type: EnchantType::Health,
+                is_cp: false,
+                enchant_level: 30,
+                enchant_quality: GearQuality::Normal
+            }));
+            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Light);
+        }
+
+        {
+            let gear = gear_piece(&result[18]);
+            assert_eq!(gear.slot, GearSlot::MainHandBackup);
+            assert_eq!(gear.item_id, 185007);
+            assert!(gear.is_cp);
+            assert_eq!(gear.gear_trait, GearTrait::Charged);
+            assert_eq!(gear.quality, GearQuality::Magic);
+            assert_eq!(gear.enchant, Some(GearEnchant {
+                enchant_type: EnchantType::DamageShield,
+                is_cp: false,
+                enchant_level: 35,
+                enchant_quality: GearQuality::Artifact
+            }));
+            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Dagger);
+        }
+
+        {
+            let gear = gear_piece(&result[19]);
+            assert_eq!(gear.slot, GearSlot::OffHandBackup);
+            assert_eq!(gear.item_id, 184897);
+            assert!(gear.is_cp);
+            assert_eq!(gear.gear_trait, GearTrait::Precise);
+            assert_eq!(gear.quality, GearQuality::Normal);
+            assert_eq!(gear.enchant, Some(GearEnchant {
+                enchant_type: EnchantType::FrozenWeapon,
+                is_cp: false,
+                enchant_level: 35,
+                enchant_quality: GearQuality::Arcane
+            }));
+            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Mace);
+        }
     }
 }

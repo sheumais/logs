@@ -1,4 +1,4 @@
-use cli::{esologs_convert::{build_master_table, build_report_segment, event_timestamp, split_and_zip_log_by_fight, write_zip_with_logtxt, ESOLogProcessor}, esologs_format::{EncounterReportCode, LoginResponse, UploadSettings, ESO_LOGS_COM_VERSION, ESO_LOGS_PARSER_VERSION}, log_edit::{handle_line, CustomLogData}};
+use cli::{esologs_convert::{build_master_table, build_report_segment, event_timestamp, split_and_zip_log_by_fight, write_zip_with_logtxt, ESOLogProcessor}, esologs_format::{EncounterReportCode, LoginResponse, UploadSettings, ESO_LOGS_COM_VERSION, ESO_LOGS_PARSER_VERSION, LINE_COUNT_FOR_PROGRESS}, log_edit::{handle_line, CustomLogData}};
 use reqwest::{multipart::{Form, Part}, Client};
 use serde_json::json;
 use state::AppState;
@@ -11,8 +11,6 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::state::cookie_file_path;
 mod state;
-
-const LINE_COUNT_FOR_PROGRESS: usize = 25000usize;
 
 #[tauri::command]
 fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), String> {
@@ -501,6 +499,7 @@ async fn create_report(
     client: &Client,
     settings: &UploadSettings,
 ) -> Result<EncounterReportCode, String> {
+    state.upload_cancel_flag.store(false, SeqCst);
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards")
@@ -552,7 +551,7 @@ async fn create_report(
 }
 
 #[tauri::command]
-async fn upload_log(state: State<'_, AppState>, upload_settings: UploadSettings) -> Result<EncounterReportCode, String> {
+async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings: UploadSettings) -> Result<EncounterReportCode, String> {
     state.upload_cancel_flag.store(false, SeqCst);
     let log_path_opt = {
         let lock = state.log_files.read().map_err(|e| e.to_string())?;
@@ -578,13 +577,17 @@ async fn upload_log(state: State<'_, AppState>, upload_settings: UploadSettings)
     let log_path_clone = log_path.clone();
     let upload_cancel_flag = state.upload_cancel_flag.clone();
 
+    let window_clone = window.clone();
     let pairs = spawn_blocking(move || -> Result<Vec<(PathBuf,PathBuf,u16)>, String> {
         if upload_cancel_flag.load(SeqCst) {
             return Err("Upload cancelled".to_string());
         }
         split_and_zip_log_by_fight(
             log_path_clone.as_path().ok_or("Invalid log file path")?,
-            tmp_dir_for_spawn.as_path()
+            tmp_dir_for_spawn.as_path(),
+            |val| {
+                let _ = window_clone.emit("upload_progress", format!("Processing: {}%", val));
+            },
         )?;
         println!("Finished split_and_zip_log_by_fight");
 
@@ -615,6 +618,13 @@ async fn upload_log(state: State<'_, AppState>, upload_settings: UploadSettings)
     let ts_path = tmp_dir.join("timestamps");
     let timestamps   = read_timestamps(&ts_path)?;
 
+    let total_segments = pairs.len();
+    let mut uploaded_segments = 0;
+    
+    window
+        .emit("live_log_code", code.clone())
+        .map_err(|e| format!("Failed to emit uploading log code: {}", e))?;
+
     for ((tbl, seg, _), (start, end)) in pairs.iter().zip(timestamps.iter()) {
         if state.upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
             return Err("Upload cancelled".to_string());
@@ -633,6 +643,8 @@ async fn upload_log(state: State<'_, AppState>, upload_settings: UploadSettings)
             *start,
             *end,
         ).await?;
+        uploaded_segments += 1;
+        let _ = window.emit("upload_progress", format!("Uploading: {}%", ((uploaded_segments as f64 / total_segments as f64) * 100.0).round() as u8));
     }
 
     println!("POST {base}/terminate-report/{code}");
@@ -795,42 +807,81 @@ fn read_timestamps(path: &Path) -> Result<Vec<(u64, u64)>, String> {
 
 #[tauri::command]
 async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_settings: UploadSettings) -> Result<EncounterReportCode, String> {
-    let input_path: PathBuf = {
+let input_path: PathBuf = {
         let guard = app_state.live_log_folder.read().map_err(|e| e.to_string())?;
         let folder = guard.as_ref().ok_or("No folder selected")?.clone();
         folder.as_path().ok_or("Invalid path")?.join("Encounter.log")
     };
+
+    println!("[live_log_upload] Using input path: {:?}", input_path);
 
     let client = {
         let g = app_state.http.read().map_err(|e| e.to_string())?;
         g.client.clone()
     };
 
+    println!("[live_log_upload] Creating report...");
     let report_code = create_report(&app_state, &client, &upload_settings).await?;
     let code: String = report_code.code.clone();
-    window.emit("live_log_code", code.clone()).map_err(|e| format!("Failed to emit live log code: {}", e))?;
+    println!("[live_log_upload] Report code: {}", code);
+
+    window
+        .emit("live_log_code", code.clone())
+        .map_err(|e| format!("Failed to emit live log code: {}", e))?;
 
     let base = "https://www.esologs.com/desktop-client".to_string();
     let tmp_dir = std::env::temp_dir().join(format!("esologtool_live_{code}"));
-    std::fs::create_dir_all(&tmp_dir).map_err(|e| format!("Failed to create temp dir: {e}"))?;
+    std::fs::create_dir_all(&tmp_dir)
+        .map_err(|e| format!("Failed to create temp dir: {e}"))?;
+    println!("[live_log_upload] Temp dir created at {:?}", tmp_dir);
 
     let window = window.clone();
     let upload_cancel_flag = app_state.upload_cancel_flag.clone();
-
     let handle = tauri::async_runtime::spawn(async move {
+        println!("[live_log_upload] Spawned async task.");
+
         let mut input_file = loop {
             match std::fs::OpenOptions::new().read(true).open(&input_path) {
-                Ok(f) => break f,
-                Err(_) => {
+                Ok(f) => {
+                    println!("[live_log_upload] Successfully opened Encounter.log");
+                    break f;
+                }
+                Err(e) => {
+                    println!(
+                        "[live_log_upload] Failed to open Encounter.log ({}). Retrying...",
+                        e
+                    );
                     std::thread::sleep(std::time::Duration::from_secs(1));
                     continue;
                 }
             }
         };
 
-        let mut pos = input_file
-            .seek(std::io::SeekFrom::Start(0))
-            .expect("seek failed");
+        let mut pos = if upload_settings.rewind {
+            println!("[live_log_upload] Rewind enabled → seeking to start of file.");
+            input_file.seek(std::io::SeekFrom::Start(0)).expect("seek failed")
+        } else {
+            println!("[live_log_upload] Rewind disabled → seeking to end of file.");
+            let scan_file = std::fs::OpenOptions::new().read(true).open(&input_path)
+                .expect("Failed to open file for scanning");
+            let mut reader = std::io::BufReader::new(&scan_file);
+            let mut pos = 0u64;
+            let mut last_begin_log_pos = 0u64;
+            loop {
+                let start_pos = pos;
+                let mut buf = String::new();
+                let bytes_read = reader.read_line(&mut buf).expect("read failed");
+                if bytes_read == 0 {
+                    break;
+                }
+                if buf.contains("BEGIN_LOG") {
+                    last_begin_log_pos = start_pos;
+                }
+                pos += bytes_read as u64;
+            }
+            input_file.seek(std::io::SeekFrom::Start(last_begin_log_pos)).expect("seek failed")
+        };
+        println!("[live_log_upload] Initial file position: {}", pos);
 
         let mut elp = ESOLogProcessor::new();
         let mut custom_state = CustomLogData::new();
@@ -840,6 +891,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
 
         loop {
             if upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
+                println!("[live_log_upload] Cancel flag set → breaking loop.");
                 break;
             }
 
@@ -851,14 +903,16 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
             let mut reader = std::io::BufReader::new(&input_file);
             let bytes_read = reader.read_to_end(&mut buffer).expect("read failed");
 
+            println!("[live_log_upload] Read {} bytes at pos {}", bytes_read, pos);
+
             if bytes_read == 0 {
+                println!("[live_log_upload] No new bytes. Sleeping 5s...");
                 std::thread::sleep(std::time::Duration::from_secs(5));
                 continue;
             }
 
             if let Some(last_nl) = buffer.iter().rposition(|&b| b == b'\n') {
                 let text = String::from_utf8_lossy(&buffer[..=last_nl]);
-
 
                 for line in text.lines() {
                     let mut split = line.splitn(4, ',');
@@ -867,22 +921,36 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                     let third = split.next();
 
                     if matches!(second, Some("BEGIN_LOG")) {
-                        elp = ESOLogProcessor::new();
-                        custom_state = CustomLogData::new();
+                        println!("[live_log_upload] BEGIN_LOG encountered.");
+                        elp.eso_logs_log.new_log_reset();
+                        elp.reset();
+                        custom_state.reset();
                         if let Some(third_str) = third {
                             if let Ok(ts) = third_str.parse::<u64>() {
-                                first_timestamp = Some(ts);
+                                println!(
+                                    "[live_log_upload] BEGIN_LOG timestamp = {}",
+                                    ts
+                                );
+                                if first_timestamp.is_none() {first_timestamp = Some(ts)};
                             }
                         }
                     }
 
-                    let is_end_combat = matches!(second, Some("END_COMBAT"));
+                    let is_end_combat = matches!(second, Some("END_COMBAT") | Some("END_LOG"));
+                    if is_end_combat {
+                        println!("[live_log_upload] END_COMBAT or END_LOG encountered.");
+                    }
 
                     for l in handle_line(line.to_string(), &mut custom_state) {
                         elp.handle_line(l.to_string());
                     }
 
                     if is_end_combat {
+                        println!(
+                            "[live_log_upload] Packaging segment {}...",
+                            segment_id
+                        );
+
                         let seg_zip =
                             tmp_dir.join(format!("report_segment_{segment_id}.zip"));
                         let tbl_zip =
@@ -899,12 +967,9 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                         let (start_ts, end_ts) = {
                             let events = &elp.eso_logs_log.events;
                             if !events.is_empty() {
-                                let mut last_ts =
-                                    event_timestamp(&events[events.len() - 1]);
+                                let mut last_ts = event_timestamp(&events[events.len() - 1]);
                                 if last_ts.is_some() && first_timestamp.is_some() {
-                                    last_ts = Some(
-                                        last_ts.unwrap() + first_timestamp.unwrap(),
-                                    );
+                                    last_ts = Some(last_ts.unwrap() + first_timestamp.unwrap());
                                 }
                                 match (first_timestamp, last_ts) {
                                     (Some(first), Some(last)) => (first, last),
@@ -914,6 +979,10 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                                 (0, 0)
                             }
                         };
+                        println!(
+                            "[live_log_upload] Segment {} time range: start={} end={}",
+                            segment_id, start_ts, end_ts
+                        );
 
                         if let Err(e) = upload_master_table(
                             &client,
@@ -932,7 +1001,13 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                             start_ts,
                             end_ts,
                         ).await {
-                            Ok(next) => segment_id = next,
+                            Ok(next) => {
+                                println!(
+                                    "[live_log_upload] Segment {} uploaded. Next = {}",
+                                    segment_id, next
+                                );
+                                segment_id = next;
+                            }
                             Err(e) => {
                                 eprintln!("Segment upload failed: {e}");
                                 segment_id += 1;
@@ -940,21 +1015,25 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                         }
 
                         elp.eso_logs_log.events.clear();
+                        custom_state.reset();
+                        let _ = window.emit("upload_progress", format!("Total lines processed: {}", processed));
                     }
 
                     processed += 1;
                 }
 
                 if processed > 0 {
-                    println!("Processed: {}", processed);
-                    let _ = window.emit("live_log_progress", processed as u32);
+                    println!("[live_log_upload] Processed lines so far: {}", processed);
                 }
 
                 pos += (last_nl + 1) as u64;
+                println!("[live_log_upload] New file position: {}", pos);
             }
 
             std::thread::sleep(std::time::Duration::from_secs(5));
         }
+
+        println!("[live_log_upload] Loop exited. Sending terminate-report...");
 
         let _ = client
             .post(&format!("{base}/terminate-report/{code}"))
@@ -962,11 +1041,15 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
             .await;
 
         let _ = std::fs::remove_dir_all(&tmp_dir);
+        println!("[live_log_upload] Temp dir deleted. Task exiting.");
     });
 
     if let Err(e) = handle.await {
         return Err(format!("Live log task failed: {e}"));
     }
+
+    println!("[live_log_upload] Upload settings saved.");
+    save_upload_settings(&upload_settings);
 
     Ok(report_code)
 }
