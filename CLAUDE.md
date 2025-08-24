@@ -116,7 +116,78 @@ Both regular upload and live logging now use the same approach:
 
 ✅ **Enhanced file path status messages**: Both upload and live logging modes now show full file paths when processing begins
 
+## Summary of Changes Since Fork from minimal-status-messages Branch
+
+This section documents the comprehensive enhancement work done to improve the ESO Log Tool's upload functionality and user experience.
+
+### Core Architecture Changes
+
+**1. Upload Processing Unification**
+- **Before**: Regular upload processed entire log files as single reports, while live logging created separate reports per BEGIN_LOG
+- **After**: Both modes now use consistent BEGIN_LOG separation approach
+- **Impact**: Users get properly segmented reports that accurately reflect individual gaming sessions
+
+**2. Zone Detection Enhancement** 
+- **Before**: Report names used the last zone seen in the log section (often incorrect)
+- **After**: Uses zone where first combat occurs via `determine_section_zone()` function
+- **Impact**: Report descriptions accurately reflect where encounters took place
+
+### User Experience Improvements
+
+**3. Status Message System Overhaul**
+- **Before**: Inconsistent timestamp formats, missing status updates
+- **After**: All messages use standardized "YYYY-MM-DD HH:MM:SS:" prefix via `format_status_timestamp()`
+- **Impact**: Clear, professional status reporting with consistent timing information
+
+**4. Live Logging Wait Indicators**
+- **Before**: No feedback when live logging was waiting for new data
+- **After**: Shows "Waited X minutes for new log entries" at 2-minute intervals (2, 4, 6, 8...)
+- **Impact**: Users know the system is active and how long it's been waiting
+
+**5. File Path Visibility**
+- **Before**: Users couldn't easily see which files were being processed
+- **After**: Full file paths displayed when processing begins
+- **Impact**: Clear confirmation of which log files are being uploaded
+
+**6. UI Message Management**
+- **Before**: Wait messages accumulated, cluttering the interface
+- **After**: Wait messages replace previous ones instead of appending
+- **Impact**: Clean, readable status console without message spam
+
+### Technical Implementation Details
+
+**New Functions Added:**
+- `format_status_timestamp()`: Standardized timestamp formatting
+- `determine_section_zone()`: Intelligent zone detection based on first combat
+- `process_log_section()`: Complete upload pipeline for individual BEGIN_LOG sections
+
+**Enhanced Functions:**
+- `upload_log()`: Complete rewrite to process sections individually
+- `live_log_upload()`: Added wait time tracking and better status messages
+- UI message handling: Added overwrite logic for wait messages
+
+**Data Flow Improvements:**
+- Log files are now parsed line-by-line to detect BEGIN_LOG boundaries
+- Each section creates its own temporary files and upload pipeline
+- Zone names determined by analyzing combat events, not just zone changes
+- Master tables and segments uploaded for each section to prevent blank reports
+
+### Commit History Summary
+1. **b2728a6**: Implement BEGIN_LOG separation for regular upload with timestamp prefixes
+2. **5bbdf6d**: Fix zone name detection to use first combat location instead of last zone change  
+3. **bcb2453**: Remove dash from report description format for cleaner spacing
+4. **c2129e4**: Add wait time status messages for live logging
+5. **b6b8ffd**: Fix wait message format to use past tense and consistent timestamp
+
+### Validation Results
+- **Functionality**: All features tested and working correctly
+- **Performance**: No significant performance impact from enhanced processing
+- **Reliability**: Proper error handling and cancellation support maintained
+- **User Experience**: Significantly improved status reporting and feedback
+
 ### Testing Notes
 - App successfully compiles and runs with `cargo tauri dev`
 - All functionality implemented with proper error handling and status reporting
 - Upload pipeline now consistent between live and non-live modes
+- Zone detection correctly identifies combat locations
+- Wait messages properly replace instead of accumulating
