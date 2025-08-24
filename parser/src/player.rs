@@ -407,7 +407,7 @@ pub fn match_enchant_type(string: &str) -> EnchantType {
         "MAGICKA" => EnchantType::Magicka,
         "HEALTH" => EnchantType::Health,
         "PRISMATIC_DEFENSE" => EnchantType::PrismaticDefense,
-        "INVALID" => EnchantType::Invalid,
+        "INVALID" => EnchantType::None,
         _ => EnchantType::None,
     }
 }

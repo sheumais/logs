@@ -3,7 +3,7 @@ use std::{env, fs};
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
-use cli::esologs_convert::{build_master_table, split_and_zip_log_by_fight, ESOLogProcessor};
+use cli::esologs_convert::{build_master_table, ESOLogProcessor};
 use cli::esologs_format::{ESOLogsEvent, ESOLogsLineType};
 use cli::log_edit::modify_log_file;
 use cli::split_log::split_encounter_file_into_log_files;
@@ -61,12 +61,6 @@ fn main() {
             } else {
                 eprintln!("Error creating output file: esolog_output2.txt");
                 return;
-            }
-        }
-        "esologzip" => {
-            match split_and_zip_log_by_fight(Path::new(file_path), Path::new("C:/Users/H/Downloads/esologzipoutput/")) {
-                Ok(_) => {println!("Done split + zip")},
-                Err(e) => println!("{e}"),
             }
         }
         "aoe" => {

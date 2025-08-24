@@ -72,12 +72,14 @@ fn get_target_id(e: &ESOLogsEvent) -> Option<u64> {
 pub struct ESOLogProcessor {
     pub eso_logs_log: ESOLogsLog,
     pub megaserver: String,
-    pub timestamp_offset: u32,
+    pub timestamp_offset: u64,
     temporary_damage_buffer: u32,
     pending_death_events: Vec<(u64, ESOLogsEvent)>, // (timestamp, event)
     last_known_timestamp: u64,
     active_casts: HashMap<u32, usize>, // (unit_id, index of ability)
     last_interrupt: Option<u32>, // unit_id of last interrupted unit
+    base_timestamp: Option<u64>,
+    most_recent_begin_log_timestamp: Option<u64>,
 }
 
 impl ESOLogProcessor {
@@ -91,7 +93,17 @@ impl ESOLogProcessor {
             last_known_timestamp: 0,
             active_casts: HashMap::new(),
             last_interrupt: None,
+            base_timestamp: None,
+            most_recent_begin_log_timestamp: None,
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.temporary_damage_buffer = 0;
+        self.pending_death_events = Vec::new();
+        self.last_known_timestamp = 0;
+        self.active_casts = HashMap::new();
+        self.last_interrupt = None;
     }
 
     pub fn add_unit(&mut self, unit: ESOLogsUnit) -> usize {
@@ -271,6 +283,10 @@ impl ESOLogProcessor {
         }
     }
 
+    fn calculate_timestamp(&mut self, rel_ticks: u64) -> u64 {
+        self.most_recent_begin_log_timestamp.unwrap_or(0) - self.base_timestamp.unwrap_or(0) + rel_ticks - self.timestamp_offset
+    }
+
     fn buffs_pair_mut(&mut self, idx_a: usize, idx_b: usize) -> Option<(&mut ESOLogsBuff, &mut ESOLogsBuff)> {
         if idx_a == idx_b || idx_a >= self.eso_logs_log.buffs.len() || idx_b >= self.eso_logs_log.buffs.len() {
             return None;
@@ -290,13 +306,21 @@ impl ESOLogProcessor {
 
     fn handle_begin_log(&mut self, parts: &[String]) {
         self.megaserver = parts[4].to_owned();
-        self.eso_logs_log = ESOLogsLog::new();
+        let log_ts = parts[2].parse::<u64>().unwrap();
+        let rel_ticks = parts[0].parse::<u64>().unwrap();
+        self.most_recent_begin_log_timestamp = Some(log_ts);
+        self.timestamp_offset = rel_ticks;
+
+        if self.base_timestamp.is_none() {
+            self.base_timestamp = Some(log_ts);
+        }
     }
 
     fn handle_end_combat(&mut self, parts: &[String]) {
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().unwrap());
         self.add_log_event(ESOLogsEvent::EndCombat(
             ESOLogsCombatEvent {
-                timestamp: parts[0].parse::<u64>().unwrap() - self.timestamp_offset as u64,
+                timestamp,
                 line_type: ESOLogsLineType::EndCombat,
             }
         ));
@@ -305,9 +329,10 @@ impl ESOLogProcessor {
     }
 
     fn handle_begin_combat(&mut self, parts: &[String]) {
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().unwrap());
         self.add_log_event(ESOLogsEvent::BeginCombat(
             ESOLogsCombatEvent {
-                timestamp: parts[0].parse::<u64>().unwrap() - self.timestamp_offset as u64,
+                timestamp,
                 line_type: ESOLogsLineType::BeginCombat,
             }
         ));
@@ -432,10 +457,11 @@ impl ESOLogProcessor {
         }
 
         // println!("Parts: {:?}", parts);
-
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().unwrap());
+        
         self.add_log_event(ESOLogsEvent::PlayerInfo(
             ESOLogsPlayerBuild {
-                timestamp: parts[0].parse::<u64>().unwrap() - self.timestamp_offset as u64,
+                timestamp,
                 line_type: ESOLogsLineType::PlayerInfo,
                 unit_index: self.unit_index(parts[2].parse().unwrap()).unwrap(),
                 permanent_buffs: parts[3].to_string(),
@@ -501,8 +527,9 @@ impl ESOLogProcessor {
         };
         let unique_index = self.add_buff_event(buff_event);
         buff_event.unique_index = unique_index;
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().unwrap());
         let ev = event::Event {
-            time: parts[0].parse::<u64>().unwrap() - self.timestamp_offset as u64,
+            time: timestamp,
             result: event::parse_event_result(&parts[2]).unwrap(),
             damage_type: event::parse_damage_type(&parts[3]),
             power_type: parts[4].parse().unwrap(),
@@ -937,7 +964,8 @@ impl ESOLogProcessor {
                 }
             }
         }
-        self.last_known_timestamp = parts[0].parse::<u64>().unwrap() - self.timestamp_offset as u64;
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().unwrap());
+        self.last_known_timestamp = timestamp;
         self.add_log_event(ESOLogsEvent::CastLine(
             ESOLogsCastLine {
                 timestamp: self.last_known_timestamp,
@@ -1006,7 +1034,8 @@ impl ESOLogProcessor {
             Self::update_shield_history(&mut self.eso_logs_log, target.unit_id, target.shield, &shield_buff_event);
         }
         let instance_ids = (self.index_in_session(source.unit_id).unwrap_or(0), self.index_in_session(target.unit_id).unwrap_or(0));
-        self.last_known_timestamp = parts[0].parse::<u64>().unwrap() - self.timestamp_offset as u64;
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().unwrap());
+        self.last_known_timestamp = timestamp;
         if parts[2] == "GAINED" {
             self.add_log_event(ESOLogsEvent::BuffLine (
                 ESOLogsBuffLine {
@@ -1059,8 +1088,9 @@ impl ESOLogProcessor {
         let zone_id = parts[2].parse().unwrap_or(0);
         let zone_name = parts[3].to_string().trim_matches('"').to_string();
         let map_url = parts[4].trim_matches('"').to_lowercase();
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().unwrap());
         self.add_log_event(ESOLogsEvent::MapInfo(ESOLogsMapInfo {
-            timestamp: parts[0].parse::<u64>().unwrap() - self.timestamp_offset as u64,
+            timestamp,
             line_type: ESOLogsLineType::MapInfo,
             map_id: zone_id,
             map_name: zone_name,
@@ -1081,9 +1111,9 @@ impl ESOLogProcessor {
                 0
             }
         };
-        self.timestamp_offset = parts[0].parse::<u32>().unwrap_or(0);
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().unwrap());
         self.add_log_event(ESOLogsEvent::ZoneInfo(ESOLogsZoneInfo {
-            timestamp: parts[0].parse::<u64>().unwrap() - self.timestamp_offset as u64,
+            timestamp,
             line_type: ESOLogsLineType::ZoneInfo,
             zone_id,
             zone_name,
@@ -1096,9 +1126,10 @@ impl ESOLogProcessor {
         let duration = parts[4].parse::<u64>().unwrap_or(0);
         let success = parse::is_true(&parts[5]);
         let final_score = parts[6].parse::<u32>().unwrap_or(0);
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().unwrap());
         self.add_log_event(ESOLogsEvent::EndTrial(
             ESOLogsEndTrial {
-                timestamp: parts[0].parse::<u64>().unwrap() - self.timestamp_offset as u64,
+                timestamp,
                 line_type: ESOLogsLineType::EndTrial,
                 trial_id: id as u8,
                 duration,
@@ -1131,8 +1162,9 @@ impl ESOLogProcessor {
         };
         let unique_index = self.add_buff_event(buff_event);
         buff_event.unique_index = unique_index;
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().unwrap());
         let health_recovery = ESOLogsHealthRecovery {
-            timestamp: parts[0].parse::<u64>().unwrap() - self.timestamp_offset as u64,
+            timestamp,
             line_type: ESOLogsLineType::HotTick,
             buff_event: buff_event,
             effective_regen: parts[2].parse::<u32>().unwrap(),
@@ -1163,8 +1195,8 @@ impl ESOLogProcessor {
 
     fn handle_end_cast(&mut self, parts: &[String]) {
         let end_reason = parse_cast_end_reason(&parts[2]);
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().unwrap());
         if end_reason == Some(CastEndReason::Interrupted) {
-            let time = parts[0].parse::<u64>().unwrap() - self.timestamp_offset as u64;
             let interrupted_cast_id = parts[3].parse::<u32>().unwrap();
             let interrupted_ability = parts[4].parse::<u32>().unwrap();
             let interrupting_ability = parts[5].parse::<u32>().unwrap();
@@ -1210,7 +1242,7 @@ impl ESOLogProcessor {
 
                 self.add_log_event(ESOLogsEvent::Interrupt(
                 ESOLogsInterrupt {
-                    timestamp: time,
+                    timestamp,
                     line_type: ESOLogsLineType::Interrupted,
                     buff_event: buff.clone(),
                     unit_instance_id: (instance_id, target_session_index),
@@ -1220,7 +1252,6 @@ impl ESOLogProcessor {
                 }));
             }
         } else if end_reason == Some(CastEndReason::Completed) { // 249171,END_CAST,COMPLETED,6859448,37108
-            let time = parts[0].parse::<u64>().unwrap() - self.timestamp_offset as u64;
             let ability_cast_id = parts[3].parse::<u32>().unwrap();
             if !self.eso_logs_log.cast_with_cast_time.contains(&ability_cast_id) {return}
             // println!("Ability cast id: {}", ability_cast_id);
@@ -1256,7 +1287,7 @@ impl ESOLogProcessor {
 
             self.add_log_event(ESOLogsEvent::CastEnded(
                 ESOLogsEndCast { 
-                    timestamp: time,
+                    timestamp,
                     line_type: ESOLogsLineType::Cast, 
                     buff_event: buff.clone(), 
                     unit_instance_id: (caster_session_index, target_session_index), 
@@ -1268,7 +1299,11 @@ impl ESOLogProcessor {
     }
 }
 
-pub fn split_and_zip_log_by_fight<InputPath, OutputDir>(input_path: InputPath, output_dir: OutputDir) -> Result<(), String> where InputPath: AsRef<Path>, OutputDir: AsRef<Path> {
+pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath, output_dir: OutputDir, mut progress_callback: F) -> Result<(), String> where InputPath: AsRef<Path>, OutputDir: AsRef<Path>, F: FnMut(u8) {
+    if output_dir.as_ref().exists() {
+        fs::remove_dir_all(&output_dir)
+            .map_err(|e| format!("Failed to remove existing output dir: {e}"))?;
+    }
     fs::create_dir_all(&output_dir)
         .map_err(|e| format!("Failed to create output dir: {e}"))?;
     let timestamps_path = output_dir.as_ref().join("timestamps");
@@ -1277,6 +1312,13 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir>(input_path: InputPath, o
             return Err(format!("Failed to clear timestamps file: {e}"));
         }
     }
+
+    let total_lines = {
+        let file = File::open(&input_path)
+            .map_err(|e| format!("Failed to open input file: {e}"))?;
+        BufReader::new(file).lines().count()
+    };
+
     let input_file = File::open(&input_path)
         .map_err(|e| format!("Failed to open input file: {e}"))?;
     let mut lines = BufReader::new(input_file).lines();
@@ -1286,24 +1328,35 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir>(input_path: InputPath, o
     let mut fight_index: u16 = 1;
 
     let mut first_timestamp: Option<u64> = None;
+    let mut current_line: usize = 0;
     while let Some(line) = lines.next() {
+        current_line += 1;
+        if current_line % LINE_COUNT_FOR_PROGRESS == 0 {
+            progress_callback(((current_line as f64 / total_lines as f64) * 100.0).round() as u8);
+        }
+
         let line = line.map_err(|e| format!("Read error: {e}"))?;
-        let mut split = line.splitn(4, ',');        
-        let _first = split.next();
-        let second = split.next();        
+        let mut split = line.splitn(4, ',');
+        let first = split.next();
+        let second = split.next();
         let third = split.next();
 
         if let Some("BEGIN_LOG") = second {
+            elp.eso_logs_log.new_log_reset();
+            elp.reset();
+            custom_state.reset();
             if let Some(third_str) = third {
                 if let Ok(ts) = third_str.parse::<u64>() {
-                    first_timestamp = Some(ts);
-                    println!("setting first_timestamp to {}", first_timestamp.unwrap());
-                    elp = ESOLogProcessor::new();
+                    if let Some(first_str) = first {
+                        if let Ok(ts2) = first_str.parse::<u64>() {
+                            if first_timestamp.is_none() {first_timestamp = Some(ts + ts2)};
+                        }
+                    }
                 }
             }
         }
 
-        let is_end_combat = matches!(second, Some("END_COMBAT"));
+        let is_end_combat = matches!(second, Some("END_COMBAT") | Some("END_LOG"));
         for l in handle_line(line, &mut custom_state) {
             elp.handle_line(l.to_string());
         }
@@ -1341,6 +1394,7 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir>(input_path: InputPath, o
             }
 
             elp.eso_logs_log.events.clear();
+            custom_state.reset();
 
             fight_index += 1;
         }

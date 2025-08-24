@@ -89,7 +89,7 @@ pub fn parse_item_types_into_hashmap() -> HashMap<u32, &'static str> {
     item_type_table
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum ItemType {
     Axe,
     Dagger,

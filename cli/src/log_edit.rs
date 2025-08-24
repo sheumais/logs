@@ -29,6 +29,11 @@ impl CustomLogData {
             taint_stacks: HashMap::new(),
         }
     }
+
+    pub fn reset(&mut self) {
+        self.zen_stacks = HashMap::new();
+        self.taint_stacks = HashMap::new();
+    }
 }
 
 pub struct ZenDebuffState {
