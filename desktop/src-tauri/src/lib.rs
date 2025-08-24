@@ -1247,7 +1247,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                 
                 // Show wait messages every 2 minutes (2, 4, 6, 8, ...)
                 if elapsed_minutes >= 2 && elapsed_minutes % 2 == 0 && elapsed_minutes as u32 > last_wait_message_minutes {
-                    let wait_message = format!("{}Waiting {} minutes for new log entries", 
+                    let wait_message = format!("{}Waited {} minutes for new log entries", 
                         format_status_timestamp(), elapsed_minutes);
                     window.emit("upload_status", wait_message).ok();
                     last_wait_message_minutes = elapsed_minutes as u32;
