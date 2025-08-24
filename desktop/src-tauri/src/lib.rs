@@ -886,7 +886,7 @@ async fn process_log_section(
         String::new()
     };
     
-    let description = format!("{}{} - {}", timestamp_str, zone_suffix, upload_settings.description);
+    let description = format!("{}{} {}", timestamp_str, zone_suffix, upload_settings.description);
     
     // Create report
     let report = create_report_with_custom_desc(client, upload_settings, description.clone()).await?;
@@ -1334,7 +1334,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                         } else {
                             String::new()
                         };
-                        let description = format!("{}{} - {}", timestamp_str, zone_suffix, upload_settings.description);
+                        let description = format!("{}{} {}", timestamp_str, zone_suffix, upload_settings.description);
                         
                         // Create new report with custom description
                         match create_report_with_custom_desc(&client, &upload_settings, description.clone()).await {
