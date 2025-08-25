@@ -7,9 +7,19 @@ use cli::esologs_convert::{build_master_table, ESOLogProcessor};
 use cli::esologs_format::{ESOLogsEvent, ESOLogsLineType};
 use cli::log_edit::modify_log_file;
 use cli::split_log::split_encounter_file_into_log_files;
+use ftail::Ftail;
+use log::LevelFilter;
 use parser::ui::*;
 
 fn main() {
+    let result = Ftail::new()
+        .console(LevelFilter::Debug)
+        .init();
+    match result {
+        Ok(_) => log::info!("Logging initialised"),
+        Err(e) => println!("Error initialising logging: {}", e),
+    }
+
     let args: Vec<String> = env::args().collect();
     let (file_path, query) = parse_config(&args);
 
@@ -19,47 +29,47 @@ fn main() {
         }
         "modify" => {
             if let Err(e) = modify_log_file(Path::new(file_path)) {
-                eprintln!("Error modifying log file: {}", e);
+                log::error!("Error modifying log file: {}", e);
             }
         }
         "split" => {
             if let Err(e) = split_encounter_file_into_log_files(Path::new(file_path)) {
-                eprintln!("Error splitting log file: {}", e);
+                log::error!("Error splitting log file: {}", e);
             }
         }
         "esolog" => {
             let mut eso_log_processor = ESOLogProcessor::new();
             if let Err(e) = eso_log_processor.convert_log_file_to_esolog_format(Path::new(file_path)) {
-                eprintln!("Error splitting log file: {}", e);
+                log::error!("Error splitting log file: {}", e);
             }
 
             if let Ok(file) = File::create("C:/Users/H/Downloads/esolog_output.txt") {
                 let mut writer = BufWriter::new(file);
                 let master_table = build_master_table(&mut eso_log_processor);
                 if let Err(e) = write!(writer, "{master_table}") {
-                    eprintln!("Error writing master_table: {}", e);
+                    log::error!("Error writing master_table: {}", e);
                 }
             } else {
-                eprintln!("Error creating output file: esolog_output.txt");
+                log::error!("Error creating output file: esolog_output.txt");
                 return;
             }
 
-            println!("master table written");
+            log::info!("master table written");
             if let Ok(file) = File::create("C:/Users/H/Downloads/esolog_output2.txt") {
                 let mut writer = BufWriter::new(file);
 
                 for line in &eso_log_processor.eso_logs_log.events {
                     if let Err(e) = writeln!(writer, "{line}") {
-                        eprintln!("Error writing events: {}", e);
+                        log::warn!("Error writing events: {}", e);
                         break;
                     }
                 }
 
                 if let Err(e) = writer.flush() {
-                    eprintln!("Error flushing writer: {}", e);
+                    log::warn!("Error flushing writer: {}", e);
                 }
             } else {
-                eprintln!("Error creating output file: esolog_output2.txt");
+                log::error!("Error creating output file: esolog_output2.txt");
                 return;
             }
         }
@@ -67,11 +77,11 @@ fn main() {
             let mut eso_log_processor = ESOLogProcessor::new();
 
             if let Err(e) = eso_log_processor.convert_log_file_to_esolog_format(Path::new(file_path)) {
-                println!("Error converting log file: {}", e);
+                log::error!("Error converting log file: {}", e);
                 return;
             }
 
-            println!("Finished parsing lines, now looking for aoe abilities...");
+            log::info!("Finished parsing lines, now looking for aoe abilities...");
 
             let mut already_found: HashSet<u32> = HashSet::new();
             let output_file = "C:/Users/H/Downloads/aoe.csv";
@@ -156,7 +166,7 @@ fn main() {
                     if non_aoe_ids.contains(&buff.id) || already_found.contains(&buff.id) {
                         continue;
                     }
-                    println!("{},{}", buff.id, buff.name);
+                    log::info!("{},{}", buff.id, buff.name);
                     writeln!(file, "{},{}", buff.id, buff.name)
                         .expect("Unable to write to file");
                     already_found.insert(buff.id);
@@ -172,7 +182,7 @@ fn main() {
                 .collect();
             let id_list = ids.join(",");
             let sql = format!("ability.id IN ({})", id_list);
-            println!("{}", sql);
+            log::info!("{}", sql);
         }
         _ => {}
     }

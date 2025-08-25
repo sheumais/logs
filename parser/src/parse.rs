@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{effect::{self, Ability, Effect}, player::{self, empty_gear_piece, GearPiece, Player}, unit::{self, Unit, UnitType}};
+use crate::{effect::{self, Ability, Effect}, player::{self, empty_gear_piece, GearPiece, Player}, unit::{self, blank_unit_state, Unit, UnitType}};
 
 pub fn is_true(value: &str) -> bool {
     value == "T"
@@ -8,7 +8,8 @@ pub fn is_true(value: &str) -> bool {
 
 pub fn unit_state(parts: &[String], start_index: usize) -> unit::UnitState {
     if start_index >= parts.len() {
-        println!("Impossible unit state: {:?}", parts);
+        eprintln!("Impossible unit state: {:?}", parts);
+        return blank_unit_state()
     }
     let parse_value = |s: &str| s.parse::<u32>().unwrap_or(0);
     let parse_pair = |s: &str| {
@@ -521,6 +522,19 @@ mod tests {
         assert_eq!(result[6], "");
         assert_eq!(result[7], "");
         assert_eq!(result.len(), 8);
+    }
+
+    #[test]
+    fn test_empty_gear_piece() {
+        let gear_piece = empty_gear_piece();
+        assert_eq!(gear_piece.enchant, None);
+        assert_eq!(gear_piece.gear_trait, GearTrait::None);
+        assert_eq!(gear_piece.is_cp, false);
+        assert_eq!(gear_piece.item_id, 0);
+        assert_eq!(gear_piece.level, 0);
+        assert_eq!(gear_piece.quality, GearQuality::None);
+        assert_eq!(gear_piece.set_id, 0);
+        assert_eq!(gear_piece.slot, GearSlot::None);
     }
 
     #[test]

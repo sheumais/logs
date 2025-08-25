@@ -68,19 +68,20 @@ impl ESOLogsLog {
         let mut id = unit.unit_id;
         if let Some(pd) = &unit.player_data {
             let char_id = pd.character_id;
-
-            if let Some(existing_index) = self.units.iter().position(|u| {
-                u.player_data.as_ref().map(|p| p.character_id) == Some(char_id)
-            }) {
-                if let Some(existing_unit) = self.units.get_mut(existing_index) {
-                    existing_unit.unit_type = unit.unit_type;
+            if char_id != 0 { // non-anonymous player
+                if let Some(existing_index) = self.units.iter().position(|u| {
+                    u.player_data.as_ref().map(|p| p.character_id) == Some(char_id)
+                }) {
+                    if let Some(existing_unit) = self.units.get_mut(existing_index) {
+                        existing_unit.unit_type = unit.unit_type;
+                    }
+                    return existing_index;
                 }
-                return existing_index;
-            }
 
-            let char_id_str = char_id.to_string();
-            let first_9 = &char_id_str[..char_id_str.len().min(9)];
-            id = first_9.parse::<u32>().unwrap_or(char_id as u32);
+                let char_id_str = char_id.to_string();
+                let first_9 = &char_id_str[..char_id_str.len().min(9)];
+                id = first_9.parse::<u32>().unwrap_or(char_id as u32);
+            }
         }
 
         let owner_id = unit.owner_id;
@@ -158,7 +159,7 @@ impl ESOLogsLog {
     }
 
     pub fn unit_index(&self, unit_id: &u32) -> Option<usize> {
-        // println!("{:?}", self.unit_id_to_session_id);
+        log::trace!("{:?}", self.unit_id_to_session_id);
         let res = self.unit_id_to_units_index.get(unit_id).copied();
         res
     }
@@ -202,10 +203,10 @@ impl ESOLogsLog {
         let session_id = *self.unit_id_to_session_id.get(&unit_id)?;
         if let Some(is_player) = self.players.get(&unit_id) {
             if *is_player {
-                // println!("Found player in index_in_session: {}, {}", unit_id, session_id);
-                // if let Some(index) = self.unit_index_in_session.get(&unit_id) {
-                //     println!("Player index would be: {}", index);
-                // }
+                log::trace!("Found player in index_in_session: {}, {}", unit_id, session_id);
+                if let Some(index) = self.unit_index_in_session.get(&unit_id) {
+                    log::trace!("Player index would be: {}", index);
+                }
                 return Some(0)
             }
         }

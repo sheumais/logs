@@ -71,7 +71,7 @@ pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
         let line = match line_result {
             Ok(l) => l,
             Err(e) => {
-                eprintln!("Error reading line: {}", e);
+                log::warn!("Error reading line: {}", e);
                 continue;
             }
         };
@@ -348,7 +348,7 @@ fn add_blockade_versions(parts: &[String]) -> Option<Vec<String>> {
 
 fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
     
-    // println!("Modifying player data: {:?}", parts);
+    log::trace!("Modifying player data: {:?}", parts);
 
     if parts.len() < 7 { // this can occur if either the player is wearing nothing and has no skills, or they're not in the trial.
         return None;
@@ -381,7 +381,7 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
     let player_id = parts[2].parse::<u32>().unwrap();
 
     for id in &mut primary_ability_id_list {
-        // println!("Checking id: {}", id);
+        // log::trace!("Checking id: {}", id);
         // println!("Current scribing_map: {:?}", custom_log_data.scribing_map);
         if matches!(*id, BLOCKADE_DEFAULT | BLOCKADE_FIRE | BLOCKADE_FROST | BLOCKADE_STORMS) {
             *id = match frontbar_type {
@@ -391,7 +391,7 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
                 _ => BLOCKADE_DEFAULT,
             };
         } else if let Some(index) = custom_log_data.scribing_unit_map.get(&(player_id, *id)) {
-            // println!("Setting {} to originally existing index {} for {}", player_id, index, id);
+            log::trace!("Setting {} to originally existing index {} for {}", player_id, index, id);
             *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
         } else if custom_log_data.scribing_map.contains_key(id) {
             if let Some(index) = custom_log_data.scribing_map.get(id) {
@@ -402,6 +402,7 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
     }
 
     for id in &mut backup_ability_id_list {
+        // log::trace!("Checking id: {}", id);
         if matches!(*id, BLOCKADE_DEFAULT | BLOCKADE_FIRE | BLOCKADE_FROST | BLOCKADE_STORMS) {
             *id = match backbar_type {
                 ItemType::FrostStaff => BLOCKADE_FROST,
@@ -410,6 +411,7 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
                 _ => BLOCKADE_DEFAULT,
             };
         } else if let Some(index) = custom_log_data.scribing_unit_map.get(&(player_id, *id)) {
+            log::trace!("Setting {} to originally existing index {} for {}", player_id, index, id);
             *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
         } else if custom_log_data.scribing_map.contains_key(id) {
             if let Some(index) = custom_log_data.scribing_map.get(id) {
@@ -446,7 +448,7 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
 
 fn modify_combat_event(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
     let ability_id = parts[8].parse::<u32>().unwrap();
-    // println!("ability_id: {}", ability_id);
+    log::trace!("ability_id: {}", ability_id);
     let time = parts[0].parse().unwrap();
     if ability_id == *MOULDERING_TAINT_ID {
         // println!("{:?}", parts);

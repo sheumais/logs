@@ -235,7 +235,7 @@ impl ESOLogProcessor {
             let line = match line_result {
                 Ok(l) => l,
                 Err(e) => {
-                    eprintln!("Error reading line: {}", e);
+                    log::warn!("Error reading line: {}", e);
                     continue;
                 }
             };
@@ -245,8 +245,8 @@ impl ESOLogProcessor {
             }
             lines += 1;
             if lines % 250_000 == 0 {
-                println!("Processed {} lines", lines);
-                println!("Length of stuff: buffs:{}, effects:{}, units:{}, lines:{}", self.eso_logs_log.buffs.len(), self.eso_logs_log.effects.len(), self.eso_logs_log.units.len(), self.eso_logs_log.events.len());
+                log::info!("Processed {} lines", lines);
+                log::info!("Length of stuff: buffs:{}, effects:{}, units:{}, lines:{}", self.eso_logs_log.buffs.len(), self.eso_logs_log.effects.len(), self.eso_logs_log.units.len(), self.eso_logs_log.events.len());
             }
         }
 
@@ -388,13 +388,6 @@ impl ESOLogProcessor {
             }
             UnitAddedEventType::Monster => {
                 let monster = parse::monster(parts);
-                // let name = monster.name.clone();
-                // for unit in &self.eso_logs_log.units {
-                //     if unit.name == name && unit.class == Self::BOSS_CLASS_ID {
-                //         monster.is_boss = true;
-                //         println!("Overwriting {} as boss", name);
-                //     }
-                // }
                 let unit = ESOLogsUnit {
                     name: monster.name.trim_matches('"').to_owned(),
                     player_data: None,
@@ -426,7 +419,7 @@ impl ESOLogProcessor {
                     }
                 }
             }
-            UnitAddedEventType::Object => {
+            UnitAddedEventType::Object | UnitAddedEventType::SiegeWeapon => {
                 let object = parse::object(parts);
                 let unit = ESOLogsUnit {
                     name: object.name.trim_matches('"').to_owned(),
@@ -452,11 +445,10 @@ impl ESOLogProcessor {
     fn handle_player_info(&mut self, parts: &[String]) {
         let length = parts.len();
         if length < 8 {
-            eprintln!("Invalid PLAYER_INFO line: {:?}", parts);
+            log::warn!("Invalid PLAYER_INFO line: {:?}", parts);
             return;
         }
 
-        // println!("Parts: {:?}", parts);
         let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().unwrap());
         
         self.add_log_event(ESOLogsEvent::PlayerInfo(
@@ -495,22 +487,21 @@ impl ESOLogProcessor {
         let units_stored_shield = *esolog.shield_values.get(&unit_id).unwrap_or(&0);
         let buff = &esolog.buffs[buff_event.buff_index];
         if shield != units_stored_shield || buff.id == 146311 /* frost safeguard */ { 
-            // println!("Comparing shields for unit {}: {} new vs stored {}", unit_id, shield, units_stored_shield);
+            log::trace!("Comparing shields for unit {}: {} new vs stored {}", unit_id, shield, units_stored_shield);
             if let Some(shield_buffs_for_unit) = esolog.shields.get_mut(&unit_id) {
                 shield_buffs_for_unit.insert(buff_event.buff_index, buff_event.clone());
-                // println!("Adding buff index: {}", buff_event.buff_index);
+                log::trace!("Adding buff index: {}", buff_event.buff_index);
             } else {
                 let mut hashmap = HashMap::new();
                 hashmap.insert(buff_event.buff_index, buff_event.clone());
                 esolog.shields.insert(unit_id, hashmap);
-                // println!("Adding buff index: {}", buff_event.buff_index);
+                log::trace!("Adding buff index: {}", buff_event.buff_index);
             }
             esolog.shield_values.insert(unit_id, shield);
         }
     }
 
     fn handle_combat_event(&mut self, parts: &[String]) {
-        // println!("{:?}", parts);
         let source = parse::unit_state(parts, 9);
         let target = if parts[19] == "*" {
             source.clone()
@@ -612,8 +603,8 @@ impl ESOLogProcessor {
                                             source_ability_cast_index: index_option.unwrap_or(0),
                                         }));
                                     } else {
-                                        println!("error: {:?}", shield_buff_event);
-                                        println!("parts: {:?}", parts);
+                                        log::trace!("shield error: {:?}", shield_buff_event);
+                                        log::trace!("shield parts: {:?}", parts);
                                     }
                                 }
                             }
@@ -830,7 +821,7 @@ impl ESOLogProcessor {
                             1 => ESOLogsResourceType::Magicka,
                             4 => ESOLogsResourceType::Stamina,
                             8 => ESOLogsResourceType::Ultimate,
-                            _ => {eprintln!("Unknown power type: {}", ev.power_type); ESOLogsResourceType::Health},
+                            _ => {log::warn!("Unknown power type: {}", ev.power_type); ESOLogsResourceType::Health},
                         },
                     }
                 ));
@@ -991,7 +982,6 @@ impl ESOLogProcessor {
     }
 
     fn handle_effect_changed(&mut self, parts: &[String]) {
-        // println!("{:?}", parts);
         let source = parse::unit_state(parts, 6);
         let target_equal_source = parts[16] == "*";
         let target = if target_equal_source {
@@ -1107,7 +1097,7 @@ impl ESOLogProcessor {
             "NORMAL" => 1,
             "VETERAN" => 2,
             _ => {
-                eprintln!("Unknown zone difficulty: {}", difficulty);
+                log::warn!("Unknown zone difficulty: {}", difficulty);
                 0
             }
         };
@@ -1209,7 +1199,7 @@ impl ESOLogProcessor {
                 if let Some(last_interrupt) = &self.last_interrupt {
                     target_id_option = Some(last_interrupt.clone());
                 } else {
-                    println!("source for interrupted cast doesn't exist: {:?}", parts);
+                    log::warn!("source for interrupted cast doesn't exist: {:?}", parts);
                     return;
                 }
             }
@@ -1254,14 +1244,20 @@ impl ESOLogProcessor {
         } else if end_reason == Some(CastEndReason::Completed) { // 249171,END_CAST,COMPLETED,6859448,37108
             let ability_cast_id = parts[3].parse::<u32>().unwrap();
             if !self.eso_logs_log.cast_with_cast_time.contains(&ability_cast_id) {return}
-            // println!("Ability cast id: {}", ability_cast_id);
+            log::trace!("Ability cast id: {}", ability_cast_id);
             // let completed_ability_id = parts[4].parse::<u32>().unwrap();
             let buff_index = self.eso_logs_log.cast_id_hashmap.get(&ability_cast_id).unwrap_or(&usize::MAX); // "buff from cast_id should always be something" except when it isn't
-            if *buff_index == usize::MAX {return;}
+            if *buff_index == usize::MAX {
+                log::trace!("completed cast buff index is none");
+                return;
+            }
             let buff = self.eso_logs_log.effects.get(*buff_index).expect("buff_index should always point to a buff event inside effects").clone();
             let caster_id_option = self.eso_logs_log.cast_id_source_unit_id.get(&ability_cast_id);
             
-            if caster_id_option.is_none() {return}
+            if caster_id_option.is_none() {
+                log::trace!("caster_id is none");
+                return
+            }
 
             let caster_id = caster_id_option.unwrap().clone();
             let caster_index = self.eso_logs_log.unit_index(&caster_id)
@@ -1368,12 +1364,6 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath
             let seg_data = build_report_segment(&elp);
             write_zip_with_logtxt(seg_zip, seg_data.as_bytes())?;
 
-            let tbl_zip = output_dir
-                .as_ref()
-                .join(format!("master_table_{fight_index}.zip"));
-            let tbl_data = build_master_table(&mut elp);
-            write_zip_with_logtxt(tbl_zip, tbl_data.as_bytes())?;
-
             let events = &elp.eso_logs_log.events;
             if !events.is_empty() {
                 let mut last_ts = event_timestamp(&events[events.len()-1]);
@@ -1399,6 +1389,12 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath
             fight_index += 1;
         }
     }
+
+    let tbl_zip = output_dir
+        .as_ref()
+        .join(format!("master_table_{fight_index}.zip"));
+    let tbl_data = build_master_table(&mut elp);
+    write_zip_with_logtxt(tbl_zip, tbl_data.as_bytes())?;
 
     Ok(())
 }
