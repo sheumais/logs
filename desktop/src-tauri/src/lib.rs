@@ -8,8 +8,10 @@ use std::{
 };
 use tauri::{async_runtime::spawn_blocking, path::BaseDirectory, Emitter, Manager, State, Window};
 use tauri_plugin_dialog::{DialogExt, FilePath};
+use ftail::Ftail;
+use log::LevelFilter;
 
-use crate::state::cookie_file_path;
+use crate::state::{cookie_file_path, cookie_folder_path};
 mod state;
 
 #[tauri::command]
@@ -43,7 +45,7 @@ fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), Str
         let line = match line_result {
             Ok(l) => l,
             Err(e) => {
-                eprintln!("Error reading line: {}", e);
+                log::warn!("Error reading line: {}", e);
                 continue;
             }
         };
@@ -388,7 +390,7 @@ fn delete_log_file(state: State<'_, AppState>) -> Result<(), String> {
 fn save_login_response(resp: &LoginResponse) {
     let path = cookie_file_path().with_file_name("login_response.json");
     if let Ok(json) = serde_json::to_string(resp) {
-        println!("Saving login response");
+        log::info!("Saving login response");
         let _ = fs::write(path, json);
     }
 }
@@ -410,7 +412,7 @@ fn get_saved_login_response() -> Option<LoginResponse> {
 fn save_upload_settings(resp: &UploadSettings) {
     let path = cookie_file_path().with_file_name("user-settings.json");
     if let Ok(json) = serde_json::to_string(&resp) {
-        println!("Saving upload settings {}", json);
+        log::info!("Saving upload settings {}", json);
         let _ = fs::write(path, json);
     }
 }
@@ -418,7 +420,7 @@ fn save_upload_settings(resp: &UploadSettings) {
 fn load_upload_settings() -> Option<UploadSettings> {
     let path = cookie_file_path().with_file_name("user-settings.json");
     if let Ok(data) = fs::read_to_string(path) {
-        println!("Returning saved settings {}", data);
+        log::trace!("Returning saved settings {}", data);
         serde_json::from_str(&data).ok()
     } else {
         None
@@ -432,6 +434,7 @@ fn get_saved_upload_settings() -> Option<UploadSettings> {
 
 #[tauri::command]
 async fn login(state: tauri::State<'_, AppState>, username: String, password: String) -> Result<LoginResponse, String> {
+    log::info!("Attempting to log in");
     let payload = serde_json::json!({ "email": username, "password": password, "version": ESO_LOGS_COM_VERSION });
 
     let client = {
@@ -448,14 +451,14 @@ async fn login(state: tauri::State<'_, AppState>, username: String, password: St
     if !resp.status().is_success() {
         return Err(format!("Server returned {}", resp.status()));
     }
-    println!("{:?}", resp.headers());
+    log::debug!("{:?}", resp.headers());
     let text = resp.text().await.map_err(|e| format!("Failed to read response text: {e}"))?;
     let body: LoginResponse = serde_json::from_str(&text).map_err(|e| format!("Invalid JSON: {e}"))?;
     {
         let http = state.http.read().unwrap();
         let store = http.cookie_store.lock().unwrap();
         for cookie in store.iter_any() {
-            println!("{:?}", cookie);
+            log::debug!("{:?}", cookie);
         }
     }
 
@@ -476,13 +479,13 @@ fn logout(state: tauri::State<'_, AppState>) -> Result<(), String> {
     let login_response_path = cookie_file_path().with_file_name("login_response.json");
     if let Err(e) = fs::remove_file(login_response_path) {
         if e.kind() != std::io::ErrorKind::NotFound {
-            println!("Failed to remove login_response.json: {}", e);
+            log::warn!("Failed to remove login_response.json: {}", e);
         }
     }
     let settings_path = cookie_file_path().with_file_name("user-settings.json");
     if let Err(e) = fs::remove_file(settings_path) {
         if e.kind() != std::io::ErrorKind::NotFound {
-            println!("Failed to remove user-settings.json: {}", e);
+            log::warn!("Failed to remove user-settings.json: {}", e);
         }
     }
     Ok(())
@@ -517,9 +520,9 @@ async fn create_report(
         "description": settings.description,
         "guildId": if settings.guild == -1 { None } else { Some(settings.guild) },
     });
-    println!("Create-report payload: {payload}");
+    log::debug!("Create-report payload: {payload}");
 
-    println!("POST https://www.esologs.com/desktop-client/create-report");
+    log::info!("POST https://www.esologs.com/desktop-client/create-report");
 
     let response = client
         .post("https://www.esologs.com/desktop-client/create-report")
@@ -531,8 +534,8 @@ async fn create_report(
     let status = response.status();
     let raw_body = response.text().await.map_err(|e| format!("Failed to read response text: {e}"))?;
 
-    println!("Received response status: {}", status);
-    println!("Raw response body: {}", raw_body);
+    log::trace!("Received response status: {}", status);
+    log::trace!("Raw response body: {}", raw_body);
 
     if !status.is_success() {
         return Err(format!("Server returned error status: {} with body: {}", status, raw_body));
@@ -543,7 +546,7 @@ async fn create_report(
     let report: EncounterReportCode = serde_json::from_str(&raw_body)
         .map_err(|e| format!("Invalid JSON: {e}\nRaw body: {raw_body}"))?;
 
-    println!("Parsed report: {:?}", report);
+    log::info!("Parsed report: {:?}", report);
 
     let code = report.code.clone();
     *state.esolog_code.write().map_err(|e| e.to_string())? = Some(code.clone());
@@ -552,25 +555,26 @@ async fn create_report(
 
 #[tauri::command]
 async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings: UploadSettings) -> Result<EncounterReportCode, String> {
+    log::info!("Beginning direct log upload process");
     state.upload_cancel_flag.store(false, SeqCst);
     let log_path_opt = {
         let lock = state.log_files.read().map_err(|e| e.to_string())?;
-        println!("log_files = {:?}", *lock);
+        log::debug!("log_files = {:?}", *lock);
         lock.clone()
     };
     let log_path = log_path_opt
         .and_then(|v| v.get(0).cloned())
         .ok_or("No log file selected")?;
-    println!("Using log file: {:?}", log_path);
+    log::debug!("Using log file: {:?}", log_path);
 
     let client = {
         let g = state.http.read().map_err(|e| e.to_string())?;
         g.client.clone()
     };
-    println!("Spawning split/zip task …");
+    log::info!("Spawning split/zip task ...");
     
     let tmp_dir = temp_dir().join("esologtool_temporary");
-    println!("Temp dir: {:?}", tmp_dir);
+    log::trace!("Temp dir: {:?}", tmp_dir);
     create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
 
     let tmp_dir_for_spawn = tmp_dir.clone();
@@ -589,7 +593,7 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
                 let _ = window_clone.emit("upload_progress", format!("Processing: {}%", val));
             },
         )?;
-        println!("Finished split_and_zip_log_by_fight");
+        log::debug!("Finished split_and_zip_log_by_fight");
 
         let mut out = Vec::new();
         for idx in 1u16.. {
@@ -601,9 +605,7 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
             }
         }
         Ok(out)
-    })
-    .await
-    .map_err(|e| format!("spawn_blocking error: {e}"))??;
+    }).await.map_err(|e| format!("spawn_blocking error: {e}"))??;
     if state.upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
         return Err("Upload cancelled".to_string());
     }
@@ -623,7 +625,8 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
         .emit("live_log_code", code.clone())
         .map_err(|e| format!("Failed to emit uploading log code: {}", e))?;
 
-let last_idx = pairs.len().saturating_sub(1);
+    let last_idx = pairs.len().saturating_sub(1);
+    log::info!("Uploading segments on main thread ... ");
     for (i, ((seg, _), (start, end))) in pairs.iter().zip(timestamps.iter()).enumerate() {
         if state.upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
             upload_master_table( 
@@ -652,17 +655,17 @@ let last_idx = pairs.len().saturating_sub(1);
     }
     uploaded_segments += 1;
     let _ = window.emit("upload_progress", format!("Uploading: {}%", ((uploaded_segments as f64 / total_segments as f64) * 100.0).round() as u8)); }
-    println!("POST {base}/terminate-report/{code}");
+    log::trace!("POST {base}/terminate-report/{code}");
     client.post(&format!("{base}/terminate-report/{code}"))
         .send()
         .await
         .map_err(|e| e.to_string())?;
-    println!("Report terminated OK");
+    log::info!("Report terminated OK");
 
     end_report(&client, code.clone()).await;
 
     if let Err(e) = fs::remove_dir_all(&tmp_dir) {
-        println!("Failed to remove temp dir {:?}: {}", tmp_dir, e);
+        log::warn!("Failed to remove temp dir {:?}: {}", tmp_dir, e);
     }
     
     save_upload_settings(&upload_settings);
@@ -676,13 +679,13 @@ async fn upload_master_table(
     segment_id: u16,
     zip_path: &Path,
 ) -> Result<(), String> {
-    println!("→ upload_master_table(): segment_id = {segment_id}");
-    println!("  ZIP path = {:?}", zip_path);
-    println!("  POST {}", url);
+    log::trace!("→ upload_master_table(): segment_id = {segment_id}");
+    log::trace!("  ZIP path = {:?}", zip_path);
+    log::trace!("  POST {}", url);
 
     let bytes = fs::read(zip_path)
         .map_err(|e| format!("Failed to read master_table zip: {e}"))?;
-    println!("  size = {} bytes", bytes.len());
+    log::trace!("  size = {} bytes", bytes.len());
 
     let part = Part::bytes(bytes)
         .file_name(zip_path.file_name().unwrap().to_string_lossy().to_string())
@@ -700,15 +703,15 @@ async fn upload_master_table(
 
     let status = resp.status();
 
-    println!("  status = {}", status);
+    log::trace!("  status = {}", status);
 
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
-        println!("  body   = {body}");
-        return Err(format!("Master table upload failed: {} – {body}", status));
+        log::trace!("  body   = {body}");
+        return Err(format!("Master table upload failed: {} - {body}", status));
     }
 
-    println!("  ✔ master table upload OK");
+    log::trace!("  ✔ master table upload OK");
     Ok(())
 }
 
@@ -720,14 +723,14 @@ async fn upload_segment_and_get_next_id(
     start_time: u64,
     end_time: u64,
 ) -> Result<u16, String> {
-    println!("→ upload_segment_and_get_next_id()");
-    println!("  segment_id = {segment_id}");
-    println!("  ZIP path   = {:?}", zip_path);
-    println!("  POST       = {url}");
+    log::trace!("→ upload_segment_and_get_next_id()");
+    log::trace!("  segment_id = {segment_id}");
+    log::trace!("  ZIP path   = {:?}", zip_path);
+    log::trace!("  POST       = {url}");
 
     let bytes = fs::read(zip_path)
         .map_err(|e| format!("Failed to read segment zip: {e}"))?;
-    println!("  size       = {} bytes", bytes.len());
+    log::trace!("  size       = {} bytes", bytes.len());
 
     let params = serde_json::json!({
         "startTime":            start_time,
@@ -738,7 +741,7 @@ async fn upload_segment_and_get_next_id(
         "inProgressEventCount": 0,
         "segmentId":            segment_id,
     });
-    println!("{}", params);
+    log::trace!("{}", params);
 
     let logfile_part = Part::bytes(bytes)
         .file_name(zip_path.file_name().unwrap().to_string_lossy().to_string())
@@ -761,8 +764,8 @@ async fn upload_segment_and_get_next_id(
     let body   = resp.text().await
         .map_err(|e| format!("Failed to read response text: {e}"))?;
 
-    println!("  status     = {}", status);
-    println!("  raw body   = {}", body);
+    log::trace!("  status     = {}", status);
+    log::trace!("  raw body   = {}", body);
 
     if !status.is_success() {
         return Err(format!("Segment upload failed: {status} - {body}"));
@@ -774,12 +777,12 @@ async fn upload_segment_and_get_next_id(
         .and_then(|v| v.as_u64())
         .ok_or_else(|| format!("Missing `nextSegmentId` in response: {body}"))?;
 
-    println!("  ✔ nextSegmentId = {next_id}");
+    log::trace!("  ✔ nextSegmentId = {next_id}");
     Ok(next_id as u16)
 }
 
 async fn end_report(client: &reqwest::Client, code: String) {
-    println!("POST https://www.esologs.com/desktop-client/terminate-report");
+    log::debug!("POST https://www.esologs.com/desktop-client/terminate-report");
 
     let _response = client
         .post(format!("https://www.esologs.com/desktop-client/terminate-report/{}", code))
@@ -812,6 +815,7 @@ fn read_timestamps(path: &Path) -> Result<Vec<(u64, u64)>, String> {
 
 #[tauri::command]
 async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_settings: UploadSettings) -> Result<EncounterReportCode, String> {
+    log::info!("Beginning direct live log upload ...");
     let input_path: PathBuf = {
         let guard = app_state.live_log_folder.read().map_err(|e| e.to_string())?;
         let folder = guard.as_ref().ok_or("No folder selected")?.clone();
@@ -822,17 +826,17 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
         *log_files_lock = Some(vec![FilePath::from(input_path.clone())]);
     }
 
-    println!("[live_log_upload] Using input path: {:?}", input_path);
+    log::trace!("[live_log_upload] Using input path: {:?}", input_path);
 
     let client = {
         let g = app_state.http.read().map_err(|e| e.to_string())?;
         g.client.clone()
     };
 
-    println!("[live_log_upload] Creating report...");
+    log::trace!("[live_log_upload] Creating report...");
     let report_code = create_report(&app_state, &client, &upload_settings).await?;
     let code: String = report_code.code.clone();
-    println!("[live_log_upload] Report code: {}", code);
+    log::trace!("[live_log_upload] Report code: {}", code);
 
     window
         .emit("live_log_code", code.clone())
@@ -842,21 +846,21 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
     let tmp_dir = std::env::temp_dir().join(format!("esologtool_live_{code}"));
     std::fs::create_dir_all(&tmp_dir)
         .map_err(|e| format!("Failed to create temp dir: {e}"))?;
-    println!("[live_log_upload] Temp dir created at {:?}", tmp_dir);
+    log::trace!("[live_log_upload] Temp dir created at {:?}", tmp_dir);
 
     let window = window.clone();
     let upload_cancel_flag = app_state.upload_cancel_flag.clone();
     let handle = tauri::async_runtime::spawn(async move {
-        println!("[live_log_upload] Spawned async task.");
+        log::trace!("[live_log_upload] Spawned async task.");
 
         let mut input_file = loop {
             match std::fs::OpenOptions::new().read(true).open(&input_path) {
                 Ok(f) => {
-                    println!("[live_log_upload] Successfully opened Encounter.log");
+                    log::trace!("[live_log_upload] Successfully opened Encounter.log");
                     break f;
                 }
                 Err(e) => {
-                    println!(
+                    log::warn!(
                         "[live_log_upload] Failed to open Encounter.log ({}). Retrying...",
                         e
                     );
@@ -867,10 +871,10 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
         };
 
         let mut pos = if upload_settings.rewind {
-            println!("[live_log_upload] Rewind enabled → seeking to start of file.");
+            log::trace!("[live_log_upload] Rewind enabled → seeking to start of file.");
             input_file.seek(std::io::SeekFrom::Start(0)).expect("seek failed")
         } else {
-            println!("[live_log_upload] Rewind disabled → seeking to end of file.");
+            log::trace!("[live_log_upload] Rewind disabled → seeking to end of file.");
             let scan_file = std::fs::OpenOptions::new().read(true).open(&input_path)
                 .expect("Failed to open file for scanning");
             let mut reader = std::io::BufReader::new(&scan_file);
@@ -890,7 +894,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
             }
             input_file.seek(std::io::SeekFrom::Start(last_begin_log_pos)).expect("seek failed")
         };
-        println!("[live_log_upload] Initial file position: {}", pos);
+        log::trace!("[live_log_upload] Initial file position: {}", pos);
 
         let mut elp = ESOLogProcessor::new();
         let mut custom_state = CustomLogData::new();
@@ -900,7 +904,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
 
         loop {
             if upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
-                println!("[live_log_upload] Cancel flag set → breaking loop.");
+                log::info!("[live_log_upload] Cancel flag set → breaking loop.");
                 break;
             }
 
@@ -912,10 +916,10 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
             let mut reader = std::io::BufReader::new(&input_file);
             let bytes_read = reader.read_to_end(&mut buffer).expect("read failed");
 
-            println!("[live_log_upload] Read {} bytes at pos {}", bytes_read, pos);
+            log::trace!("[live_log_upload] Read {} bytes at pos {}", bytes_read, pos);
 
             if bytes_read == 0 {
-                println!("[live_log_upload] No new bytes. Sleeping 5s...");
+                log::trace!("[live_log_upload] No new bytes. Sleeping 5s...");
                 std::thread::sleep(std::time::Duration::from_secs(5));
                 continue;
             }
@@ -930,13 +934,13 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                     let third = split.next();
 
                     if matches!(second, Some("BEGIN_LOG")) {
-                        println!("[live_log_upload] BEGIN_LOG encountered.");
+                        log::trace!("[live_log_upload] BEGIN_LOG encountered.");
                         elp.eso_logs_log.new_log_reset();
                         elp.reset();
                         custom_state.reset();
                         if let Some(third_str) = third {
                             if let Ok(ts) = third_str.parse::<u64>() {
-                                println!(
+                                log::trace!(
                                     "[live_log_upload] BEGIN_LOG timestamp = {}",
                                     ts
                                 );
@@ -947,7 +951,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
 
                     let is_end_combat = matches!(second, Some("END_COMBAT") | Some("END_LOG"));
                     if is_end_combat {
-                        println!("[live_log_upload] END_COMBAT or END_LOG encountered.");
+                        log::trace!("[live_log_upload] END_COMBAT or END_LOG encountered.");
                     }
 
                     for l in handle_line(line.to_string(), &mut custom_state) {
@@ -955,7 +959,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                     }
 
                     if is_end_combat {
-                        println!(
+                        log::trace!(
                             "[live_log_upload] Packaging segment {}...",
                             segment_id
                         );
@@ -988,7 +992,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                                 (0, 0)
                             }
                         };
-                        println!(
+                        log::trace!(
                             "[live_log_upload] Segment {} time range: start={} end={}",
                             segment_id, start_ts, end_ts
                         );
@@ -999,7 +1003,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                             segment_id,
                             &tbl_zip,
                         ).await {
-                            eprintln!("Master table upload failed: {e}");
+                            log::error!("Master table upload failed: {e}");
                         }
 
                         match upload_segment_and_get_next_id(
@@ -1011,14 +1015,14 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                             end_ts,
                         ).await {
                             Ok(next) => {
-                                println!(
+                                log::trace!(
                                     "[live_log_upload] Segment {} uploaded. Next = {}",
                                     segment_id, next
                                 );
                                 segment_id = next;
                             }
                             Err(e) => {
-                                eprintln!("Segment upload failed: {e}");
+                                log::error!("Segment upload failed: {e}");
                                 segment_id += 1;
                             }
                         }
@@ -1032,17 +1036,17 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                 }
 
                 if processed > 0 {
-                    println!("[live_log_upload] Processed lines so far: {}", processed);
+                    log::trace!("[live_log_upload] Processed lines so far: {}", processed);
                 }
 
                 pos += (last_nl + 1) as u64;
-                println!("[live_log_upload] New file position: {}", pos);
+                log::trace!("[live_log_upload] New file position: {}", pos);
             }
 
             std::thread::sleep(std::time::Duration::from_secs(5));
         }
 
-        println!("[live_log_upload] Loop exited. Sending terminate-report...");
+        log::trace!("[live_log_upload] Loop exited. Sending terminate-report...");
 
         let _ = client
             .post(&format!("{base}/terminate-report/{code}"))
@@ -1050,14 +1054,14 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
             .await;
 
         let _ = std::fs::remove_dir_all(&tmp_dir);
-        println!("[live_log_upload] Temp dir deleted. Task exiting.");
+        log::trace!("[live_log_upload] Temp dir deleted. Task exiting.");
     });
 
     if let Err(e) = handle.await {
         return Err(format!("Live log task failed: {e}"));
     }
 
-    println!("[live_log_upload] Upload settings saved.");
+    log::trace!("[live_log_upload] Upload settings saved.");
     save_upload_settings(&upload_settings);
 
     Ok(report_code)
@@ -1065,6 +1069,21 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let result = Ftail::new()
+        .console(LevelFilter::Info)
+        .daily_file({
+            let mut path = cookie_folder_path();
+            path.push("logs");
+            if let Err(e) = std::fs::create_dir_all(&path) {
+                log::warn!("Failed to create logs folder: {}", e);
+            }
+            &path.clone()
+        }, LevelFilter::Info)
+    .init();
+    match result {
+        Ok(_) => log::info!("Logging initialised"),
+        Err(e) => println!("Error initialising logging: {}", e),
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
@@ -1106,15 +1125,15 @@ async fn update(app: tauri::AppHandle) -> tauri_plugin_updater::Result<()> {
       .download_and_install(
         |chunk_length, content_length| {
           downloaded += chunk_length;
-          println!("downloaded {downloaded} from {content_length:?}");
+          log::info!("downloaded {downloaded} from {content_length:?}");
         },
         || {
-          println!("download finished");
+          log::info!("download finished");
         },
       )
       .await?;
 
-    println!("update installed");
+    log::info!("update installed");
     // app.restart();
   }
 

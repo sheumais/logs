@@ -159,7 +159,7 @@ impl ESOLogsLog {
     }
 
     pub fn unit_index(&self, unit_id: &u32) -> Option<usize> {
-        // println!("{:?}", self.unit_id_to_session_id);
+        log::trace!("{:?}", self.unit_id_to_session_id);
         let res = self.unit_id_to_units_index.get(unit_id).copied();
         res
     }
@@ -203,10 +203,10 @@ impl ESOLogsLog {
         let session_id = *self.unit_id_to_session_id.get(&unit_id)?;
         if let Some(is_player) = self.players.get(&unit_id) {
             if *is_player {
-                // println!("Found player in index_in_session: {}, {}", unit_id, session_id);
-                // if let Some(index) = self.unit_index_in_session.get(&unit_id) {
-                //     println!("Player index would be: {}", index);
-                // }
+                log::trace!("Found player in index_in_session: {}, {}", unit_id, session_id);
+                if let Some(index) = self.unit_index_in_session.get(&unit_id) {
+                    log::trace!("Player index would be: {}", index);
+                }
                 return Some(0)
             }
         }

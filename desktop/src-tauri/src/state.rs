@@ -13,6 +13,13 @@ pub fn cookie_file_path() -> PathBuf {
     dir
 }
 
+pub fn cookie_folder_path() -> PathBuf {
+    let mut dir = data_local_dir().unwrap_or_else(|| temp_dir());
+    dir.push("eso-log-tool");
+    create_dir_all(&dir).ok();
+    dir
+}
+
 fn build_http_client_with_store(store: Arc<CookieStoreMutex>) -> Client {
     Client::builder()
         .cookie_provider(store.clone())
@@ -24,21 +31,21 @@ fn build_http_client_with_store(store: Arc<CookieStoreMutex>) -> Client {
 
 fn load_cookie_store() -> Arc<CookieStoreMutex> {
     let path = cookie_file_path();
-    println!("Loading cookies from: {:?}", path);
+    log::trace!("Loading cookies from: {:?}", path);
     if let Ok(mut file) = File::open(&path) {
         let mut data = String::new();
         if file.read_to_string(&mut data).is_ok() {
             if let Ok(store) = serde_json::from_str::<CookieStore>(&data) {
-                println!("Loaded cookies: {} cookies", store.iter_any().count());
+                log::trace!("Loaded cookies: {} cookies", store.iter_any().count());
                 return Arc::new(CookieStoreMutex::new(store));
             } else {
-                println!("Failed to deserialize cookies");
+                log::error!("Failed to deserialize cookies");
             }
         } else {
-            println!("Failed to read cookie file");
+            log::error!("Failed to read cookie file");
         }
     } else {
-        println!("No cookie file found at {:?}", path);
+        log::warn!("No cookie file found at {:?}", path);
     }
     Arc::new(CookieStoreMutex::default())
 }
@@ -47,16 +54,16 @@ fn save_cookie_store(store: &CookieStoreMutex) {
     let path = cookie_file_path();
     if let Ok(store) = store.lock() {
         let count = store.iter_any().count();
-        println!("Saving {} cookies to {:?}", count, path);
+        log::trace!("Saving {} cookies to {:?}", count, path);
         if let Ok(json) = serde_json::to_string(&*store) {
             if let Err(e) = fs::write(&path, json) {
-                println!("Failed to write cookie file: {}", e);
+                log::error!("Failed to write cookie file: {}", e);
             }
         } else {
-            println!("Failed to serialize cookies");
+            log::error!("Failed to serialize cookies");
         }
     } else {
-        println!("Failed to lock cookie store for saving");
+        log::warn!("Failed to lock cookie store for saving");
     }
 }
 

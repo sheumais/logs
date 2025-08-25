@@ -21,3 +21,5 @@ yew_icons = {version = "0.8", features = ["LucideArrowLeftCircle", "LucideUpload
 stylist = {version = "0.13", features = ["yew_integration"]}
 tauri-sys = { git = "https://github.com/JonasKruckenberg/tauri-sys", branch = "v2", features = ["all"] }
 futures = "0.3.29"
+ftail = "0.3.0"
+log = "0.4.27"
