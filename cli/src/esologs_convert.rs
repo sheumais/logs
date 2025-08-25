@@ -502,7 +502,6 @@ impl ESOLogProcessor {
     }
 
     fn handle_combat_event(&mut self, parts: &[String]) {
-        log::trace!("{:?}", parts);
         let source = parse::unit_state(parts, 9);
         let target = if parts[19] == "*" {
             source.clone()
@@ -983,7 +982,6 @@ impl ESOLogProcessor {
     }
 
     fn handle_effect_changed(&mut self, parts: &[String]) {
-        log::trace!("{:?}", parts);
         let source = parse::unit_state(parts, 6);
         let target_equal_source = parts[16] == "*";
         let target = if target_equal_source {
@@ -1250,13 +1248,16 @@ impl ESOLogProcessor {
             // let completed_ability_id = parts[4].parse::<u32>().unwrap();
             let buff_index = self.eso_logs_log.cast_id_hashmap.get(&ability_cast_id).unwrap_or(&usize::MAX); // "buff from cast_id should always be something" except when it isn't
             if *buff_index == usize::MAX {
-                log::trace!("buff index is null");
+                log::trace!("completed cast buff index is none");
                 return;
             }
             let buff = self.eso_logs_log.effects.get(*buff_index).expect("buff_index should always point to a buff event inside effects").clone();
             let caster_id_option = self.eso_logs_log.cast_id_source_unit_id.get(&ability_cast_id);
             
-            if caster_id_option.is_none() {return}
+            if caster_id_option.is_none() {
+                log::trace!("caster_id is none");
+                return
+            }
 
             let caster_id = caster_id_option.unwrap().clone();
             let caster_index = self.eso_logs_log.unit_index(&caster_id)
