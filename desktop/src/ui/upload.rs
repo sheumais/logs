@@ -219,12 +219,16 @@ pub fn upload() -> Html {
     };
 
     let delete_log_file = {
+        let error = error.clone();
         let has_been_deleted = has_been_deleted.clone();
         Callback::from(move |_| {
+            let error = error.clone();
             let has_been_deleted = has_been_deleted.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                invoke::<()>("delete_log_file", &()).await;
-                has_been_deleted.set(true);
+                match invoke_result::<(), String>("delete_log_file", &()).await {
+                    Ok(_) => {has_been_deleted.set(true)},
+                    Err(e) => {error.set(Some(e.to_string()))}
+                };
             });
         })
     };

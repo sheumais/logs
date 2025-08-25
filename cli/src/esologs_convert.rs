@@ -426,7 +426,7 @@ impl ESOLogProcessor {
                     }
                 }
             }
-            UnitAddedEventType::Object => {
+            UnitAddedEventType::Object | UnitAddedEventType::SiegeWeapon => {
                 let object = parse::object(parts);
                 let unit = ESOLogsUnit {
                     name: object.name.trim_matches('"').to_owned(),
@@ -1368,12 +1368,6 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath
             let seg_data = build_report_segment(&elp);
             write_zip_with_logtxt(seg_zip, seg_data.as_bytes())?;
 
-            let tbl_zip = output_dir
-                .as_ref()
-                .join(format!("master_table_{fight_index}.zip"));
-            let tbl_data = build_master_table(&mut elp);
-            write_zip_with_logtxt(tbl_zip, tbl_data.as_bytes())?;
-
             let events = &elp.eso_logs_log.events;
             if !events.is_empty() {
                 let mut last_ts = event_timestamp(&events[events.len()-1]);
@@ -1399,6 +1393,12 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath
             fight_index += 1;
         }
     }
+
+    let tbl_zip = output_dir
+        .as_ref()
+        .join(format!("master_table_{fight_index}.zip"));
+    let tbl_data = build_master_table(&mut elp);
+    write_zip_with_logtxt(tbl_zip, tbl_data.as_bytes())?;
 
     Ok(())
 }

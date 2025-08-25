@@ -68,19 +68,20 @@ impl ESOLogsLog {
         let mut id = unit.unit_id;
         if let Some(pd) = &unit.player_data {
             let char_id = pd.character_id;
-
-            if let Some(existing_index) = self.units.iter().position(|u| {
-                u.player_data.as_ref().map(|p| p.character_id) == Some(char_id)
-            }) {
-                if let Some(existing_unit) = self.units.get_mut(existing_index) {
-                    existing_unit.unit_type = unit.unit_type;
+            if char_id != 0 { // non-anonymous player
+                if let Some(existing_index) = self.units.iter().position(|u| {
+                    u.player_data.as_ref().map(|p| p.character_id) == Some(char_id)
+                }) {
+                    if let Some(existing_unit) = self.units.get_mut(existing_index) {
+                        existing_unit.unit_type = unit.unit_type;
+                    }
+                    return existing_index;
                 }
-                return existing_index;
-            }
 
-            let char_id_str = char_id.to_string();
-            let first_9 = &char_id_str[..char_id_str.len().min(9)];
-            id = first_9.parse::<u32>().unwrap_or(char_id as u32);
+                let char_id_str = char_id.to_string();
+                let first_9 = &char_id_str[..char_id_str.len().min(9)];
+                id = first_9.parse::<u32>().unwrap_or(char_id as u32);
+            }
         }
 
         let owner_id = unit.owner_id;

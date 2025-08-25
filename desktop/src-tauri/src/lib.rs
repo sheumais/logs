@@ -7,7 +7,7 @@ use std::{
     env::temp_dir, fs::{self, create_dir_all, File, OpenOptions}, io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write}, path::{Path, PathBuf}, sync::atomic::Ordering::SeqCst, thread, time::{Duration, SystemTime, UNIX_EPOCH}
 };
 use tauri::{async_runtime::spawn_blocking, path::BaseDirectory, Emitter, Manager, State, Window};
-use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_dialog::{DialogExt, FilePath};
 
 use crate::state::cookie_file_path;
 mod state;
@@ -578,7 +578,7 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
     let upload_cancel_flag = state.upload_cancel_flag.clone();
 
     let window_clone = window.clone();
-    let pairs = spawn_blocking(move || -> Result<Vec<(PathBuf,PathBuf,u16)>, String> {
+    let pairs = spawn_blocking(move || -> Result<Vec<(PathBuf,u16)>, String> {
         if upload_cancel_flag.load(SeqCst) {
             return Err("Upload cancelled".to_string());
         }
@@ -593,11 +593,9 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
 
         let mut out = Vec::new();
         for idx in 1u16.. {
-            let tbl = tmp_dir_for_spawn.join(format!("master_table_{idx}.zip"));
             let seg = tmp_dir_for_spawn.join(format!("report_segment_{idx}.zip"));
-            if tbl.exists() && seg.exists() {
-                println!("Found pair idx={idx}: {:?}, {:?}", tbl, seg);
-                out.push((tbl, seg, idx));
+            if seg.exists() {
+                out.push((seg, idx));
             } else {
                 break;
             }
@@ -625,28 +623,35 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
         .emit("live_log_code", code.clone())
         .map_err(|e| format!("Failed to emit uploading log code: {}", e))?;
 
-    for ((tbl, seg, _), (start, end)) in pairs.iter().zip(timestamps.iter()) {
+let last_idx = pairs.len().saturating_sub(1);
+    for (i, ((seg, _), (start, end))) in pairs.iter().zip(timestamps.iter()).enumerate() {
         if state.upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
-            return Err("Upload cancelled".to_string());
-        }
-        upload_master_table(
+            upload_master_table( 
             &client,
             &format!("{base}/set-report-master-table/{code}"),
-            segment_id,
-            tbl,
+            last_idx.try_into().unwrap(),
+            &tmp_dir.join(format!("report_segment_{}.zip", segment_id)).clone(),
         ).await?;
-        segment_id = upload_segment_and_get_next_id(
-            &client,
-            &format!("{base}/add-report-segment/{code}"),
-            seg,
-            segment_id,
-            *start,
+        return Err("Upload cancelled".to_string());
+    } 
+    segment_id = upload_segment_and_get_next_id(
+         &client,
+          &format!("{base}/add-report-segment/{code}"),
+           seg,
+            segment_id, 
+            *start, 
             *end,
-        ).await?;
-        uploaded_segments += 1;
-        let _ = window.emit("upload_progress", format!("Uploading: {}%", ((uploaded_segments as f64 / total_segments as f64) * 100.0).round() as u8));
+         ).await?;
+    if i == last_idx {
+        upload_master_table( 
+        &client,
+        &format!("{base}/set-report-master-table/{code}"),
+        segment_id,
+        &tmp_dir.join(format!("master_table_{}.zip", segment_id)).clone(),
+        ).await?;         
     }
-
+    uploaded_segments += 1;
+    let _ = window.emit("upload_progress", format!("Uploading: {}%", ((uploaded_segments as f64 / total_segments as f64) * 100.0).round() as u8)); }
     println!("POST {base}/terminate-report/{code}");
     client.post(&format!("{base}/terminate-report/{code}"))
         .send()
@@ -807,11 +812,15 @@ fn read_timestamps(path: &Path) -> Result<Vec<(u64, u64)>, String> {
 
 #[tauri::command]
 async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_settings: UploadSettings) -> Result<EncounterReportCode, String> {
-let input_path: PathBuf = {
+    let input_path: PathBuf = {
         let guard = app_state.live_log_folder.read().map_err(|e| e.to_string())?;
         let folder = guard.as_ref().ok_or("No folder selected")?.clone();
         folder.as_path().ok_or("Invalid path")?.join("Encounter.log")
     };
+    {
+        let mut log_files_lock = app_state.log_files.write().map_err(|e| e.to_string())?;
+        *log_files_lock = Some(vec![FilePath::from(input_path.clone())]);
+    }
 
     println!("[live_log_upload] Using input path: {:?}", input_path);
 

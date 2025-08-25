@@ -56,6 +56,7 @@ pub enum UnitAddedEventType {
     Player,
     Monster,
     Object,
+    SiegeWeapon,
     Unknown,
 }
 
@@ -65,6 +66,7 @@ impl From<&str> for UnitAddedEventType {
             "PLAYER" => UnitAddedEventType::Player,
             "MONSTER" => UnitAddedEventType::Monster,
             "OBJECT" => UnitAddedEventType::Object,
+            "SIEGE_WEAPON" => UnitAddedEventType::SiegeWeapon,
             _ => UnitAddedEventType::Unknown,
         }
     }
