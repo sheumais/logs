@@ -359,11 +359,9 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
 
     let mut frontbar_type = ItemType::Unknown;
     let mut backbar_type = ItemType::Unknown;
-    let gear_parts: Vec<&str> = parts[5].trim_matches(|c| c == '[' || c == ']')
-    .split("],[")
-    .collect();
+    let gear_parts: Vec<&str> = parts[5..parts.len()-2].iter().map(|s| s.as_str()).collect();
 
-    for i in gear_parts{
+    for i in gear_parts {
         let gear_piece = gear_piece(i);
         let item_slot = gear_piece.slot;
         let item_type = get_item_type_from_hashmap(gear_piece.item_id);
