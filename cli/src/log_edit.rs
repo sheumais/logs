@@ -451,7 +451,6 @@ fn modify_combat_event(parts: &[String], custom_log_data: &mut CustomLogData) ->
     log::trace!("ability_id: {}", ability_id);
     let time = parts[0].parse().unwrap();
     if ability_id == *MOULDERING_TAINT_ID {
-        // println!("{:?}", parts);
         let source = parse::unit_state(&parts, 9);
         let target = parse::unit_state(&parts, 19);
         let cast_track_id = parts[7].parse::<u32>().unwrap(); 
