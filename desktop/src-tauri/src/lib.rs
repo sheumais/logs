@@ -1070,7 +1070,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let result = Ftail::new()
-        .console(LevelFilter::Info)
+        .console(LevelFilter::Debug)
         .daily_file({
             let mut path = cookie_folder_path();
             path.push("logs");

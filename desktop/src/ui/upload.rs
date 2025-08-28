@@ -145,9 +145,9 @@ pub fn upload() -> Html {
 
                 is_uploading.set(UploadState::UploadingLog);
                 let settings = UploadSettings { 
-                    guild: guild.unwrap_or(-1), 
-                    visibility: visibility.unwrap_or(2), 
-                    region: region.unwrap_or(1),
+                    guild: guild.unwrap_or(selected_guild), 
+                    visibility: visibility.unwrap_or(selected_visibility), 
+                    region: region.unwrap_or(selected_region),
                     description: description.to_string(),
                     rewind: false,
                 };
@@ -186,9 +186,9 @@ pub fn upload() -> Html {
 
                 is_uploading.set(UploadState::LiveLogging);
                 let settings = UploadSettings { 
-                    guild: guild.unwrap_or(-1), 
-                    visibility: visibility.unwrap_or(2), 
-                    region: region.unwrap_or(1),
+                    guild: guild.unwrap_or(selected_guild), 
+                    visibility: visibility.unwrap_or(selected_visibility), 
+                    region: region.unwrap_or(selected_region),
                     description: description.to_string(),
                     rewind: rewind.unwrap_or(selected_rewind),
                 };
