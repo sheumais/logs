@@ -40,8 +40,8 @@ impl ESOLogsLog {
 
     pub fn new_log_reset(&mut self) {
         // self.units = Vec<ESOLogsUnit>;
-        self.session_id_to_units_index = HashMap::new();
-        self.owner_id_pairs_index = HashMap::new();
+        // self.session_id_to_units_index = HashMap::new();
+        // self.owner_id_pairs_index = HashMap::new();
         self.unit_id_to_session_id = HashMap::new();
         self.unit_id_to_units_index = HashMap::new();
         self.session_units = HashMap::new();
@@ -50,7 +50,7 @@ impl ESOLogsLog {
         self.players = HashMap::new();
         self.bosses = HashMap::new();
         // self.buffs = Vec<ESOLogsBuff>;
-        self.buffs_hashmap = HashMap::new();
+        // self.buffs_hashmap = HashMap::new();
         // self.effects = Vec<ESOLogsBuffEvent>;
         self.effects_hashmap = HashMap::new();
         self.cast_id_hashmap = HashMap::new();

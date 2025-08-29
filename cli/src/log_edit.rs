@@ -4,7 +4,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Write, BufRead};
 use std::path::Path;
 use parser::effect::{is_zen_dot, MOULDERING_TAINT_ID, MOULDERING_TAINT_TIME, ZEN_DEBUFF_ID};
-use parser::event::{self, EventResult};
+use parser::event::{self, parse_event_result, EventResult};
 use parser::parse::{self, gear_piece, unit_state};
 use parser::player::GearSlot;
 use parser::set::{get_item_type_from_hashmap, ItemType};
@@ -116,6 +116,7 @@ pub fn handle_line(line: String, custom_log_data: &mut CustomLogData) -> Vec<Str
         let is_ability = parts.get(1).map(|s| s.as_str()) == Some("ABILITY_INFO");
         let is_effect  = parts.get(1).map(|s| s.as_str()) == Some("EFFECT_INFO");
         let is_player  = parts.get(1).map(|s| s.as_str()) == Some("PLAYER_INFO");
+        // let is_resurrect = parts.get(2).map(|s| s.as_str()) == Some("SOUL_GEM_RESURRECTION_ACCEPTED");
 
         let is_zen_debuff = parts
             .get(5)
@@ -128,6 +129,8 @@ pub fn handle_line(line: String, custom_log_data: &mut CustomLogData) -> Vec<Str
 
         modified_lines.extend(new_lines);
     } else {
+        let is_resurrect = parts.get(1).map(|s| s.as_str()) == Some("BEGIN_CAST") && parts[5].parse::<u32>() == Ok(26770);
+        if is_resurrect {return modified_lines}
         modified_lines.push(line);
     }
 
@@ -274,7 +277,24 @@ fn add_arcanist_beam_cast(parts: &[String]) -> Option<Vec<String>> {
 
 fn check_ability_info(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
     let ability = parse::ability(parts);
-    if ability.scribing.is_some() {
+    if let Some(ref scribing) = ability.scribing {
+        if let Some((existing_index, existing_ability)) = custom_log_data.scribing_abilities
+            .iter()
+            .enumerate()
+            .find(|(_, a)| a.name == ability.name && a.scribing.as_ref() == Some(scribing))
+        {
+            custom_log_data.scribing_map.insert(ability.id, existing_index);
+            let focus_script = &existing_ability.scribing.as_ref().unwrap()[0];
+            let signature_script = &existing_ability.scribing.as_ref().unwrap()[1];
+            let affix_script = &existing_ability.scribing.as_ref().unwrap()[2];
+            let new_name = format!("{} ({} / {})", &existing_ability.name, signature_script, affix_script);
+            return Some(vec![
+                format!("{},{},{},\"{}\",\"{}\",{},{},\"{}\",\"{}\",\"{}\"",
+                    parts[0], "ABILITY_INFO", existing_ability.id, new_name, existing_ability.icon, "F", "T", focus_script, signature_script, affix_script),
+                format!("{},{},{},\"{}\",\"{}\",{},{},\"{}\",\"{}\",\"{}\"",
+                    parts[0], "ABILITY_INFO", ability.id, ability.name, existing_ability.icon, "F", "T", focus_script, signature_script, affix_script)
+            ]);
+        }
         let ability_name_clone = ability.name.clone();
         let ability_id_clone = ability.id;
         let scribing_ability = ScribingAbility {
@@ -291,8 +311,12 @@ fn check_ability_info(parts: &[String], custom_log_data: &mut CustomLogData) -> 
         let signature_script = &scribing_ability.scribing.as_ref().unwrap()[1];
         let affix_script = &scribing_ability.scribing.as_ref().unwrap()[2];
         let new_name = format!("{} ({} / {})", &scribing_ability.name, signature_script, affix_script);
-        return Some(vec![format!("{},{},{},\"{}\",\"{}\",{},{},\"{}\",\"{}\",\"{}\"", parts[0], "ABILITY_INFO", scribing_ability.id, new_name, scribing_ability.icon, "F", "T", focus_script, signature_script, affix_script),
-        format!("{},{},{},\"{}\",\"{}\",{},{},\"{}\",\"{}\",\"{}\"", parts[0], "ABILITY_INFO", ability_id_clone, ability_name_clone, scribing_ability.icon, "F", "T", focus_script, signature_script, affix_script)]);
+        return Some(vec![
+            format!("{},{},{},\"{}\",\"{}\",{},{},\"{}\",\"{}\",\"{}\"",
+                parts[0], "ABILITY_INFO", scribing_ability.id, new_name, scribing_ability.icon, "F", "T", focus_script, signature_script, affix_script),
+            format!("{},{},{},\"{}\",\"{}\",{},{},\"{}\",\"{}\",\"{}\"",
+                parts[0], "ABILITY_INFO", ability_id_clone, ability_name_clone, scribing_ability.icon, "F", "T", focus_script, signature_script, affix_script)
+        ]);
     } else if parts[2] == PRAGMATIC.to_string() || parts[2] == EXHAUSTING.to_string() {
         add_arcanist_beam_information(parts)
     } else if parts[2].parse::<u32>().ok() == Some(BLOCKADE_DEFAULT) {
@@ -448,83 +472,95 @@ fn modify_combat_event(parts: &[String], custom_log_data: &mut CustomLogData) ->
     let ability_id = parts[8].parse::<u32>().unwrap();
     log::trace!("ability_id: {}", ability_id);
     let time = parts[0].parse().unwrap();
-    if ability_id == *MOULDERING_TAINT_ID {
-        let source = parse::unit_state(&parts, 9);
-        let target = parse::unit_state(&parts, 19);
-        let cast_track_id = parts[7].parse::<u32>().unwrap(); 
-        let entry = custom_log_data.taint_stacks.entry(target.unit_id).or_insert_with(|| MoulderingTaintState {
-            stacks: 0,
-            last_timestamp: time,
-            last_source_unit_state: source,
-            last_cast_id: cast_track_id,
-            last_target_unit_state: target,
-        });
-        entry.stacks += 1;
-        entry.last_timestamp = time;
-        entry.last_source_unit_state = source;
-        entry.last_cast_id = cast_track_id;
-        entry.last_target_unit_state = target;
-        let mut lines: Vec<String> = vec![];
-        if entry.stacks == 1 {
-            let mut gained_line = format!(
-                "{},{},{},{},{},{},",
-                time, "EFFECT_CHANGED", "GAINED", "1", cast_track_id, MOULDERING_TAINT_ID.to_string()
-            );
-            let rest = parts[9..].join(",");
-            gained_line.push_str(&rest);
-            lines.push(gained_line);
-        }
-        let mut line = format!(
-            "{},{},{},{},{},{},",
-            time, "EFFECT_CHANGED", "UPDATED", entry.stacks, cast_track_id, MOULDERING_TAINT_ID.to_string()
-        );
+    let event_type = parse_event_result(&parts[2]);
+    if event_type == Some(EventResult::SoulGemResurrectionAccepted) {
+        let mut lines = Vec::new();
+        let mut line = format!("{},BEGIN_CAST,0,F,0,26770,", parts[0]);
         let rest = parts[9..].join(",");
         line.push_str(&rest);
         lines.push(line);
-        // println!("{}", line);
-        return Some(lines);
-    } else {
-        let mut removed = Vec::new();
-        for (id, entry) in custom_log_data.taint_stacks.iter_mut() {
-            if parts[19] != "*" {
-                let target = parse::unit_state(&parts, 19);
-                if target.unit_id == *id {
-                    if (time > entry.last_timestamp + *MOULDERING_TAINT_TIME as u64 || (event::parse_event_result(&parts[2]).unwrap() == EventResult::Died || target.health == 0)) && entry.stacks > 0 {
-                        entry.last_timestamp = time;
-                        entry.stacks = 0;
-                        let e = entry.last_source_unit_state;
-                        let mut line = format!(
-                            "{},{},{},{},{},{},{},{}/{},{}/{},{}/{},{}/{},{}/{},{},{},{},{},",
-                            time, "EFFECT_CHANGED", "FADED", "1", entry.last_cast_id, MOULDERING_TAINT_ID.to_string(),
-                            e.unit_id, e.health, e.max_health, e.magicka, e.max_magicka, e.stamina, e.max_stamina, e.ultimate, e.max_ultimate, e.werewolf, e.werewolf_max, e.shield, e.map_x, e.map_y, e.heading
-                        );
-                        let rest = parts[19..].join(",");
-                        line.push_str(&rest);
-                        // println!("{}", line);
-                        removed.push(id.clone());
-                        return Some(vec![line]);
+        lines.push(format!("{},END_CAST,COMPLETED,0,26770", parts[0]));
+
+        return Some(lines)
+    }
+
+    match ability_id {
+        id if id == *MOULDERING_TAINT_ID => {
+            let source = parse::unit_state(&parts, 9);
+            let target = parse::unit_state(&parts, 19);
+            let cast_track_id = parts[7].parse::<u32>().unwrap(); 
+            let entry = custom_log_data.taint_stacks.entry(target.unit_id).or_insert_with(|| MoulderingTaintState {
+                stacks: 0,
+                last_timestamp: time,
+                last_source_unit_state: source,
+                last_cast_id: cast_track_id,
+                last_target_unit_state: target,
+            });
+            entry.stacks += 1;
+            entry.last_timestamp = time;
+            entry.last_source_unit_state = source;
+            entry.last_cast_id = cast_track_id;
+            entry.last_target_unit_state = target;
+            let mut lines: Vec<String> = vec![];
+            if entry.stacks == 1 {
+                let mut gained_line = format!(
+                    "{},{},{},{},{},{},",
+                    time, "EFFECT_CHANGED", "GAINED", "1", cast_track_id, MOULDERING_TAINT_ID.to_string()
+                );
+                let rest = parts[9..].join(",");
+                gained_line.push_str(&rest);
+                lines.push(gained_line);
+            }
+            let mut line = format!(
+                "{},{},{},{},{},{},",
+                time, "EFFECT_CHANGED", "UPDATED", entry.stacks, cast_track_id, MOULDERING_TAINT_ID.to_string()
+            );
+            let rest = parts[9..].join(",");
+            line.push_str(&rest);
+            lines.push(line);
+            return Some(lines);
+        },
+        _ => {
+            let mut removed = Vec::new();
+            for (id, entry) in custom_log_data.taint_stacks.iter_mut() {
+                if parts[19] != "*" {
+                    let target = parse::unit_state(&parts, 19);
+                    if target.unit_id == *id {
+                        if (time > entry.last_timestamp + *MOULDERING_TAINT_TIME as u64 || (event::parse_event_result(&parts[2]).unwrap() == EventResult::Died || target.health == 0)) && entry.stacks > 0 {
+                            entry.last_timestamp = time;
+                            entry.stacks = 0;
+                            let e = entry.last_source_unit_state;
+                            let mut line = format!(
+                                "{},{},{},{},{},{},{},{}/{},{}/{},{}/{},{}/{},{}/{},{},{},{},{},",
+                                time, "EFFECT_CHANGED", "FADED", "1", entry.last_cast_id, MOULDERING_TAINT_ID.to_string(),
+                                e.unit_id, e.health, e.max_health, e.magicka, e.max_magicka, e.stamina, e.max_stamina, e.ultimate, e.max_ultimate, e.werewolf, e.werewolf_max, e.shield, e.map_x, e.map_y, e.heading
+                            );
+                            let rest = parts[19..].join(",");
+                            line.push_str(&rest);
+                            removed.push(id.clone());
+                            return Some(vec![line]);
+                        }
                     }
                 }
+                if time > entry.last_timestamp + 500 + *MOULDERING_TAINT_TIME as u64 && entry.stacks > 0 {
+                    entry.last_timestamp = time;
+                    entry.stacks = 0;
+                    let e = entry.last_source_unit_state;
+                    let t = entry.last_target_unit_state;
+                    let line = format!(
+                        "{},{},{},{},{},{},{},{}/{},{}/{},{}/{},{}/{},{}/{},{},{},{},{},{},{}/{},{}/{},{}/{},{}/{},{}/{},{},{},{},{}",
+                        time, "EFFECT_CHANGED", "FADED", "1", entry.last_cast_id, MOULDERING_TAINT_ID.to_string(),
+                        e.unit_id, e.health, e.max_health, e.magicka, e.max_magicka, e.stamina, e.max_stamina, e.ultimate, e.max_ultimate, e.werewolf, e.werewolf_max, e.shield, e.map_x, e.map_y, e.heading,
+                        t.unit_id, "0", t.max_health, "0", "0", "0", "0", "0", "0", "0", "0", "0", t.map_x, t.map_y, t.heading
+                    );
+                    removed.push(id.clone());
+                    return Some(vec![line]);
+                }
             }
-            if time > entry.last_timestamp + 500 + *MOULDERING_TAINT_TIME as u64 && entry.stacks > 0 {
-                entry.last_timestamp = time;
-                entry.stacks = 0;
-                let e = entry.last_source_unit_state;
-                let t = entry.last_target_unit_state;
-                let line = format!(
-                    "{},{},{},{},{},{},{},{}/{},{}/{},{}/{},{}/{},{}/{},{},{},{},{},{},{}/{},{}/{},{}/{},{}/{},{}/{},{},{},{},{}",
-                    time, "EFFECT_CHANGED", "FADED", "1", entry.last_cast_id, MOULDERING_TAINT_ID.to_string(),
-                    e.unit_id, e.health, e.max_health, e.magicka, e.max_magicka, e.stamina, e.max_stamina, e.ultimate, e.max_ultimate, e.werewolf, e.werewolf_max, e.shield, e.map_x, e.map_y, e.heading,
-                    t.unit_id, "0", t.max_health, "0", "0", "0", "0", "0", "0", "0", "0", "0", t.map_x, t.map_y, t.heading
-                );
-                removed.push(id.clone());
-                return Some(vec![line]);
+            for k in removed {
+                custom_log_data.taint_stacks.remove_entry(&k);
             }
         }
-        for k in removed {
-            custom_log_data.taint_stacks.remove_entry(&k);
-        }
-        
     }
 
     return None
