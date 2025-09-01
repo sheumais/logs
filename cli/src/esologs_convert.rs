@@ -548,7 +548,7 @@ impl ESOLogProcessor {
             parse::unit_state(parts, 19)
         };
         let ability_id = parts[8].parse().map_err(|e| format!("Failed to parse ability_id: {}", e))?;
-        if ability_id == 0 {return Err(format!("Combat event ability id is zero"))}
+        if ability_id == 0 {return Ok(())} // usually just soul_gem_resurrection_accepted, nothing to worry about
         let mut buff_event= ESOLogsBuffEvent {
             unique_index: 0,
             source_unit_index: self.unit_index(source.unit_id).ok_or_else(|| format!("source_unit_index {} is out of bounds", source.unit_id))?,
@@ -1540,6 +1540,12 @@ pub fn build_master_table(elp: &mut ESOLogProcessor) -> String {
         }
 
         if buff.id == buff.caused_by_id && buff.damage_type == DamageType::None {
+            buff.caused_by_id = 0;
+        }
+
+        if matches!(buff.caused_by_id,
+            26770
+        ) {
             buff.caused_by_id = 0;
         }
     }

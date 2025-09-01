@@ -598,7 +598,7 @@ pub enum ESOLogsResourceType {
     Health = 4,
     Magicka = 0,
     Stamina = 1,
-    Ultimate = 8,
+    Ultimate = 2,
 }
 
 impl Display for ESOLogsResourceType {
