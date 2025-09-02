@@ -13,7 +13,7 @@ use parser::ui::*;
 
 fn main() {
     let result = Ftail::new()
-        .console(LevelFilter::Debug)
+        .console(LevelFilter::Trace)
         .init();
     match result {
         Ok(_) => log::info!("Logging initialised"),

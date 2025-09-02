@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, u32};
 
-use crate::{effect::{self, Ability, Effect}, player::{self, empty_gear_piece, GearPiece, Player}, unit::{self, blank_unit_state, Unit, UnitType}};
+use crate::{effect::{self, Ability, Effect}, player::{self, empty_gear_piece, is_appropriate_level, EnchantType, GearPiece, GearSlot, Player}, unit::{self, blank_unit_state, Unit, UnitType}};
 
 pub fn is_true(value: &str) -> bool {
     value == "T"
@@ -114,31 +114,30 @@ pub fn object(parts: &[String]) -> Unit {
 pub fn gear_piece(part: &str) -> GearPiece {
     let split: Vec<&str> = part.split(',').collect();
     if split.len() < 3 {println!("Gear piece malformed: {:?}", split); return empty_gear_piece()}
-    if player::match_gear_trait(split[4]) == player::GearTrait::None && split[4] != "NONE" {
-        println!("Unknown gear trait: {part}");
-    }
+    let level = split[9].parse::<u8>().unwrap_or(u8::MAX);
+    let slot = player::match_gear_slot(split[0]);
+    let is_cp = split.get(8).map_or(false, |v| is_true(v));
+    let quality = split.get(10).map(|v| player::match_gear_quality(v)).unwrap_or(player::GearQuality::None);
 
-    let enchant = if split.len() > 7  && split[7] != "INVALID" {
-        let et = player::match_enchant_type(split[7]);
-        if et == player::EnchantType::None && split[7] != "NONE" {
-            println!("Unknown enchant type: {part}");
+    let enchant = if is_appropriate_level(level, is_cp) {
+        let mut et = player::match_enchant_type(split[7]);
+        if et == EnchantType::Invalid && matches!(slot, GearSlot::Ring1 | GearSlot::Necklace | GearSlot::Ring2) {
+            // assume enchant is indeko tri recovery
+            et = EnchantType::PrismaticRecovery;
         }
 
         Some(player::GearEnchant {
             enchant_type: et,
-            is_cp: split.get(8).map_or(false, |v| is_true(v)),
-            enchant_level: split.get(9).and_then(|v| v.parse().ok()).unwrap_or(0),
-            enchant_quality: split
-                .get(10)
-                .map(|v| player::match_gear_quality(v))
-                .unwrap_or(player::GearQuality::None),
+            is_cp,
+            enchant_level: level,
+            enchant_quality: quality,
         })
     } else {
         None
     };
 
     GearPiece {
-        slot: player::match_gear_slot(split[0]),
+        slot,
         item_id: split[1].parse().unwrap_or(0),
         is_cp: is_true(split[2]),
         level: split[3].parse().unwrap_or(0),

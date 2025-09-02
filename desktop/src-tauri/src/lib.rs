@@ -606,6 +606,9 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
         }
         Ok(out)
     }).await.map_err(|e| format!("spawn_blocking error: {e}"))??;
+
+    let _ = window.emit("upload_progress", format!("Processing: 100%"));
+
     if state.upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
         return Err("Upload cancelled".to_string());
     }
@@ -630,31 +633,33 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
     for (i, ((seg, _), (start, end))) in pairs.iter().zip(timestamps.iter()).enumerate() {
         if state.upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
             upload_master_table( 
+                &client,
+                &format!("{base}/set-report-master-table/{code}"),
+                last_idx.try_into().unwrap(),
+                &tmp_dir.join(format!("report_segment_{}.zip", segment_id)).clone(),
+            ).await?;
+            return Err("Upload cancelled".to_string());
+        } 
+        segment_id = upload_segment_and_get_next_id(
+            &client,
+            &format!("{base}/add-report-segment/{code}"),
+            seg,
+                segment_id, 
+                *start, 
+                *end,
+        ).await?;
+        if i == last_idx {
+            upload_master_table( 
             &client,
             &format!("{base}/set-report-master-table/{code}"),
-            last_idx.try_into().unwrap(),
-            &tmp_dir.join(format!("report_segment_{}.zip", segment_id)).clone(),
-        ).await?;
-        return Err("Upload cancelled".to_string());
-    } 
-    segment_id = upload_segment_and_get_next_id(
-         &client,
-          &format!("{base}/add-report-segment/{code}"),
-           seg,
-            segment_id, 
-            *start, 
-            *end,
-         ).await?;
-    if i == last_idx {
-        upload_master_table( 
-        &client,
-        &format!("{base}/set-report-master-table/{code}"),
-        segment_id,
-        &tmp_dir.join(format!("master_table_{}.zip", segment_id)).clone(),
-        ).await?;         
+            segment_id,
+            &tmp_dir.join(format!("master_table_{}.zip", segment_id)).clone(),
+            ).await?;         
+        }
+        uploaded_segments += 1;
+        let _ = window.emit("upload_progress", format!("Uploading: {}%", ((uploaded_segments as f64 / total_segments as f64) * 100.0).round() as u8)); 
     }
-    uploaded_segments += 1;
-    let _ = window.emit("upload_progress", format!("Uploading: {}%", ((uploaded_segments as f64 / total_segments as f64) * 100.0).round() as u8)); }
+    let _ = window.emit("upload_progress", format!("Uploading: 100%"));
     log::trace!("POST {base}/terminate-report/{code}");
     client.post(&format!("{base}/terminate-report/{code}"))
         .send()

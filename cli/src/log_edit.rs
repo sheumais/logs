@@ -9,14 +9,15 @@ use parser::parse::{self, gear_piece, unit_state};
 use parser::player::GearSlot;
 use parser::set::{get_item_type_from_hashmap, ItemType};
 use parser::unit::UnitState;
-use parser::{EffectChangedEventType, EventType};
+use parser::{EffectChangedEventType, EventType, UnitAddedEventType};
 
 pub struct CustomLogData {
     pub zen_stacks: HashMap<u32, ZenDebuffState>,
     pub scribing_abilities: Vec<ScribingAbility>,
     pub scribing_map: HashMap<u32, usize>,
-    pub scribing_unit_map: HashMap<(u32, u32), usize>,
+    pub scribing_unit_map: HashMap<(String, u32), usize>,
     pub taint_stacks: HashMap<u32, MoulderingTaintState>,
+    pub units: HashMap<u32, String>,
 }
 
 impl CustomLogData {
@@ -27,6 +28,7 @@ impl CustomLogData {
             scribing_map: HashMap::new(),
             scribing_unit_map: HashMap::new(),
             taint_stacks: HashMap::new(),
+            units: HashMap::new(),
         }
     }
 
@@ -145,6 +147,7 @@ fn check_line_for_edits(parts: &[String], custom_log_data: &mut CustomLogData) -
         EventType::EffectInfo => add_arcanist_beam_effect_information(parts),
         EventType::PlayerInfo => modify_player_data(parts, custom_log_data),
         EventType::CombatEvent => modify_combat_event(parts, custom_log_data),
+        EventType::UnitAdded => handle_unit_added(parts, custom_log_data),
         _ => None,
     }
 }
@@ -372,9 +375,9 @@ fn add_blockade_versions(parts: &[String]) -> Option<Vec<String>> {
 
 fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
     
-    log::trace!("Modifying player data: {:?}", parts);
+    // log::trace!("Modifying player data: {:?}", parts);
 
-    if parts.len() < 7 { // this can occur if either the player is wearing nothing and has no skills, or they're not in the trial.
+    if parts.len() < 7 { // this should never occur
         return None;
     }
 
@@ -385,8 +388,17 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
     let mut backbar_type = ItemType::Unknown;
     let gear_parts: Vec<&str> = parts[5..parts.len()-2].iter().map(|s| s.as_str()).collect();
 
+    let mut processed_gear: Vec<String> = Vec::new();
     for i in gear_parts {
         let gear_piece = gear_piece(i);
+        // let is_mythic = is_mythic_set(gear_piece_obj.set_id);
+        let gear_str = i.to_string();
+        // if is_mythic { // save for the rainy day where esologs adds functionality for mythic items.. https://discord.com/channels/503331371159257089/714906580646232135/878731437807902760
+        //     if let Some(pos) = gear_str.find("LEGENDARY") {
+        //         gear_str.replace_range(pos..pos + "LEGENDARY".len(), "MYTHIC_OVERRIDE");
+        //     }
+        // }
+        processed_gear.push(format!("[{}]", gear_str));
         let item_slot = gear_piece.slot;
         let item_type = get_item_type_from_hashmap(gear_piece.item_id);
         if item_slot == GearSlot::MainHand {
@@ -395,16 +407,11 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
             backbar_type = item_type;
         }
     }
-    // println!("{}", custom_log_data.scribing_map.len());
-    // println!("{}", custom_log_data.scribing_map.keys().map(|k| k.to_string()).collect::<Vec<_>>().join(", "));
-    // println!("{}", custom_log_data.scribing_abilities.iter().map(|a| a.id.to_string()).collect::<Vec<_>>().join(", "));
-    // println!("{:?}", custom_log_data.scribing_abilities);
 
     let player_id = parts[2].parse::<u32>().unwrap();
+    let player_name = custom_log_data.units.get(&player_id).cloned().unwrap_or_else(|| player_id.to_string());
 
     for id in &mut primary_ability_id_list {
-        // log::trace!("Checking id: {}", id);
-        // println!("Current scribing_map: {:?}", custom_log_data.scribing_map);
         if matches!(*id, BLOCKADE_DEFAULT | BLOCKADE_FIRE | BLOCKADE_FROST | BLOCKADE_STORMS) {
             *id = match frontbar_type {
                 ItemType::FrostStaff => BLOCKADE_FROST,
@@ -412,19 +419,18 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
                 ItemType::LightningStaff => BLOCKADE_STORMS,
                 _ => BLOCKADE_DEFAULT,
             };
-        } else if let Some(index) = custom_log_data.scribing_unit_map.get(&(player_id, *id)) {
-            log::trace!("Setting {} to originally existing index {} for {}", player_id, index, id);
+        } else if let Some(index) = custom_log_data.scribing_unit_map.get(&(player_name.clone(), *id)) {
+            log::trace!("Setting {} to scribing {:?} for {}", player_name, custom_log_data.scribing_abilities[*index].scribing, id);
             *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
         } else if custom_log_data.scribing_map.contains_key(id) {
             if let Some(index) = custom_log_data.scribing_map.get(id) {
-                custom_log_data.scribing_unit_map.insert((player_id, *id), *index);
+                custom_log_data.scribing_unit_map.insert((player_name.clone(), *id), *index);
                 *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
             }
         }
     }
 
     for id in &mut backup_ability_id_list {
-        // log::trace!("Checking id: {}", id);
         if matches!(*id, BLOCKADE_DEFAULT | BLOCKADE_FIRE | BLOCKADE_FROST | BLOCKADE_STORMS) {
             *id = match backbar_type {
                 ItemType::FrostStaff => BLOCKADE_FROST,
@@ -432,12 +438,12 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
                 ItemType::LightningStaff => BLOCKADE_STORMS,
                 _ => BLOCKADE_DEFAULT,
             };
-        } else if let Some(index) = custom_log_data.scribing_unit_map.get(&(player_id, *id)) {
-            log::trace!("Setting {} to originally existing index {} for {}", player_id, index, id);
+        } else if let Some(index) = custom_log_data.scribing_unit_map.get(&(player_name.clone(), *id)) {
+            log::trace!("Setting {} to scribing {:?} for {}", player_name, custom_log_data.scribing_abilities[*index].scribing, id);
             *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
         } else if custom_log_data.scribing_map.contains_key(id) {
             if let Some(index) = custom_log_data.scribing_map.get(id) {
-                custom_log_data.scribing_unit_map.insert((player_id, *id), *index);
+                custom_log_data.scribing_unit_map.insert((player_name.clone(), *id), *index);
                 *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
             }
         }
@@ -450,27 +456,16 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
         format!("[{}]", parts[3]),
         format!("[{}]", parts[4]),
     ];
-    let gear_start = 5;
-    let gear_end = parts.len().saturating_sub(2);
-    let gear: Vec<String> = if parts.len() > gear_start && gear_end > gear_start {
-        parts[gear_start..gear_end]
-            .iter()
-            .map(|p| format!("[{}]", p))
-            .collect()
-    } else {
-        vec![]
-    };
-    new_parts.push(format!("[{}]", gear.join(",")));
+    new_parts.push(format!("[{}]", processed_gear.join(",")));
     new_parts.push(format!("[{}]", primary_ability_id_list.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",")));
     new_parts.push(format!("[{}]", backup_ability_id_list.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",")));
-
 
     Some(vec![new_parts.join(",")])
 }
 
 fn modify_combat_event(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
     let ability_id = parts[8].parse::<u32>().unwrap();
-    log::trace!("ability_id: {}", ability_id);
+    // log::trace!("ability_id: {}", ability_id);
     let time = parts[0].parse().unwrap();
     let event_type = parse_event_result(&parts[2]);
     if event_type == Some(EventResult::SoulGemResurrectionAccepted) {
@@ -564,4 +559,29 @@ fn modify_combat_event(parts: &[String], custom_log_data: &mut CustomLogData) ->
     }
 
     return None
+}
+
+fn handle_unit_added(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
+    let event = UnitAddedEventType::from(parts.get(3).unwrap().as_str());
+        match event {
+            UnitAddedEventType::Player => {
+                let player = parse::player(parts);
+                if player.name == "Offline" || player.name.len() < 3 {return None;}
+                custom_log_data.units.insert(player.unit_id, player.name.clone());
+                custom_log_data.units.insert(player.player_per_session_id, player.name);
+            },
+            UnitAddedEventType::Monster => {
+                // let monster = parse::monster(parts);
+                // custom_log_data.units.insert(monster.unit_id, monster.name.clone());
+                // custom_log_data.units.insert(monster.unit_id, monster.name);
+            },
+            UnitAddedEventType::Object | UnitAddedEventType::SiegeWeapon => {
+                // let object = parse::object(parts);
+            },
+            UnitAddedEventType::Unknown => {
+                log::error!("Unknown unit added unit type");
+            },
+        }
+
+    None
 }

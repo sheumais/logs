@@ -279,7 +279,7 @@ impl ESOLogProcessor {
             EventType::EffectInfo    => self.handle_effect_info(parts),
             EventType::UnitChanged   => self.handle_unit_changed(parts),
             EventType::EndCast       => self.handle_end_cast(parts),
-            EventType::Unknown       => {log::trace!("Ignoring line because unknown eventtype"); Ok(())}
+            EventType::Unknown       => {Ok(())}
         };
         match r {
             Ok(()) => {},
@@ -451,6 +451,7 @@ impl ESOLogProcessor {
                         pet: ESOLogsPet { pet_type_index: self.unit_index(monster.unit_id).unwrap_or(0) }
                     };
                     if !self.eso_logs_log.pets.iter().any(|rel| rel.owner_index == pet_relationship.owner_index && rel.pet.pet_type_index == pet_relationship.pet.pet_type_index) {
+                        log::trace!("Inserting new pet relationship: {}", pet_relationship);
                         self.eso_logs_log.pets.push(pet_relationship);
                     }
                 }
@@ -526,15 +527,15 @@ impl ESOLogProcessor {
         let units_stored_shield = *esolog.shield_values.get(&unit_id).unwrap_or(&0);
         let buff = &esolog.buffs[buff_event.buff_index];
         if shield != units_stored_shield || buff.id == 146311 /* frost safeguard */ { 
-            log::trace!("Comparing shields for unit {}: {} new vs stored {}", unit_id, shield, units_stored_shield);
+            // log::trace!("Comparing shields for unit {}: {} new vs stored {}", unit_id, shield, units_stored_shield);
             if let Some(shield_buffs_for_unit) = esolog.shields.get_mut(&unit_id) {
                 shield_buffs_for_unit.insert(buff_event.buff_index, buff_event.clone());
-                log::trace!("Adding buff index: {}", buff_event.buff_index);
+                // log::trace!("Adding buff index: {}", buff_event.buff_index);
             } else {
                 let mut hashmap = HashMap::new();
                 hashmap.insert(buff_event.buff_index, buff_event.clone());
                 esolog.shields.insert(unit_id, hashmap);
-                log::trace!("Adding buff index: {}", buff_event.buff_index);
+                // log::trace!("Adding buff index: {}", buff_event.buff_index);
             }
             esolog.shield_values.insert(unit_id, shield);
         }
@@ -1512,6 +1513,7 @@ pub fn build_master_table(elp: &mut ESOLogProcessor) -> String {
             111504 => Some("gear_undaunted_werewolfbehemoth_head_a".to_string()), // balorgh
             220015 => Some("gear_lucentguardian_heavy_head_a".to_string()), // lucent echoes
             147459 => Some("antiquities_ornate_necklace_3".to_string()), // pearls of ehlnofey
+            117714 | 117693 => Some("ability_necromancer_002_a".to_string()), // blastbones grey-ed out
             _ => None,
         };
         if let Some(icon) = new_icon {
@@ -1535,6 +1537,8 @@ pub fn build_master_table(elp: &mut ESOLogProcessor) -> String {
             | 156020 // from the brink
             | 190960 // harmony (jewellery synergy)
             | 103966 // concentrated barrier
+            | 160827 // selene
+            | 133494 // aegis caller
         ) {
             buff.caused_by_id = 0;
         }
@@ -1547,6 +1551,11 @@ pub fn build_master_table(elp: &mut ESOLogProcessor) -> String {
             26770
         ) {
             buff.caused_by_id = 0;
+        }
+
+        buff.damage_type = match buff.id {
+            103631 | 103622 => DamageType::Oblivion, // roaring flare
+            _ => buff.damage_type,
         }
     }
     for i in 0..elp.eso_logs_log.buffs.len() {
@@ -1563,7 +1572,7 @@ pub fn build_master_table(elp: &mut ESOLogProcessor) -> String {
                     && child_damage_type != DamageType::Heal
                     && child_damage_type != DamageType::None
                 {
-                    parent_buff.damage_type = child_damage_type;
+                    elp.eso_logs_log.buffs[i].caused_by_id = 0;
                 }
             }
         }

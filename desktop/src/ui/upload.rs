@@ -9,7 +9,9 @@ use web_sys::HtmlInputElement;
 use yew::{function_component, html, use_context, Html, use_state, Callback, events::Event, TargetCast};
 use yew::prelude::*;
 use yew_icons::IconId;
+use yew_router::hooks::use_navigator;
 use crate::app::{ESOLogUploadSettings, LoginContext};
+use crate::routes::Route;
 use crate::ui::icon_button::{BackArrow, IconButton};
 use crate::ui::style::*;
 
@@ -125,6 +127,7 @@ pub fn upload() -> Html {
     };
 
     let upload_log = {
+        let upload_progress = upload_progress.clone();
         let report_code = report_code.clone();
         let error = error.clone();
         let is_uploading = is_uploading.clone();
@@ -133,6 +136,7 @@ pub fn upload() -> Html {
         let visibility = visibility.clone();
         let description = description.clone();
         move |_| {
+            let upload_progress = upload_progress.clone();
             let report_code = report_code.clone();
             let error = error.clone();
             let is_uploading = is_uploading.clone();
@@ -151,6 +155,7 @@ pub fn upload() -> Html {
                     description: description.to_string(),
                     rewind: false,
                 };
+                upload_progress.set(None);
                 match invoke_result::<EncounterReportCode, String>("upload_log",  
                     &serde_json::json!({
                         "uploadSettings": settings,
@@ -164,6 +169,7 @@ pub fn upload() -> Html {
     };
 
     let live_log = {
+        let upload_progress = upload_progress.clone();
         let report_code = report_code.clone();
         let error = error.clone();
         let is_uploading = is_uploading.clone();
@@ -173,6 +179,7 @@ pub fn upload() -> Html {
         let description = description.clone();
         let rewind = rewind.clone();
         move |_| {
+            let upload_progress = upload_progress.clone();
             let report_code = report_code.clone();
             let error = error.clone();
             let is_uploading = is_uploading.clone();
@@ -192,6 +199,7 @@ pub fn upload() -> Html {
                     description: description.to_string(),
                     rewind: rewind.unwrap_or(selected_rewind),
                 };
+                upload_progress.set(None);
                 match invoke_result::<EncounterReportCode, String>("live_log_upload",  
                     &serde_json::json!({
                         "uploadSettings": settings,
@@ -256,6 +264,18 @@ pub fn upload() -> Html {
     } else {
         (html! {}, html! {}, html! {})
     };
+    let navigator = use_navigator().unwrap();
+
+    {
+        let navigator = navigator.clone();
+        let has_been_deleted = has_been_deleted.clone();
+        use_effect(move || {
+            if *has_been_deleted {
+                navigator.push(&Route::Home);
+            }
+            || ()
+        });
+    }
 
     html! {
         <div>

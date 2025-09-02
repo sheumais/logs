@@ -361,6 +361,7 @@ pub enum EnchantType {
     PoisonedWeapon,
     PrismaticDefense,
     PrismaticOnslaught,
+    PrismaticRecovery,
     ReduceArmor,
     ReduceBlockAndBash,
     ReduceFeatCost,
@@ -387,6 +388,7 @@ pub fn match_enchant_type(string: &str) -> EnchantType {
         "INCREASE_BASH_DAMAGE" => EnchantType::IncreaseBashDamage,
         "DISEASE_RESISTANT" => EnchantType::DiseaseResistance,
         "INCREASE_POTION_EFFECTIVENESS" => EnchantType::IncreasePotionEffectiveness,
+        "PRISMATIC_REGEN" => EnchantType::PrismaticRecovery, // not implemented by ZOS yet.
         
         "ABSORB_STAMINA" => EnchantType::AbsorbStamina,
         "ABSORB_MAGICKA" => EnchantType::AbsorbMagicka,
@@ -407,7 +409,7 @@ pub fn match_enchant_type(string: &str) -> EnchantType {
         "MAGICKA" => EnchantType::Magicka,
         "HEALTH" => EnchantType::Health,
         "PRISMATIC_DEFENSE" => EnchantType::PrismaticDefense,
-        "INVALID" => EnchantType::None,
+        "INVALID" => EnchantType::Invalid,
         _ => EnchantType::None,
     }
 }
@@ -432,6 +434,7 @@ pub struct GearPiece {
     pub enchant: Option<GearEnchant>,
 }
 
+/// If is_cp then level * 10, else level
 pub fn veteran_level_to_cp(level: u8, is_cp: bool) -> u8 {
     if is_cp {
         (level.saturating_mul(10)).min(u8::MAX)
@@ -440,10 +443,12 @@ pub fn veteran_level_to_cp(level: u8, is_cp: bool) -> u8 {
     }
 }
 
+/// 160
 pub fn maximum_item_level() -> u8 {
     160
 }
 
+/// level > 0 and level <= 16 or 50 (basically)
 pub fn is_appropriate_level(level: u8, is_cp: bool) -> bool {
     let level = veteran_level_to_cp(level, is_cp);
     level > 0 && level <= maximum_item_level()
