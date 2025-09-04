@@ -420,7 +420,7 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
                 _ => BLOCKADE_DEFAULT,
             };
         } else if let Some(index) = custom_log_data.scribing_unit_map.get(&(player_name.clone(), *id)) {
-            log::trace!("Setting {} to scribing {:?} for {}", player_name, custom_log_data.scribing_abilities[*index].scribing, id);
+            // log::trace!("Setting {} to scribing {:?} for {}", player_name, custom_log_data.scribing_abilities[*index].scribing, id);
             *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
         } else if custom_log_data.scribing_map.contains_key(id) {
             if let Some(index) = custom_log_data.scribing_map.get(id) {
@@ -439,7 +439,7 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
                 _ => BLOCKADE_DEFAULT,
             };
         } else if let Some(index) = custom_log_data.scribing_unit_map.get(&(player_name.clone(), *id)) {
-            log::trace!("Setting {} to scribing {:?} for {}", player_name, custom_log_data.scribing_abilities[*index].scribing, id);
+            // log::trace!("Setting {} to scribing {:?} for {}", player_name, custom_log_data.scribing_abilities[*index].scribing, id);
             *id = BEGIN_SCRIBING_ABILITIES + *index as u32;
         } else if custom_log_data.scribing_map.contains_key(id) {
             if let Some(index) = custom_log_data.scribing_map.get(id) {

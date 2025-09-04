@@ -287,7 +287,7 @@ pub fn pancake_style() -> Style {
 pub fn custom_user_style(username: &str) -> Style {
     match username {
         "Angel.xo" | "Watermelón" => angel_style().clone(),
-        "Pancake" | "XenoNox" | "JakeX1V" | "Scarece" | "Coeus-Metis" | "brainsnorkel" => pancake_style().clone(), // contributors
+        "Pancake" | "XenoNox" | "JakeX1V" | "Scarece" | "Coeus-Metis" | "brainsnorkel" | "JacobWasTake'n" | "Morning_Skooma" => pancake_style().clone(), // contributors, donators, those who have helped.
         _ => Style::new(css!(r#""#)).expect("Failed to create empty style"),
     }
 }

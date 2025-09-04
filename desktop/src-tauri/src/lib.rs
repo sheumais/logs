@@ -630,16 +630,17 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
 
     let last_idx = pairs.len().saturating_sub(1);
     log::info!("Uploading segments on main thread ... ");
-    for (i, ((seg, _), (start, end))) in pairs.iter().zip(timestamps.iter()).enumerate() {
+    for ((seg, _), (start, end)) in pairs.iter().zip(timestamps.iter()) {
         if state.upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
             upload_master_table( 
                 &client,
                 &format!("{base}/set-report-master-table/{code}"),
                 last_idx.try_into().unwrap(),
-                &tmp_dir.join(format!("report_segment_{}.zip", segment_id)).clone(),
+                &tmp_dir.join(format!("master_table.zip")).clone(),
             ).await?;
+            log::info!("Uploading master table ... ");
             return Err("Upload cancelled".to_string());
-        } 
+        }
         segment_id = upload_segment_and_get_next_id(
             &client,
             &format!("{base}/add-report-segment/{code}"),
@@ -648,17 +649,16 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
                 *start, 
                 *end,
         ).await?;
-        if i == last_idx {
-            upload_master_table( 
-            &client,
-            &format!("{base}/set-report-master-table/{code}"),
-            segment_id,
-            &tmp_dir.join(format!("master_table_{}.zip", segment_id)).clone(),
-            ).await?;         
-        }
         uploaded_segments += 1;
         let _ = window.emit("upload_progress", format!("Uploading: {}%", ((uploaded_segments as f64 / total_segments as f64) * 100.0).round() as u8)); 
     }
+    log::info!("Uploading master table ... ");
+        upload_master_table( 
+        &client,
+        &format!("{base}/set-report-master-table/{code}"),
+        segment_id,
+        &tmp_dir.join(format!("master_table.zip")).clone(),
+    ).await?;  
     let _ = window.emit("upload_progress", format!("Uploading: 100%"));
     log::trace!("POST {base}/terminate-report/{code}");
     client.post(&format!("{base}/terminate-report/{code}"))
@@ -669,9 +669,9 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
 
     end_report(&client, code.clone()).await;
 
-    if let Err(e) = fs::remove_dir_all(&tmp_dir) {
-        log::warn!("Failed to remove temp dir {:?}: {}", tmp_dir, e);
-    }
+    // if let Err(e) = fs::remove_dir_all(&tmp_dir) {
+    //     log::warn!("Failed to remove temp dir {:?}: {}", tmp_dir, e);
+    // }
     
     save_upload_settings(&upload_settings);
 
@@ -954,9 +954,13 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                         }
                     }
 
-                    let is_end_combat = matches!(second, Some("END_COMBAT") | Some("END_LOG"));
+                    let is_end_log = matches!(second, Some("END_LOG"));
+                    let is_end_combat = matches!(second, Some("END_COMBAT"));
                     if is_end_combat {
-                        log::trace!("[live_log_upload] END_COMBAT or END_LOG encountered.");
+                        log::trace!("[live_log_upload] END_COMBAT encountered.");
+                    }
+                    if is_end_log {
+                        log::trace!("[live_log_upload] END_LOG encountered.");
                     }
 
                     for l in handle_line(line.to_string(), &mut custom_state) {
@@ -972,7 +976,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                         let seg_zip =
                             tmp_dir.join(format!("report_segment_{segment_id}.zip"));
                         let tbl_zip =
-                            tmp_dir.join(format!("master_table_{segment_id}.zip"));
+                            tmp_dir.join(format!("master_table.zip"));
 
                         let seg_data = build_report_segment(&elp);
                         write_zip_with_logtxt(&seg_zip, seg_data.as_bytes())

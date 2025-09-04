@@ -110,8 +110,8 @@ impl ESOLogProcessor {
         return self.eso_logs_log.add_unit(unit)
     }
 
-    pub fn map_unit_id_to_monster_id(&mut self, unit_id: u32, unit: &ESOLogsUnit) -> bool {
-        return self.eso_logs_log.map_unit_id_to_monster_id(unit_id, unit)
+    pub fn map_unit_id_to_monster_id(&mut self, unit_id: u32, unit: &ESOLogsUnit) {
+        self.eso_logs_log.map_unit_id_to_monster_id(unit_id, unit)
     }
 
     pub fn add_object(&mut self, object: ESOLogsUnit) -> usize {
@@ -446,12 +446,13 @@ impl ESOLogProcessor {
                 self.eso_logs_log.unit_id_to_units_index.insert(monster.unit_id, index);
                 self.eso_logs_log.shield_values.insert(monster.unit_id, 0);
                 if pet_owner_index.is_some() && monster.reaction == Reaction::NpcAlly {
+                    // println!("{} - New unit {} ({}, {}) with index {} belonging to {}", parts[0], monster.name.trim_matches('"'), monster.monster_id, monster.unit_id, index, self.eso_logs_log.units[pet_owner_index.unwrap()].name);
                     let pet_relationship = ESOLogsPetRelationship {
                         owner_index: pet_owner_index.ok_or_else(|| "Failed to parse owner_index".to_string())?,
-                        pet: ESOLogsPet { pet_type_index: self.unit_index(monster.unit_id).unwrap_or(0) }
+                        pet: ESOLogsPet { pet_type_index: index }
                     };
-                    if !self.eso_logs_log.pets.iter().any(|rel| rel.owner_index == pet_relationship.owner_index && rel.pet.pet_type_index == pet_relationship.pet.pet_type_index) {
-                        log::trace!("Inserting new pet relationship: {}", pet_relationship);
+                    if !self.eso_logs_log.pets.iter().any(|rel| rel.pet.pet_type_index == pet_relationship.pet.pet_type_index) {
+                        // log::trace!("{}, Pet relationship: {} for unit: {} ({}), owner: {}, due to unit id {}", parts[0], pet_relationship, monster.name.trim_matches('"'), monster.monster_id, self.eso_logs_log.units[pet_relationship.owner_index].name, monster.unit_id);
                         self.eso_logs_log.pets.push(pet_relationship);
                     }
                 }
@@ -949,6 +950,26 @@ impl ESOLogProcessor {
                 }
             }
         };
+
+        // let debug_pattern = [
+        //     "6219258", "COMBAT_EVENT", "DAMAGE", "DISEASE", "1", "28120", "0", "3276875", "117715", "440", "6991/6991", "0/0", "0/0", "0/0", "0/0", "0", "0.3267", "0.6231", "0.9248", "422", "156850/287485", "0/0", "0/0", "0/0", "0/0", "0", "0.3250", "0.6201", "1.9384"
+        // ].iter().map(|s| s.to_string()).collect::<Vec<_>>();
+
+        // if parts == debug_pattern {
+        //     println!("--- DEBUG COMBAT_EVENT PRINT_ALL ---");
+        //     println!("parts: {:?}", parts);
+        //     println!("source: {:?}", source);
+        //     println!("target: {:?}", target);
+        //     println!("ability_id: {:?}", ability_id);
+        //     println!("buff_event: {:?}", buff_event);
+        //     println!("unique_index: {:?}", unique_index);
+        //     println!("ev: {:?}", ev);
+        //     println!("cast_id: {:?}", cast_id);
+        //     println!("index_option: {:?}", index_option);
+        //     // println!("eso_logs_log.units: {:?}", self.eso_logs_log.units);
+        //     println!("eso_logs_log.pets: {:?}", self.eso_logs_log.pets);
+        // }
+
         Ok(())
     }
 
@@ -1411,7 +1432,8 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath
             }
         }
 
-        let is_end_combat = matches!(second, Some("END_COMBAT") | Some("END_LOG"));
+        // let is_end_log = matches!(second, Some("END_LOG"));
+        let is_end_combat = matches!(second, Some("END_COMBAT"));
         for l in handle_line(line, &mut custom_state) {
             elp.handle_line(l.to_string());
         }
@@ -1451,7 +1473,7 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath
 
     let tbl_zip = output_dir
         .as_ref()
-        .join(format!("master_table_{fight_index}.zip"));
+        .join(format!("master_table.zip"));
     let tbl_data = build_master_table(&mut elp);
     write_zip_with_logtxt(tbl_zip, tbl_data.as_bytes())?;
 

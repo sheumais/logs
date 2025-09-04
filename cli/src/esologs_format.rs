@@ -68,7 +68,7 @@ impl ESOLogsLog {
         let mut id = unit.unit_id;
         if let Some(pd) = &unit.player_data {
             let char_id = pd.character_id;
-            if char_id != 0 { // non-anonymous player
+            if char_id != 0 {
                 if let Some(existing_index) = self.units.iter().position(|u| {
                     u.player_data.as_ref().map(|p| p.character_id) == Some(char_id)
                 }) {
@@ -77,7 +77,6 @@ impl ESOLogsLog {
                     }
                     return existing_index;
                 }
-
                 let char_id_str = char_id.to_string();
                 let first_9 = &char_id_str[..char_id_str.len().min(9)];
                 id = first_9.parse::<u32>().unwrap_or(char_id as u32);
@@ -85,14 +84,11 @@ impl ESOLogsLog {
         }
 
         let owner_id = unit.owner_id;
-        let session_id = self.unit_id_to_session_id.get(&owner_id).unwrap_or(&0);
-        let raw_key = (id, self.session_id_to_units_index.get(session_id).unwrap_or(&0usize));
-        let key = (raw_key.0, *raw_key.1);
+        let session_id = self.unit_id_to_session_id.get(&owner_id).unwrap_or(&u32::MAX);
+
+        let key = (id, *self.session_id_to_units_index.get(session_id).unwrap_or(&usize::MAX));
 
         if let Some(existing_index) = self.owner_id_pairs_index.get(&key) {
-            if let Some(original_unit) = self.units.get_mut(*existing_index) {
-                original_unit.unit_type = unit.unit_type;
-            }
             if *existing_index < self.units.len() {
                 return *existing_index;
             }
@@ -106,13 +102,9 @@ impl ESOLogsLog {
         index
     }
 
-    pub fn map_unit_id_to_monster_id(&mut self, unit_id: u32, unit: &ESOLogsUnit) -> bool {
+    pub fn map_unit_id_to_monster_id(&mut self, unit_id: u32, unit: &ESOLogsUnit) {
         let session_id = unit.unit_id;
-        if self.unit_id_to_session_id.contains_key(&unit_id) {
-            return false;
-        }
         self.unit_id_to_session_id.insert(unit_id, session_id);
-        true
     }
 
     pub fn add_object(&mut self, object: ESOLogsUnit) -> usize {
@@ -204,9 +196,9 @@ impl ESOLogsLog {
         if let Some(is_player) = self.players.get(&unit_id) {
             if *is_player {
                 // log::trace!("Found player in index_in_session: {}, {}", unit_id, session_id);
-                if let Some(index) = self.unit_index_in_session.get(&unit_id) {
-                    log::trace!("Player index would be: {}", index);
-                }
+                // if let Some(index) = self.unit_index_in_session.get(&unit_id) {
+                    // log::trace!("Player index would be: {}", index);
+                // }
                 return Some(0)
             }
         }

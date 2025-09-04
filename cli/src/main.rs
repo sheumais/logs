@@ -43,19 +43,19 @@ fn main() {
                 log::error!("Error splitting log file: {}", e);
             }
 
-            if let Ok(file) = File::create("C:/Users/H/Downloads/esolog_output.txt") {
+            if let Ok(file) = File::create("C:/Users/H/Downloads/master_table.txt") {
                 let mut writer = BufWriter::new(file);
                 let master_table = build_master_table(&mut eso_log_processor);
                 if let Err(e) = write!(writer, "{master_table}") {
                     log::error!("Error writing master_table: {}", e);
                 }
             } else {
-                log::error!("Error creating output file: esolog_output.txt");
+                log::error!("Error creating output file: master_table.txt");
                 return;
             }
 
             log::info!("master table written");
-            if let Ok(file) = File::create("C:/Users/H/Downloads/esolog_output2.txt") {
+            if let Ok(file) = File::create("C:/Users/H/Downloads/report_segments.txt") {
                 let mut writer = BufWriter::new(file);
 
                 for line in &eso_log_processor.eso_logs_log.events {
@@ -69,7 +69,7 @@ fn main() {
                     log::warn!("Error flushing writer: {}", e);
                 }
             } else {
-                log::error!("Error creating output file: esolog_output2.txt");
+                log::error!("Error creating output file: report_segments.txt");
                 return;
             }
         }
