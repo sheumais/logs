@@ -1561,6 +1561,7 @@ pub fn build_master_table(elp: &mut ESOLogProcessor) -> String {
             | 103966 // concentrated barrier
             | 160827 // selene
             | 133494 // aegis caller
+            | 220863 // sliver assault
         ) {
             buff.caused_by_id = 0;
         }
