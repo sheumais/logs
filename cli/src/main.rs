@@ -194,6 +194,12 @@ fn main() {
             let sql = format!("ability.id IN ({})", id_list);
             log::info!("{}", sql);
         }
+        "parentzones" => {
+            parser::zone::print_parent_zones();
+        }
+        "dungeons" => {
+            parser::zone::print_dungeon_zones();
+        }
         _ => {}
     }
 }

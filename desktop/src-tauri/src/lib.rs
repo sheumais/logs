@@ -669,9 +669,9 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
 
     end_report(&client, code.clone()).await;
 
-    // if let Err(e) = fs::remove_dir_all(&tmp_dir) {
-    //     log::warn!("Failed to remove temp dir {:?}: {}", tmp_dir, e);
-    // }
+    if let Err(e) = fs::remove_dir_all(&tmp_dir) {
+        log::warn!("Failed to remove temp dir {:?}: {}", tmp_dir, e);
+    }
     
     save_upload_settings(&upload_settings);
 
@@ -1102,6 +1102,9 @@ pub fn run() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 update(handle).await.unwrap();
+            });
+            thread::spawn(move || {
+                cli::rich_presence::rich_presence_thread();
             });
             Ok(())
         })

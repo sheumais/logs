@@ -80,6 +80,7 @@ pub struct ESOLogProcessor {
     last_interrupt: Option<u32>, // unit_id of last interrupted unit
     base_timestamp: Option<u64>,
     most_recent_begin_log_timestamp: Option<u64>,
+    zone: Option<u16>,
 }
 
 impl ESOLogProcessor {
@@ -95,6 +96,7 @@ impl ESOLogProcessor {
             last_interrupt: None,
             base_timestamp: None,
             most_recent_begin_log_timestamp: None,
+            zone: None,
         }
     }
 
@@ -1174,14 +1176,15 @@ impl ESOLogProcessor {
             zone_name,
             zone_difficulty: difficulty_int,
         }));
+        self.zone = Some(zone_id);
         Ok(())
     }
 
     fn handle_trial_end(&mut self, parts: &[String]) -> Result<(), String> {
-        let id = parts[3].parse::<u32>().unwrap_or(0);
-        let duration = parts[4].parse::<u64>().unwrap_or(0);
-        let success = parse::is_true(&parts[5]);
-        let final_score = parts[6].parse::<u32>().unwrap_or(0);
+        let id = parts[2].parse::<u32>().unwrap_or(0);
+        let duration = parts[3].parse::<u64>().unwrap_or(0);
+        let success = parse::is_true(&parts[4]);
+        let final_score = parts[5].parse::<u32>().unwrap_or(0);
         let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {}", e))?);
         self.add_log_event(ESOLogsEvent::EndTrial(
             ESOLogsEndTrial {
