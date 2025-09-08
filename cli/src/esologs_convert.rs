@@ -80,6 +80,7 @@ pub struct ESOLogProcessor {
     last_interrupt: Option<u32>, // unit_id of last interrupted unit
     base_timestamp: Option<u64>,
     most_recent_begin_log_timestamp: Option<u64>,
+    zone: Option<u16>,
 }
 
 impl ESOLogProcessor {
@@ -95,6 +96,7 @@ impl ESOLogProcessor {
             last_interrupt: None,
             base_timestamp: None,
             most_recent_begin_log_timestamp: None,
+            zone: None,
         }
     }
 
@@ -549,8 +551,8 @@ impl ESOLogProcessor {
         } else {
             parse::unit_state(parts, 19)
         };
-        let ability_id = parts[8].parse().map_err(|e| format!("Failed to parse ability_id: {}", e))?;
-        if ability_id == 0 {return Ok(())} // usually just soul_gem_resurrection_accepted, nothing to worry about
+        let mut ability_id = parts[8].parse().map_err(|e| format!("Failed to parse ability_id: {}", e))?;
+        if ability_id == 0 {ability_id = 26770}
         let mut buff_event= ESOLogsBuffEvent {
             unique_index: 0,
             source_unit_index: self.unit_index(source.unit_id).ok_or_else(|| format!("source_unit_index {} is out of bounds", source.unit_id))?,
@@ -932,6 +934,30 @@ impl ESOLogProcessor {
             EventResult::Interrupt => {
                 self.last_interrupt = Some(target.unit_id);
             }
+            EventResult::SoulGemResurrectionAccepted => {
+                self.add_log_event(ESOLogsEvent::CastLine(
+                    ESOLogsCastLine {
+                        timestamp: ev.time,
+                        line_type: ESOLogsLineType::Resurrect,
+                        buff_event: buff_event,
+                        unit_instance_id: (0, 0), // can only ever resurrect a player or companion, who should always have instance id of 0
+                        cast: ESOLogsCastBase {
+                            source_allegiance,
+                            target_allegiance,
+                            cast_id_origin: 0,
+                            source_unit_state: ESOLogsUnitState {
+                                unit_state: source,
+                                champion_points: self.get_cp_for_unit(source.unit_id),
+                            },
+                            target_unit_state: ESOLogsUnitState {
+                                unit_state: target,
+                                champion_points: self.get_cp_for_unit(target.unit_id),
+                            },
+                        },
+                        cast_information: None,
+                    }
+                ));
+            }
             _ => {}
         };
         if ev.result != EventResult::DamageShielded {
@@ -1174,14 +1200,15 @@ impl ESOLogProcessor {
             zone_name,
             zone_difficulty: difficulty_int,
         }));
+        self.zone = Some(zone_id);
         Ok(())
     }
 
     fn handle_trial_end(&mut self, parts: &[String]) -> Result<(), String> {
-        let id = parts[3].parse::<u32>().unwrap_or(0);
-        let duration = parts[4].parse::<u64>().unwrap_or(0);
-        let success = parse::is_true(&parts[5]);
-        let final_score = parts[6].parse::<u32>().unwrap_or(0);
+        let id = parts[2].parse::<u32>().unwrap_or(0);
+        let duration = parts[3].parse::<u64>().unwrap_or(0);
+        let success = parse::is_true(&parts[4]);
+        let final_score = parts[5].parse::<u32>().unwrap_or(0);
         let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {}", e))?);
         self.add_log_event(ESOLogsEvent::EndTrial(
             ESOLogsEndTrial {
@@ -1432,8 +1459,7 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath
             }
         }
 
-        // let is_end_log = matches!(second, Some("END_LOG"));
-        let is_end_combat = matches!(second, Some("END_COMBAT"));
+        let is_end_combat = matches!(second, Some("END_COMBAT") | Some("END_LOG"));
         for l in handle_line(line, &mut custom_state) {
             elp.handle_line(l.to_string());
         }

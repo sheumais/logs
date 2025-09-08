@@ -1,4 +1,5 @@
-use cli::{esologs_convert::{build_master_table, build_report_segment, event_timestamp, split_and_zip_log_by_fight, write_zip_with_logtxt, ESOLogProcessor}, esologs_format::{EncounterReportCode, LoginResponse, UploadSettings, ESO_LOGS_COM_VERSION, ESO_LOGS_PARSER_VERSION, LINE_COUNT_FOR_PROGRESS}, log_edit::{handle_line, CustomLogData}};
+use cli::{esologs_convert::{build_master_table, build_report_segment, event_timestamp, split_and_zip_log_by_fight, write_zip_with_logtxt, ESOLogProcessor}, esologs_format::{ESO_LOGS_COM_VERSION, ESO_LOGS_PARSER_VERSION, LINE_COUNT_FOR_PROGRESS}, log_edit::{handle_line, CustomLogData}};
+use esologtool_ui::{EncounterReportCode, LoginResponse, UploadSettings};
 use reqwest::{multipart::{Form, Part}, Client};
 use serde_json::json;
 use state::AppState;
@@ -305,7 +306,11 @@ fn pick_files_internal(
             "Elder Scrolls Online/live/logs/Encounter.log",
             BaseDirectory::Document,
         )
-        .unwrap();
+        .or_else(|_| window.app_handle().path().resolve(
+            "",
+            BaseDirectory::Home,
+        ))
+        .map_err(|e| format!("Failed to resolve default path: {}", e))?;
     let default_dir = default_path
         .parent()
         .unwrap_or_else(|| default_path.as_path());
@@ -669,9 +674,9 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
 
     end_report(&client, code.clone()).await;
 
-    // if let Err(e) = fs::remove_dir_all(&tmp_dir) {
-    //     log::warn!("Failed to remove temp dir {:?}: {}", tmp_dir, e);
-    // }
+    if let Err(e) = fs::remove_dir_all(&tmp_dir) {
+        log::warn!("Failed to remove temp dir {:?}: {}", tmp_dir, e);
+    }
     
     save_upload_settings(&upload_settings);
 
@@ -1090,7 +1095,7 @@ pub fn run() {
         }, LevelFilter::Info)
     .init();
     match result {
-        Ok(_) => log::info!("Logging initialised"),
+        Ok(_) => log::info!("Logging initialised..."),
         Err(e) => println!("Error initialising logging: {}", e),
     }
     tauri::Builder::default()
@@ -1102,6 +1107,9 @@ pub fn run() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 update(handle).await.unwrap();
+            });
+            thread::spawn(move || {
+                cli::rich_presence::rich_presence_thread();
             });
             Ok(())
         })
