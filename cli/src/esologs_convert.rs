@@ -1459,8 +1459,7 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath
             }
         }
 
-        // let is_end_log = matches!(second, Some("END_LOG"));
-        let is_end_combat = matches!(second, Some("END_COMBAT"));
+        let is_end_combat = matches!(second, Some("END_COMBAT") | Some("END_LOG"));
         for l in handle_line(line, &mut custom_state) {
             elp.handle_line(l.to_string());
         }
