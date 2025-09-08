@@ -362,7 +362,7 @@
 601,572,Wayrest,
 628,20,Doomcrag,
 632,888,Skyreach Hold,
-635,888,Dragonstar Arena,
+635,888,Dragonstar Arena,X
 636,888,Hel Ra Citadel,X
 637,57,Quarantine Serk Catacombs,
 638,888,Aetherian Archive,X
@@ -373,7 +373,7 @@
 643,584,Imperial Sewers,
 649,584,The Dragonfire Cathedral,
 676,816,Shark's Teeth Grotto,
-677,684,Maelstrom Arena,
+677,684,Maelstrom Arena,X
 678,584,Imperial City Prison,X
 681,108,City of Ash II,X
 684,684,Wrothgar,
@@ -675,7 +675,7 @@
 1079,726,Vakka-Bok Xanmeer,
 1080,101,Frostvault,X
 1081,823,Depths of Malatar,X
-1082,726,Blackrose Prison,
+1082,726,Blackrose Prison,X
 1083,726,Deep-Root,
 1085,1086,Halls of Colossus,
 1086,1086,Northern Elsweyr,
@@ -800,7 +800,7 @@
 1224,1208,Nighthollow Keep,
 1225,1207,Nchuand-Zel,
 1226,1207,Reachwind Depths,
-1227,1207,Vateshran Hollows,
+1227,1207,Vateshran Hollows,X
 1228,823,Black Drake Villa,X
 1229,57,The Cauldron,X
 1233,1160,Antiquarian's Alpine Gallery,
@@ -833,12 +833,12 @@
 1260,1261,The Silent Halls,
 1261,1261,Blackwood,
 1262,19,Festival Arena,
-1263,1261,Rockgrove,
+1263,1261,Rockgrove,X
 1264,1207,Stone Eagle Aerie,
 1265,1160,Shalidor's Shrouded Realm,
 1266,1261,Xal Irasotl,
 1267,3,Red Petal Bastion,X
-1268,1261,The Dread Cellar,
+1268,1261,The Dread Cellar,X
 1270,849,Kushalit Sanctuary,
 1271,823,Varlaisvea Ayleid Ruins,
 1272,1261,Atoll of Immolation,
@@ -971,7 +971,7 @@
 1433,1414,Journey's End Lodgings,
 1434,1414,Emissary's Enclave,
 1435,1383,The Fair Winds,
-1436,1413,Infinite Archive,
+1436,1413,Infinite Archive,X
 1437,981,Shadow Queen's Labyrinth,
 1438,104,Sword-Singer's Redoubt,
 1439,849,Shrine of Inevitable Secrets,
@@ -1052,6 +1052,8 @@
 1546,1282,Shattered Mirror Isle,
 1547,1443,Castle Skingrad,
 1548,1502,Ossein Cage,X
+1551,1502,Naj Caldeesh,X
+1552,1502,Black Gem Foundry,X
 1554,1261,Theater of the Ancestors,
 1555,1502,Bismuth Steam Baths,
 1556,1502,The Sleepy Sloth,
