@@ -1,6 +1,6 @@
 [package]
 name = "esologtool"
-version = "0.3.8"
+version = "0.3.9"
 edition = "2021"
 
 [lib]
@@ -18,6 +18,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 parser = { path = "../../parser" }
 cli = { path = "../../cli" }
+esologtool-ui = { path = "../../desktop" }
 reqwest = { version = "0.12.21", default-features = false, features = ["rustls-tls", "json", "cookies", "multipart"] }
 cookie_store = { version = "0.21.1", features = ["serde"] }
 reqwest_cookie_store = "0.8.2"

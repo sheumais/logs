@@ -551,8 +551,8 @@ impl ESOLogProcessor {
         } else {
             parse::unit_state(parts, 19)
         };
-        let ability_id = parts[8].parse().map_err(|e| format!("Failed to parse ability_id: {}", e))?;
-        if ability_id == 0 {return Ok(())} // usually just soul_gem_resurrection_accepted, nothing to worry about
+        let mut ability_id = parts[8].parse().map_err(|e| format!("Failed to parse ability_id: {}", e))?;
+        if ability_id == 0 {ability_id = 26770}
         let mut buff_event= ESOLogsBuffEvent {
             unique_index: 0,
             source_unit_index: self.unit_index(source.unit_id).ok_or_else(|| format!("source_unit_index {} is out of bounds", source.unit_id))?,
@@ -933,6 +933,30 @@ impl ESOLogProcessor {
             }
             EventResult::Interrupt => {
                 self.last_interrupt = Some(target.unit_id);
+            }
+            EventResult::SoulGemResurrectionAccepted => {
+                self.add_log_event(ESOLogsEvent::CastLine(
+                    ESOLogsCastLine {
+                        timestamp: ev.time,
+                        line_type: ESOLogsLineType::Resurrect,
+                        buff_event: buff_event,
+                        unit_instance_id: (0, 0), // can only ever resurrect a player or companion, who should always have instance id of 0
+                        cast: ESOLogsCastBase {
+                            source_allegiance,
+                            target_allegiance,
+                            cast_id_origin: 0,
+                            source_unit_state: ESOLogsUnitState {
+                                unit_state: source,
+                                champion_points: self.get_cp_for_unit(source.unit_id),
+                            },
+                            target_unit_state: ESOLogsUnitState {
+                                unit_state: target,
+                                champion_points: self.get_cp_for_unit(target.unit_id),
+                            },
+                        },
+                        cast_information: None,
+                    }
+                ));
             }
             _ => {}
         };
