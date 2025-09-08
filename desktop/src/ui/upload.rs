@@ -1,6 +1,7 @@
 use std::ops::Deref;
 use std::rc::Rc;
 
+use esologtool_common::{EncounterReportCode, UploadSettings};
 use futures::StreamExt;
 use tauri_sys::core::{invoke, invoke_result};
 use tauri_sys::event;
@@ -13,7 +14,6 @@ use crate::app::{ESOLogUploadSettings, LoginContext};
 use crate::routes::Route;
 use crate::ui::icon_button::{BackArrow, IconButton};
 use crate::ui::style::*;
-use crate::{EncounterReportCode, UploadSettings};
 
 #[derive(PartialEq)]
 pub enum UploadState {

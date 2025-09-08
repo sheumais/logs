@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use esologtool_common::{LoginResponse, UploadSettings};
 use yew::prelude::*;
 use yew_router::prelude::*;
 use crate::routes::Route;
@@ -11,7 +12,6 @@ use crate::ui::modify::ModifyScreen;
 use crate::ui::split::SplitCombineScreen;
 use crate::ui::terms::TermsComponent;
 use crate::ui::upload::UploadScreen;
-use crate::{LoginResponse, UploadSettings};
 
 pub type LoginContext = UseStateHandle<Option<Rc<LoginResponse>>>;
 pub type ESOLogUploadSettings = UseStateHandle<Option<Rc<UploadSettings>>>;

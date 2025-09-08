@@ -1,5 +1,5 @@
 use cli::{esologs_convert::{build_master_table, build_report_segment, event_timestamp, split_and_zip_log_by_fight, write_zip_with_logtxt, ESOLogProcessor}, esologs_format::{ESO_LOGS_COM_VERSION, ESO_LOGS_PARSER_VERSION, LINE_COUNT_FOR_PROGRESS}, log_edit::{handle_line, CustomLogData}};
-use esologtool_ui::{EncounterReportCode, LoginResponse, UploadSettings};
+use esologtool_common::{EncounterReportCode, LoginResponse, UploadSettings};
 use reqwest::{multipart::{Form, Part}, Client};
 use serde_json::json;
 use state::AppState;

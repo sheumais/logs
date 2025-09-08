@@ -26,6 +26,7 @@ This application is designed to help you manage and process your Elder Scrolls O
 - Touch of Z'en debuff stacks
 - Bahsei’s taint debuff stacks
 - Better icon support, e.g. wall of elements
+- Resurrect casts in the cast list show only taken resurrects
 
 You can apply these fixes to the log file and then upload it through the official uploader if you prefer.
 

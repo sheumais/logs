@@ -1,11 +1,12 @@
 use std::rc::Rc;
+use esologtool_common::LoginResponse;
 use stylist::{css, Style};
 use tauri_sys::core::{invoke, invoke_result};
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
 use yew_router::hooks::use_navigator;
 use yew_icons::{Icon, IconId};
-use crate::{app::LoginContext, routes::Route, ui::{icon_button::{BackArrow, IconButton}, style::*}, LoginResponse};
+use crate::{app::LoginContext, routes::Route, ui::{icon_button::{BackArrow, IconButton}, style::*}};
 
 #[function_component(LoginBox)]
 pub fn login_component() -> Html {
