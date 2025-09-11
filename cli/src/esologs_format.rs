@@ -384,6 +384,8 @@ pub enum ESOLogsLineType {
     BuffGainedAlly = 5,
     BuffStacksUpdatedAlly = 6,
     BuffFadedAlly = 7,
+    StacksUpdatedSelf = 8,
+    ShieldEvent = 9, // ??
     BuffGainedEnemy = 10,
     BuffStacksUpdatedEnemy = 11,
     BuffFadedEnemy = 12,

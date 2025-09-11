@@ -19,17 +19,17 @@ mod state;
 fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), String> {
     let paths_guard = state.log_files.read().unwrap();
     let file_paths = paths_guard.as_ref().ok_or("No file paths set")?;
-    let file_path = file_paths.get(0).ok_or("No file path in vector")?;
+    let file_path = file_paths.first().ok_or("No file path in vector")?;
     let path_ref = file_path.as_path().ok_or("Invalid file path")?;
-    let file = File::open(path_ref).map_err(|e| format!("Failed to open file: {}", e))?;
+    let file = File::open(path_ref).map_err(|e| format!("Failed to open file: {e}"))?;
     let reader = BufReader::new(&file);
     let total_lines = reader.lines().count();
 
     let parent = path_ref.parent().unwrap_or_else(|| Path::new("."));
     let orig_file_name = path_ref.file_stem().and_then(|s| s.to_str()).unwrap_or("Encounter");
-    let new_file_name = format!("{}-MODIFIED.log", orig_file_name);
+    let new_file_name = format!("{orig_file_name}-MODIFIED.log");
     let new_path = parent.join(new_file_name);
-    let file = File::open(path_ref).map_err(|e| format!("Failed to reopen file: {}", e))?;
+    let file = File::open(path_ref).map_err(|e| format!("Failed to reopen file: {e}"))?;
     let reader = BufReader::new(file);
 
     let file = OpenOptions::new()
@@ -37,7 +37,7 @@ fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), Str
         .create(true)
         .truncate(true)
         .open(&new_path)
-        .map_err(|e| format!("Failed to create output file: {}", e))?;
+        .map_err(|e| format!("Failed to create output file: {e}"))?;
     let mut writer = BufWriter::new(file);
     let mut custom_log_data = CustomLogData::new();
 
@@ -46,7 +46,7 @@ fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), Str
         let line = match line_result {
             Ok(l) => l,
             Err(e) => {
-                log::warn!("Error reading line: {}", e);
+                log::warn!("Error reading line: {e}");
                 continue;
             }
         };
@@ -60,7 +60,7 @@ fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), Str
             let progress = (processed * 100 / total_lines).min(100);
             window
                 .emit("log_modify_progress", progress)
-                .map_err(|e| format!("Failed to emit progress: {}", e))?;
+                .map_err(|e| format!("Failed to emit progress: {e}"))?;
         }
     }
 
@@ -71,26 +71,26 @@ fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), Str
 fn split_encounter_file_into_log_files(window: Window, state: State<'_, AppState>) -> Result<(), String> {
     let paths_guard = state.log_files.read().map_err(|e| e.to_string())?;
     let file_paths = paths_guard.as_ref().ok_or("No file paths set")?;
-    let file_path = file_paths.get(0).ok_or("No file path in vector")?;
+    let file_path = file_paths.first().ok_or("No file path in vector")?;
     let path_ref = file_path.as_path().ok_or("Invalid file path")?;
-    let file = File::open(path_ref).map_err(|e| format!("Failed to open file: {}", e))?;
+    let file = File::open(path_ref).map_err(|e| format!("Failed to open file: {e}"))?;
     let reader = BufReader::new(&file);
     let total_lines = reader.lines().count();
-    let file = File::open(path_ref).map_err(|e| format!("Failed to reopen file: {}", e))?;
+    let file = File::open(path_ref).map_err(|e| format!("Failed to reopen file: {e}"))?;
     let reader = BufReader::new(file);
 
     let mut current_writer: Option<BufWriter<File>> = None;
 
     let mut processed = 0;
     for line_result in reader.lines() {
-        let line = line_result.map_err(|e| format!("Error reading line: {}", e))?;
+        let line = line_result.map_err(|e| format!("Error reading line: {e}"))?;
         let mut parts = line.splitn(4, ',');
         let _ = parts.next();
         let linetype = parts.next();
         let timestamp = parts.next();
 
         if let (Some("BEGIN_LOG"), Some(time)) = (linetype, timestamp) {
-            let out_name = format!("Split-Encounter-{}.log", time);
+            let out_name = format!("Split-Encounter-{time}.log");
             let parent = file_path
                 .as_path()
                 .ok_or("Invalid file path")?
@@ -102,13 +102,13 @@ fn split_encounter_file_into_log_files(window: Window, state: State<'_, AppState
                 .create(true)
                 .truncate(true)
                 .open(&out_path)
-                .map_err(|e| format!("Failed to create output file: {}", e))?;
+                .map_err(|e| format!("Failed to create output file: {e}"))?;
             current_writer = Some(BufWriter::new(file));
         }
 
         if let Some(writer) = current_writer.as_mut() {
             writeln!(writer, "{line}")
-                .map_err(|e| format!("Failed to write to split file: {}", e))?;
+                .map_err(|e| format!("Failed to write to split file: {e}"))?;
         }
 
         processed += 1;
@@ -116,14 +116,14 @@ fn split_encounter_file_into_log_files(window: Window, state: State<'_, AppState
             let progress = (processed * 100 / total_lines).min(100);
             window
                 .emit("log_split_progress", progress)
-                .map_err(|e| format!("Failed to emit progress: {}", e))?;
+                .map_err(|e| format!("Failed to emit progress: {e}"))?;
         }
     }
 
     if let Some(mut writer) = current_writer {
         writer
             .flush()
-            .map_err(|e| format!("Failed to flush writer: {}", e))?;
+            .map_err(|e| format!("Failed to flush writer: {e}"))?;
     }
 
     Ok(())
@@ -137,15 +137,14 @@ fn combine_encounter_log_files(window: Window, state: State<'_, AppState>) -> Re
         return Err("No files provided".into());
     }
 
-    let first_file = File::open(&file_paths[0].as_path().unwrap())
-        .map_err(|e| format!("Failed to open first file: {}", e))?;
+    let first_file = File::open(file_paths[0].as_path().unwrap())
+        .map_err(|e| format!("Failed to open first file: {e}"))?;
     let mut first_reader = BufReader::new(first_file);
     let mut first_line = String::new();
     first_reader
         .read_line(&mut first_line)
-        .map_err(|e| format!("Failed to read first line: {}", e))?;
-    let start_timestamp = first_line
-        .splitn(4, ',')
+        .map_err(|e| format!("Failed to read first line: {e}"))?;
+    let start_timestamp = first_line.split(',')
         .nth(2)
         .ok_or("Malformed BEGIN_LOG line in first file")?
         .trim();
@@ -156,21 +155,19 @@ fn combine_encounter_log_files(window: Window, state: State<'_, AppState>) -> Re
         .as_path()
         .ok_or("Invalid file path")?;
     let last_file =
-        File::open(last_path).map_err(|e| format!("Failed to open last file: {}", e))?;
+        File::open(last_path).map_err(|e| format!("Failed to open last file: {e}"))?;
     let mut last_reader = BufReader::new(last_file);
     let mut last_line = String::new();
     last_reader
         .read_line(&mut last_line)
-        .map_err(|e| format!("Failed to read last line: {}", e))?;
-    let end_timestamp = last_line
-        .splitn(4, ',')
+        .map_err(|e| format!("Failed to read last line: {e}"))?;
+    let end_timestamp = last_line.split(',')
         .nth(2)
         .ok_or("Malformed BEGIN_LOG line in last file")?
         .trim();
 
     let out_name = format!(
-        "Combined-Encounter-{}-{}.log",
-        start_timestamp, end_timestamp
+        "Combined-Encounter-{start_timestamp}-{end_timestamp}.log"
     );
     let parent = file_paths[0]
         .as_path()
@@ -178,12 +175,12 @@ fn combine_encounter_log_files(window: Window, state: State<'_, AppState>) -> Re
         .unwrap_or_else(|| Path::new("."));
     let out_path = parent.join(out_name);
     let mut out_file =
-        File::create(&out_path).map_err(|e| format!("Failed to create output file: {}", e))?;
+        File::create(&out_path).map_err(|e| format!("Failed to create output file: {e}"))?;
 
     let mut total_lines = 0;
     for path in file_paths {
         let file = File::open(path.as_path().unwrap())
-            .map_err(|e| format!("Failed to open file for counting: {}", e))?;
+            .map_err(|e| format!("Failed to open file for counting: {e}"))?;
         let reader = BufReader::new(file);
         total_lines += reader.lines().count();
     }
@@ -191,18 +188,18 @@ fn combine_encounter_log_files(window: Window, state: State<'_, AppState>) -> Re
     let mut processed = 0;
     for path in file_paths {
         let file = File::open(path.as_path().unwrap())
-            .map_err(|e| format!("Failed to open file: {}", e))?;
+            .map_err(|e| format!("Failed to open file: {e}"))?;
         let reader = BufReader::new(file);
 
         for line in reader.lines() {
-            let line = line.map_err(|e| format!("Failed to read line: {}", e))?;
-            writeln!(out_file, "{line}").map_err(|e| format!("Failed to write line: {}", e))?;
+            let line = line.map_err(|e| format!("Failed to read line: {e}"))?;
+            writeln!(out_file, "{line}").map_err(|e| format!("Failed to write line: {e}"))?;
             processed += 1;
             if processed % LINE_COUNT_FOR_PROGRESS == 0 || processed == total_lines {
                 let progress = (processed * 100 / total_lines).min(100);
                 window
                     .emit("log_combine_progress", progress)
-                    .map_err(|e| format!("Failed to emit progress: {}", e))?;
+                    .map_err(|e| format!("Failed to emit progress: {e}"))?;
             }
         }
     }
@@ -221,7 +218,7 @@ fn live_log_from_folder(window: Window, app_state: State<'_, AppState>) -> Resul
     let mut output_folder_pathbuf = folder.as_path().unwrap().to_path_buf();
     output_folder_pathbuf.push("LogToolLive");
     std::fs::create_dir_all(&output_folder_pathbuf)
-        .map_err(|e| format!("Failed to create output folder: {}", e))?;
+        .map_err(|e| format!("Failed to create output folder: {e}"))?;
     let output_path = output_folder_pathbuf.join("Encounter.log");
 
     let window = window.clone();
@@ -310,10 +307,10 @@ fn pick_files_internal(
             "",
             BaseDirectory::Home,
         ))
-        .map_err(|e| format!("Failed to resolve default path: {}", e))?;
+        .map_err(|e| format!("Failed to resolve default path: {e}"))?;
     let default_dir = default_path
         .parent()
-        .unwrap_or_else(|| default_path.as_path());
+        .unwrap_or(default_path.as_path());
 
     let dialog = window
         .dialog()
@@ -330,7 +327,7 @@ fn pick_files_internal(
         let log_tool_live = default_dir.join("LogToolLive");
         if log_tool_live.exists() {
             if let Err(e) = std::fs::remove_dir_all(&log_tool_live) {
-                return Err(format!("Failed to delete LogToolLive folder: {}", e));
+                return Err(format!("Failed to delete LogToolLive folder: {e}"));
             }
         }
     }
@@ -386,9 +383,9 @@ fn pick_and_load_folder(window: Window, state: State<'_, AppState>) -> Result<()
 fn delete_log_file(state: State<'_, AppState>) -> Result<(), String> {
     let paths_guard = state.log_files.read().unwrap();
     let file_paths = paths_guard.as_ref().ok_or("No file paths set")?;
-    let file_path = file_paths.get(0).ok_or("No file path in vector")?;
+    let file_path = file_paths.first().ok_or("No file path in vector")?;
     let path_ref = file_path.as_path().ok_or("Invalid file path")?;
-    std::fs::remove_file(path_ref).map_err(|e| format!("Failed to delete file: {}", e))?;
+    std::fs::remove_file(path_ref).map_err(|e| format!("Failed to delete file: {e}"))?;
     Ok(())
 }
 
@@ -417,7 +414,7 @@ fn get_saved_login_response() -> Option<LoginResponse> {
 fn save_upload_settings(resp: &UploadSettings) {
     let path = cookie_file_path().with_file_name("user-settings.json");
     if let Ok(json) = serde_json::to_string(&resp) {
-        log::info!("Saving upload settings {}", json);
+        log::info!("Saving upload settings {json}");
         let _ = fs::write(path, json);
     }
 }
@@ -425,7 +422,7 @@ fn save_upload_settings(resp: &UploadSettings) {
 fn load_upload_settings() -> Option<UploadSettings> {
     let path = cookie_file_path().with_file_name("user-settings.json");
     if let Ok(data) = fs::read_to_string(path) {
-        log::trace!("Returning saved settings {}", data);
+        log::trace!("Returning saved settings {data}");
         serde_json::from_str(&data).ok()
     } else {
         None
@@ -463,7 +460,7 @@ async fn login(state: tauri::State<'_, AppState>, username: String, password: St
         let http = state.http.read().unwrap();
         let store = http.cookie_store.lock().unwrap();
         for cookie in store.iter_any() {
-            log::debug!("{:?}", cookie);
+            log::debug!("{cookie:?}");
         }
     }
 
@@ -484,13 +481,13 @@ fn logout(state: tauri::State<'_, AppState>) -> Result<(), String> {
     let login_response_path = cookie_file_path().with_file_name("login_response.json");
     if let Err(e) = fs::remove_file(login_response_path) {
         if e.kind() != std::io::ErrorKind::NotFound {
-            log::warn!("Failed to remove login_response.json: {}", e);
+            log::warn!("Failed to remove login_response.json: {e}");
         }
     }
     let settings_path = cookie_file_path().with_file_name("user-settings.json");
     if let Err(e) = fs::remove_file(settings_path) {
         if e.kind() != std::io::ErrorKind::NotFound {
-            log::warn!("Failed to remove user-settings.json: {}", e);
+            log::warn!("Failed to remove user-settings.json: {e}");
         }
     }
     Ok(())
@@ -539,11 +536,11 @@ async fn create_report(
     let status = response.status();
     let raw_body = response.text().await.map_err(|e| format!("Failed to read response text: {e}"))?;
 
-    log::trace!("Received response status: {}", status);
-    log::trace!("Raw response body: {}", raw_body);
+    log::trace!("Received response status: {status}");
+    log::trace!("Raw response body: {raw_body}");
 
     if !status.is_success() {
-        return Err(format!("Server returned error status: {} with body: {}", status, raw_body));
+        return Err(format!("Server returned error status: {status} with body: {raw_body}"));
     }
 
     state.http.write().unwrap().save_cookies();
@@ -551,7 +548,7 @@ async fn create_report(
     let report: EncounterReportCode = serde_json::from_str(&raw_body)
         .map_err(|e| format!("Invalid JSON: {e}\nRaw body: {raw_body}"))?;
 
-    log::info!("Parsed report: {:?}", report);
+    log::info!("Parsed report: {report:?}");
 
     let code = report.code.clone();
     *state.esolog_code.write().map_err(|e| e.to_string())? = Some(code.clone());
@@ -568,9 +565,9 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
         lock.clone()
     };
     let log_path = log_path_opt
-        .and_then(|v| v.get(0).cloned())
+        .and_then(|v| v.first().cloned())
         .ok_or("No log file selected")?;
-    log::debug!("Using log file: {:?}", log_path);
+    log::debug!("Using log file: {log_path:?}");
 
     let client = {
         let g = state.http.read().map_err(|e| e.to_string())?;
@@ -579,7 +576,7 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
     log::info!("Spawning split/zip task ...");
     
     let tmp_dir = temp_dir().join("esologtool_temporary");
-    log::trace!("Temp dir: {:?}", tmp_dir);
+    log::trace!("Temp dir: {tmp_dir:?}");
     create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
 
     let tmp_dir_for_spawn = tmp_dir.clone();
@@ -595,7 +592,7 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
             log_path_clone.as_path().ok_or("Invalid log file path")?,
             tmp_dir_for_spawn.as_path(),
             |val| {
-                let _ = window_clone.emit("upload_progress", format!("Processing: {}%", val));
+                let _ = window_clone.emit("upload_progress", format!("Processing: {val}%"));
             },
         )?;
         log::debug!("Finished split_and_zip_log_by_fight");
@@ -612,7 +609,7 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
         Ok(out)
     }).await.map_err(|e| format!("spawn_blocking error: {e}"))??;
 
-    let _ = window.emit("upload_progress", format!("Processing: 100%"));
+    let _ = window.emit("upload_progress", "Processing: 100%".to_string());
 
     if state.upload_cancel_flag.load(std::sync::atomic::Ordering::SeqCst) {
         return Err("Upload cancelled".to_string());
@@ -631,7 +628,7 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
     
     window
         .emit("live_log_code", code.clone())
-        .map_err(|e| format!("Failed to emit uploading log code: {}", e))?;
+        .map_err(|e| format!("Failed to emit uploading log code: {e}"))?;
 
     let last_idx = pairs.len().saturating_sub(1);
     log::info!("Uploading segments on main thread ... ");
@@ -641,7 +638,7 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
                 &client,
                 &format!("{base}/set-report-master-table/{code}"),
                 last_idx.try_into().unwrap(),
-                &tmp_dir.join(format!("master_table.zip")).clone(),
+                &tmp_dir.join("master_table.zip").clone(),
             ).await?;
             log::info!("Uploading master table ... ");
             return Err("Upload cancelled".to_string());
@@ -662,11 +659,11 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
         &client,
         &format!("{base}/set-report-master-table/{code}"),
         segment_id,
-        &tmp_dir.join(format!("master_table.zip")).clone(),
+        &tmp_dir.join("master_table.zip").clone(),
     ).await?;  
-    let _ = window.emit("upload_progress", format!("Uploading: 100%"));
+    let _ = window.emit("upload_progress", "Uploading: 100%".to_string());
     log::trace!("POST {base}/terminate-report/{code}");
-    client.post(&format!("{base}/terminate-report/{code}"))
+    client.post(format!("{base}/terminate-report/{code}"))
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -675,7 +672,7 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
     end_report(&client, code.clone()).await;
 
     if let Err(e) = fs::remove_dir_all(&tmp_dir) {
-        log::warn!("Failed to remove temp dir {:?}: {}", tmp_dir, e);
+        log::warn!("Failed to remove temp dir {tmp_dir:?}: {e}");
     }
     
     save_upload_settings(&upload_settings);
@@ -690,8 +687,8 @@ async fn upload_master_table(
     zip_path: &Path,
 ) -> Result<(), String> {
     log::trace!("→ upload_master_table(): segment_id = {segment_id}");
-    log::trace!("  ZIP path = {:?}", zip_path);
-    log::trace!("  POST {}", url);
+    log::trace!("  ZIP path = {zip_path:?}");
+    log::trace!("  POST {url}");
 
     let bytes = fs::read(zip_path)
         .map_err(|e| format!("Failed to read master_table zip: {e}"))?;
@@ -713,12 +710,12 @@ async fn upload_master_table(
 
     let status = resp.status();
 
-    log::trace!("  status = {}", status);
+    log::trace!("  status = {status}");
 
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
         log::trace!("  body   = {body}");
-        return Err(format!("Master table upload failed: {} - {body}", status));
+        return Err(format!("Master table upload failed: {status} - {body}"));
     }
 
     log::trace!("  ✔ master table upload OK");
@@ -735,7 +732,7 @@ async fn upload_segment_and_get_next_id(
 ) -> Result<u16, String> {
     log::trace!("→ upload_segment_and_get_next_id()");
     log::trace!("  segment_id = {segment_id}");
-    log::trace!("  ZIP path   = {:?}", zip_path);
+    log::trace!("  ZIP path   = {zip_path:?}");
     log::trace!("  POST       = {url}");
 
     let bytes = fs::read(zip_path)
@@ -751,7 +748,7 @@ async fn upload_segment_and_get_next_id(
         "inProgressEventCount": 0,
         "segmentId":            segment_id,
     });
-    log::trace!("{}", params);
+    log::trace!("{params}");
 
     let logfile_part = Part::bytes(bytes)
         .file_name(zip_path.file_name().unwrap().to_string_lossy().to_string())
@@ -774,8 +771,8 @@ async fn upload_segment_and_get_next_id(
     let body   = resp.text().await
         .map_err(|e| format!("Failed to read response text: {e}"))?;
 
-    log::trace!("  status     = {}", status);
-    log::trace!("  raw body   = {}", body);
+    log::trace!("  status     = {status}");
+    log::trace!("  raw body   = {body}");
 
     if !status.is_success() {
         return Err(format!("Segment upload failed: {status} - {body}"));
@@ -795,7 +792,7 @@ async fn end_report(client: &reqwest::Client, code: String) {
     log::debug!("POST https://www.esologs.com/desktop-client/terminate-report");
 
     let _response = client
-        .post(format!("https://www.esologs.com/desktop-client/terminate-report/{}", code))
+        .post(format!("https://www.esologs.com/desktop-client/terminate-report/{code}"))
         .send()
         .await
         .map_err(|e| format!("Request error: {e}"));
@@ -836,7 +833,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
         *log_files_lock = Some(vec![FilePath::from(input_path.clone())]);
     }
 
-    log::trace!("[live_log_upload] Using input path: {:?}", input_path);
+    log::trace!("[live_log_upload] Using input path: {input_path:?}");
 
     let client = {
         let g = app_state.http.read().map_err(|e| e.to_string())?;
@@ -846,17 +843,17 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
     log::trace!("[live_log_upload] Creating report...");
     let report_code = create_report(&app_state, &client, &upload_settings).await?;
     let code: String = report_code.code.clone();
-    log::trace!("[live_log_upload] Report code: {}", code);
+    log::trace!("[live_log_upload] Report code: {code}");
 
     window
         .emit("live_log_code", code.clone())
-        .map_err(|e| format!("Failed to emit live log code: {}", e))?;
+        .map_err(|e| format!("Failed to emit live log code: {e}"))?;
 
     let base = "https://www.esologs.com/desktop-client".to_string();
     let tmp_dir = std::env::temp_dir().join(format!("esologtool_live_{code}"));
     std::fs::create_dir_all(&tmp_dir)
         .map_err(|e| format!("Failed to create temp dir: {e}"))?;
-    log::trace!("[live_log_upload] Temp dir created at {:?}", tmp_dir);
+    log::trace!("[live_log_upload] Temp dir created at {tmp_dir:?}");
 
     let window = window.clone();
     let upload_cancel_flag = app_state.upload_cancel_flag.clone();
@@ -871,8 +868,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                 }
                 Err(e) => {
                     log::warn!(
-                        "[live_log_upload] Failed to open Encounter.log ({}). Retrying...",
-                        e
+                        "[live_log_upload] Failed to open Encounter.log ({e}). Retrying..."
                     );
                     std::thread::sleep(std::time::Duration::from_secs(1));
                     continue;
@@ -904,7 +900,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
             }
             input_file.seek(std::io::SeekFrom::Start(last_begin_log_pos)).expect("seek failed")
         };
-        log::trace!("[live_log_upload] Initial file position: {}", pos);
+        log::trace!("[live_log_upload] Initial file position: {pos}");
 
         let mut elp = ESOLogProcessor::new();
         let mut custom_state = CustomLogData::new();
@@ -926,7 +922,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
             let mut reader = std::io::BufReader::new(&input_file);
             let bytes_read = reader.read_to_end(&mut buffer).expect("read failed");
 
-            log::trace!("[live_log_upload] Read {} bytes at pos {}", bytes_read, pos);
+            log::trace!("[live_log_upload] Read {bytes_read} bytes at pos {pos}");
 
             if bytes_read == 0 {
                 log::trace!("[live_log_upload] No new bytes. Sleeping 5s...");
@@ -951,8 +947,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                         if let Some(third_str) = third {
                             if let Ok(ts) = third_str.parse::<u64>() {
                                 log::trace!(
-                                    "[live_log_upload] BEGIN_LOG timestamp = {}",
-                                    ts
+                                    "[live_log_upload] BEGIN_LOG timestamp = {ts}"
                                 );
                                 if first_timestamp.is_none() {first_timestamp = Some(ts)};
                             }
@@ -972,16 +967,15 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                         elp.handle_line(l.to_string());
                     }
 
-                    if is_end_combat {
+                    if is_end_combat || is_end_log {
                         log::trace!(
-                            "[live_log_upload] Packaging segment {}...",
-                            segment_id
+                            "[live_log_upload] Packaging segment {segment_id}..."
                         );
 
                         let seg_zip =
                             tmp_dir.join(format!("report_segment_{segment_id}.zip"));
                         let tbl_zip =
-                            tmp_dir.join(format!("master_table.zip"));
+                            tmp_dir.join("master_table.zip");
 
                         let seg_data = build_report_segment(&elp);
                         write_zip_with_logtxt(&seg_zip, seg_data.as_bytes())
@@ -1007,8 +1001,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                             }
                         };
                         log::trace!(
-                            "[live_log_upload] Segment {} time range: start={} end={}",
-                            segment_id, start_ts, end_ts
+                            "[live_log_upload] Segment {segment_id} time range: start={start_ts} end={end_ts}"
                         );
 
                         if let Err(e) = upload_master_table(
@@ -1030,8 +1023,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                         ).await {
                             Ok(next) => {
                                 log::trace!(
-                                    "[live_log_upload] Segment {} uploaded. Next = {}",
-                                    segment_id, next
+                                    "[live_log_upload] Segment {segment_id} uploaded. Next = {next}"
                                 );
                                 segment_id = next;
                             }
@@ -1043,18 +1035,18 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
 
                         elp.eso_logs_log.events.clear();
                         custom_state.reset();
-                        let _ = window.emit("upload_progress", format!("Total lines processed: {}", processed));
+                        let _ = window.emit("upload_progress", format!("Total lines processed: {processed}"));
                     }
 
                     processed += 1;
                 }
 
                 if processed > 0 {
-                    log::trace!("[live_log_upload] Processed lines so far: {}", processed);
+                    log::trace!("[live_log_upload] Processed lines so far: {processed}");
                 }
 
                 pos += (last_nl + 1) as u64;
-                log::trace!("[live_log_upload] New file position: {}", pos);
+                log::trace!("[live_log_upload] New file position: {pos}");
             }
 
             std::thread::sleep(std::time::Duration::from_secs(5));
@@ -1063,7 +1055,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
         log::trace!("[live_log_upload] Loop exited. Sending terminate-report...");
 
         let _ = client
-            .post(&format!("{base}/terminate-report/{code}"))
+            .post(format!("{base}/terminate-report/{code}"))
             .send()
             .await;
 
@@ -1089,14 +1081,14 @@ pub fn run() {
             let mut path = cookie_folder_path();
             path.push("logs");
             if let Err(e) = std::fs::create_dir_all(&path) {
-                log::warn!("Failed to create logs folder: {}", e);
+                log::warn!("Failed to create logs folder: {e}");
             }
             &path.clone()
         }, LevelFilter::Info)
     .init();
     match result {
         Ok(_) => log::info!("Logging initialised..."),
-        Err(e) => println!("Error initialising logging: {}", e),
+        Err(e) => println!("Error initialising logging: {e}"),
     }
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())

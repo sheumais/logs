@@ -1148,10 +1148,18 @@ impl ESOLogProcessor {
             if stacks > 1 {
                 if source_allegiance == 32 {source_allegiance = 16}
                 if target_allegiance == 32 {target_allegiance = 16}
+                let line_type = {
+                    if source == target {ESOLogsLineType::StacksUpdatedSelf} else {
+                        if source_allegiance == target_allegiance {ESOLogsLineType::BuffStacksUpdatedAlly} else {
+                            ESOLogsLineType::BuffStacksUpdatedEnemy
+                        }
+                    }
+                    
+                };
                 self.add_log_event(ESOLogsEvent::StackUpdate (
                     ESOLogsBuffStacks {
                         timestamp: self.last_known_timestamp,
-                        line_type: if source_allegiance == target_allegiance {ESOLogsLineType::BuffStacksUpdatedAlly} else {ESOLogsLineType::BuffStacksUpdatedEnemy},
+                        line_type,
                         buff_event: buff_event,
                         unit_instance_id: instance_ids,
                         source_allegiance,

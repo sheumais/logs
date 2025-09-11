@@ -6,7 +6,7 @@ use cookie_store::CookieStore;
 use reqwest_cookie_store::CookieStoreMutex;
 
 pub fn cookie_file_path() -> PathBuf {
-    let mut dir = data_local_dir().unwrap_or_else(|| temp_dir());
+    let mut dir = data_local_dir().unwrap_or_else(temp_dir);
     dir.push("eso-log-tool");
     create_dir_all(&dir).ok();
     dir.push("cookies.json");
@@ -14,7 +14,7 @@ pub fn cookie_file_path() -> PathBuf {
 }
 
 pub fn cookie_folder_path() -> PathBuf {
-    let mut dir = data_local_dir().unwrap_or_else(|| temp_dir());
+    let mut dir = data_local_dir().unwrap_or_else(temp_dir);
     dir.push("eso-log-tool");
     create_dir_all(&dir).ok();
     dir
@@ -31,7 +31,7 @@ fn build_http_client_with_store(store: Arc<CookieStoreMutex>) -> Client {
 
 fn load_cookie_store() -> Arc<CookieStoreMutex> {
     let path = cookie_file_path();
-    log::trace!("Loading cookies from: {:?}", path);
+    log::trace!("Loading cookies from: {path:?}");
     if let Ok(mut file) = File::open(&path) {
         let mut data = String::new();
         if file.read_to_string(&mut data).is_ok() {
@@ -45,7 +45,7 @@ fn load_cookie_store() -> Arc<CookieStoreMutex> {
             log::error!("Failed to read cookie file");
         }
     } else {
-        log::warn!("No cookie file found at {:?}", path);
+        log::warn!("No cookie file found at {path:?}");
     }
     Arc::new(CookieStoreMutex::default())
 }
@@ -54,10 +54,10 @@ fn save_cookie_store(store: &CookieStoreMutex) {
     let path = cookie_file_path();
     if let Ok(store) = store.lock() {
         let count = store.iter_any().count();
-        log::trace!("Saving {} cookies to {:?}", count, path);
+        log::trace!("Saving {count} cookies to {path:?}");
         if let Ok(json) = serde_json::to_string(&*store) {
             if let Err(e) = fs::write(&path, json) {
-                log::error!("Failed to write cookie file: {}", e);
+                log::error!("Failed to write cookie file: {e}");
             }
         } else {
             log::error!("Failed to serialize cookies");
