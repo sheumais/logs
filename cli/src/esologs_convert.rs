@@ -76,7 +76,6 @@ pub struct ESOLogProcessor {
     temporary_damage_buffer: u32,
     pending_death_events: Vec<(u64, ESOLogsEvent)>, // (timestamp, event)
     last_known_timestamp: u64,
-    active_casts: HashMap<u32, usize>, // (unit_id, index of ability)
     last_interrupt: Option<u32>, // unit_id of last interrupted unit
     base_timestamp: Option<u64>,
     most_recent_begin_log_timestamp: Option<u64>,
@@ -92,7 +91,6 @@ impl ESOLogProcessor {
             temporary_damage_buffer: 0,
             pending_death_events: Vec::new(),
             last_known_timestamp: 0,
-            active_casts: HashMap::new(),
             last_interrupt: None,
             base_timestamp: None,
             most_recent_begin_log_timestamp: None,
@@ -104,7 +102,6 @@ impl ESOLogProcessor {
         self.temporary_damage_buffer = 0;
         self.pending_death_events = Vec::new();
         self.last_known_timestamp = 0;
-        self.active_casts = HashMap::new();
         self.last_interrupt = None;
     }
 
@@ -448,14 +445,15 @@ impl ESOLogProcessor {
                 self.eso_logs_log.unit_id_to_units_index.insert(monster.unit_id, index);
                 self.eso_logs_log.shield_values.insert(monster.unit_id, 0);
                 if pet_owner_index.is_some() && monster.reaction == Reaction::NpcAlly {
-                    // println!("{} - New unit {} ({}, {}) with index {} belonging to {}", parts[0], monster.name.trim_matches('"'), monster.monster_id, monster.unit_id, index, self.eso_logs_log.units[pet_owner_index.unwrap()].name);
+                    // log::debug!("{} - New unit {} ({}, {}) with index {} belonging to {}", parts[0], monster.name.trim_matches('"'), monster.monster_id, monster.unit_id, index, self.eso_logs_log.units[pet_owner_index.unwrap()].name);
                     let pet_relationship = ESOLogsPetRelationship {
                         owner_index: pet_owner_index.ok_or_else(|| "Failed to parse owner_index".to_string())?,
                         pet: ESOLogsPet { pet_type_index: index }
                     };
                     if !self.eso_logs_log.pets.iter().any(|rel| rel.pet.pet_type_index == pet_relationship.pet.pet_type_index) {
-                        // log::trace!("{}, Pet relationship: {} for unit: {} ({}), owner: {}, due to unit id {}", parts[0], pet_relationship, monster.name.trim_matches('"'), monster.monster_id, self.eso_logs_log.units[pet_relationship.owner_index].name, monster.unit_id);
+                        // log::debug!("{}, Pet relationship: {} for unit: {} ({}), owner: {}, due to unit id {}", parts[0], pet_relationship, monster.name.trim_matches('"'), monster.monster_id, self.eso_logs_log.units[pet_relationship.owner_index].name, monster.unit_id);
                         self.eso_logs_log.pets.push(pet_relationship);
+                        println!("{:?}", self.eso_logs_log.pets);
                     }
                 }
             }
@@ -551,8 +549,9 @@ impl ESOLogProcessor {
         } else {
             parse::unit_state(parts, 19)
         };
+        let result = event::parse_event_result(&parts[2]).ok_or_else(|| format!("Failed to parse combat event_result"))?;
         let mut ability_id = parts[8].parse().map_err(|e| format!("Failed to parse ability_id: {}", e))?;
-        if ability_id == 0 {ability_id = 26770}
+        if ability_id == 0 && result == EventResult::SoulGemResurrectionAccepted {ability_id = 26770}
         let mut buff_event= ESOLogsBuffEvent {
             unique_index: 0,
             source_unit_index: self.unit_index(source.unit_id).ok_or_else(|| format!("source_unit_index {} is out of bounds", source.unit_id))?,
@@ -564,7 +563,7 @@ impl ESOLogProcessor {
         let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {}", e))?);
         let ev = event::Event {
             time: timestamp,
-            result: event::parse_event_result(&parts[2]).ok_or_else(|| format!("Failed to parse combat event_result"))?,
+            result,
             damage_type: event::parse_damage_type(&parts[3]),
             power_type: parts[4].parse().map_err(|e| format!("Failed to parse power_type: {}", e))?,
             hit_value: parts[5].parse().map_err(|e| format!("Failed to parse hit_value: {}", e))?,
@@ -1014,15 +1013,15 @@ impl ESOLogProcessor {
             buff_index: self.buff_index(ability_id).ok_or_else(|| format!("buff_index {} is out of bounds", ability_id))?,
         };
         let cast_id: u32 = parts[4].parse().map_err(|e| format!("Failed to parse cast_id: {}", e))?;
-        self.eso_logs_log.buffs_hashmap.insert(cast_id, buff_event.buff_index);
         buff_event.unique_index = self.add_buff_event(buff_event);
-        self.eso_logs_log.cast_id_hashmap.insert(cast_id, buff_event.unique_index);
-        if cast_id != 0 {
+        if cast_id != 0 {        
+            self.eso_logs_log.buffs_hashmap.insert(cast_id, buff_event.buff_index);
+            self.eso_logs_log.cast_id_hashmap.insert(cast_id, buff_event.unique_index);
             if let Some(buff) = self.eso_logs_log.buffs.get_mut(buff_event.buff_index) {
                 buff.caused_by_id = ability_id;
             }
         }
-        self.active_casts.insert(source.unit_id, buff_event.buff_index);
+
         let cast_time = parts[2].parse::<u32>().map_err(|e| format!("Failed to parse cast_time: {}", e))?;
         if cast_time > 0 {
             self.eso_logs_log.cast_with_cast_time.insert(ability_id);

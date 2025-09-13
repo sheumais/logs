@@ -74,6 +74,7 @@ impl ESOLogsLog {
                     if let Some(existing_unit) = self.units.get_mut(existing_index) {
                         existing_unit.unit_type = unit.unit_type;
                     }
+                    self.session_id_to_units_index.insert(id, existing_index);
                     return existing_index;
                 }
                 let char_id_str = char_id.to_string();
@@ -84,7 +85,6 @@ impl ESOLogsLog {
 
         let owner_id = unit.owner_id;
         let session_id = self.unit_id_to_session_id.get(&owner_id).unwrap_or(&u32::MAX);
-
         let key = (id, *self.session_id_to_units_index.get(session_id).unwrap_or(&usize::MAX));
 
         if let Some(existing_index) = self.owner_id_pairs_index.get(&key) {
