@@ -342,8 +342,8 @@ impl ESOLogProcessor {
             }
         ));
 
-        self.eso_logs_log.session_units.clear();
-        self.eso_logs_log.unit_index_in_session.clear();
+        self.eso_logs_log.fight_units.clear();
+        self.eso_logs_log.unit_index_during_fight.clear();
 
         Ok(())
     }
@@ -453,7 +453,6 @@ impl ESOLogProcessor {
                     if !self.eso_logs_log.pets.iter().any(|rel| rel.pet.pet_type_index == pet_relationship.pet.pet_type_index) {
                         // log::debug!("{}, Pet relationship: {} for unit: {} ({}), owner: {}, due to unit id {}", parts[0], pet_relationship, monster.name.trim_matches('"'), monster.monster_id, self.eso_logs_log.units[pet_relationship.owner_index].name, monster.unit_id);
                         self.eso_logs_log.pets.push(pet_relationship);
-                        println!("{:?}", self.eso_logs_log.pets);
                     }
                 }
             }

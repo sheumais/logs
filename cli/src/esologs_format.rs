@@ -12,8 +12,8 @@ pub struct ESOLogsLog {
     pub owner_id_pairs_index: HashMap<(u32, usize), usize>,
     pub unit_id_to_session_id: HashMap<u32, u32>,
     pub unit_id_to_units_index: HashMap<u32, usize>,
-    pub session_units: HashMap<u32, Vec<u32>>,
-    pub unit_index_in_session: HashMap<u32, usize>,
+    pub fight_units: HashMap<usize, Vec<u32>>,
+    pub unit_index_during_fight: HashMap<u32, usize>,
     pub objects: HashMap<String, u32>,
     pub players: HashMap<u32, bool>,
     pub bosses: HashMap<u32, bool>,
@@ -43,8 +43,8 @@ impl ESOLogsLog {
         // self.owner_id_pairs_index = HashMap::new();
         self.unit_id_to_session_id = HashMap::new();
         self.unit_id_to_units_index = HashMap::new();
-        self.session_units = HashMap::new();
-        self.unit_index_in_session = HashMap::new();
+        self.fight_units = HashMap::new();
+        self.unit_index_during_fight = HashMap::new();
         self.objects = HashMap::new();
         self.players = HashMap::new();
         self.bosses = HashMap::new();
@@ -194,11 +194,12 @@ impl ESOLogsLog {
     }
 
     pub fn index_in_session(&mut self, unit_id: &u32) -> Option<usize> {
-        let session_id = *self.unit_id_to_session_id.get(&unit_id)?;
+        let unit_index = self.unit_index(unit_id)?;
+        // let session_id = *self.unit_id_to_session_id.get(&unit_id)?;
         if let Some(is_player) = self.players.get(&unit_id) {
             if *is_player {
                 // log::trace!("Found player in index_in_session: {}, {}", unit_id, session_id);
-                // if let Some(index) = self.unit_index_in_session.get(&unit_id) {
+                // if let Some(index) = self.unit_index_during_fight.get(&unit_id) {
                     // log::trace!("Player index would be: {}", index);
                 // }
                 return Some(0)
@@ -207,13 +208,13 @@ impl ESOLogsLog {
         if let Some(is_boss) = self.bosses.get(&unit_id) {
             if *is_boss {return Some(0)}
         }
-        let entry = self.session_units.entry(session_id).or_insert_with(Vec::new);
+        let entry = self.fight_units.entry(unit_index).or_insert_with(Vec::new);
         
-        if let Some(&idx) = self.unit_index_in_session.get(&unit_id) {return Some(idx)}
+        if let Some(&idx) = self.unit_index_during_fight.get(&unit_id) {return Some(idx)}
 
         let new_idx = entry.len();
         entry.push(*unit_id);
-        self.unit_index_in_session.insert(*unit_id, new_idx);
+        self.unit_index_during_fight.insert(*unit_id, new_idx);
         Some(new_idx)
     }
 
