@@ -442,16 +442,17 @@ impl ESOLogProcessor {
                     self.eso_logs_log.bosses.insert(monster.unit_id, true);
                 }
                 let index = self.add_unit(unit);
+                // if monster.name.trim_matches('"').to_lowercase().contains("wamasu") {log::debug!("{:?} has index {index}", monster);}
                 self.eso_logs_log.unit_id_to_units_index.insert(monster.unit_id, index);
                 self.eso_logs_log.shield_values.insert(monster.unit_id, 0);
-                if pet_owner_index.is_some() && monster.reaction == Reaction::NpcAlly {
+                if pet_owner_index.is_some() {
                     // log::debug!("{} - New unit {} ({}, {}) with index {} belonging to {}", parts[0], monster.name.trim_matches('"'), monster.monster_id, monster.unit_id, index, self.eso_logs_log.units[pet_owner_index.unwrap()].name);
                     let pet_relationship = ESOLogsPetRelationship {
                         owner_index: pet_owner_index.ok_or_else(|| "Failed to parse owner_index".to_string())?,
                         pet: ESOLogsPet { pet_type_index: index }
                     };
                     if !self.eso_logs_log.pets.iter().any(|rel| rel.pet.pet_type_index == pet_relationship.pet.pet_type_index) {
-                        // log::debug!("{}, Pet relationship: {} for unit: {} ({}), owner: {}, due to unit id {}", parts[0], pet_relationship, monster.name.trim_matches('"'), monster.monster_id, self.eso_logs_log.units[pet_relationship.owner_index].name, monster.unit_id);
+                        log::debug!("{}, Pet relationship: {} for unit: {} ({}), owner: {}, due to unit id {}", parts[0], pet_relationship, monster.name.trim_matches('"'), monster.monster_id, self.eso_logs_log.units[pet_relationship.owner_index].name, monster.unit_id);
                         self.eso_logs_log.pets.push(pet_relationship);
                     }
                 }
@@ -792,14 +793,14 @@ impl ESOLogProcessor {
                 ));
             }
             EventResult::HotTick | EventResult::CriticalHeal | EventResult::Heal | EventResult::HotTickCritical => {
-                if buff_event.source_unit_index < self.eso_logs_log.units.len() {
-                    let unit = &mut self.eso_logs_log.units[buff_event.source_unit_index];
-                    if icon != "nil" && icon != "death_recap_melee_basic" {
-                        unit.icon = Some(icon.clone());
-                    } else if unit.icon.is_none() {
-                        unit.icon = Some("death_recap_melee_basic".to_string());
-                    }
-                }
+                // if buff_event.source_unit_index < self.eso_logs_log.units.len() {
+                //     let unit = &mut self.eso_logs_log.units[buff_event.source_unit_index];
+                //     if icon != "nil" && icon != "death_recap_melee_basic" {
+                //         unit.icon = Some(icon.clone());
+                //     } else if unit.icon.is_none() {
+                //         unit.icon = Some("death_recap_melee_basic".to_string());
+                //     }
+                // }
                 if let Some(buff) = self.eso_logs_log.buffs.get_mut(buff_event.buff_index) {
                     buff.damage_type = ev.damage_type;
                 }

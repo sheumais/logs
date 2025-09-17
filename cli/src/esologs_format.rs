@@ -83,6 +83,21 @@ impl ESOLogsLog {
             }
         }
 
+        if unit.unit_type == Reaction::Hostile && unit.owner_id != 0 {
+            if let Some(existing_index) = self.units.iter().position(|u| {
+                u.unit_id == unit.unit_id && u.name == unit.name
+            }) {
+                if let Some(existing_unit) = self.units.get_mut(existing_index) {
+                    if existing_unit.owner_id != unit.owner_id {
+                        existing_unit.owner_id = unit.owner_id;
+                        existing_unit.unit_type = unit.unit_type;
+                        log::debug!("Setting {existing_unit} to owner id {}", unit.owner_id);
+                    }
+                }
+                return existing_index;
+            }
+        }
+
         let owner_id = unit.owner_id;
         let session_id = self.unit_id_to_session_id.get(&owner_id).unwrap_or(&u32::MAX);
         let key = (id, *self.session_id_to_units_index.get(session_id).unwrap_or(&usize::MAX));
