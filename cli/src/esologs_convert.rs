@@ -278,7 +278,8 @@ impl ESOLogProcessor {
             EventType::EffectInfo    => self.handle_effect_info(parts),
             EventType::UnitChanged   => self.handle_unit_changed(parts),
             EventType::EndCast       => self.handle_end_cast(parts),
-            EventType::Unknown       => {Ok(())}
+            EventType::UnitRemoved   => Ok(()),
+            EventType::Unknown       => {log::debug!("Unknown log line:\n{:?}", parts); Ok(())}
         };
         match r {
             Ok(()) => {},

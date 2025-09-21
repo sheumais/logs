@@ -26,6 +26,7 @@ pub enum EventType {
     EffectInfo,
     UnitChanged,
     EndCast,
+    UnitRemoved,
     Unknown,
 }
 
@@ -48,6 +49,7 @@ impl From<&str> for EventType {
             "EFFECT_INFO"    => EventType::EffectInfo,
             "UNIT_CHANGED"   => EventType::UnitChanged,
             "END_CAST"       => EventType::EndCast,
+            "UNIT_REMOVED"   => EventType::UnitRemoved,
             _                => EventType::Unknown,
         }
     }

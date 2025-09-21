@@ -211,18 +211,10 @@ impl ESOLogsLog {
     pub fn index_in_session(&mut self, unit_id: &u32) -> Option<usize> {
         let unit_index = self.unit_index(unit_id)?;
         // let session_id = *self.unit_id_to_session_id.get(&unit_id)?;
-        if let Some(is_player) = self.players.get(&unit_id) {
-            if *is_player {
-                // log::trace!("Found player in index_in_session: {}, {}", unit_id, session_id);
-                // if let Some(index) = self.unit_index_during_fight.get(&unit_id) {
-                    // log::trace!("Player index would be: {}", index);
-                // }
-                return Some(0)
-            }
+        if let Some(unit) = self.units.get(unit_index) {
+            if unit.unit_type != Reaction::Hostile {return Some(0)}
         }
-        if let Some(is_boss) = self.bosses.get(&unit_id) {
-            if *is_boss {return Some(0)}
-        }
+
         let entry = self.fight_units.entry(unit_index).or_insert_with(Vec::new);
         
         if let Some(&idx) = self.unit_index_during_fight.get(&unit_id) {return Some(idx)}
@@ -443,13 +435,7 @@ pub struct ESOLogsBuffLine {
 impl Display for ESOLogsBuffLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (id0, id1) = self.unit_instance_id;
-        let unit_instance_str = if id0 == 0 && id1 == 0 {
-            format!("{}", self.buff_event.unique_index.wrapping_add(1))
-        } else if id1 == 0 {
-            format!("{}.{}", self.buff_event.unique_index.wrapping_add(1), id0)
-        } else {
-            format!("{}.{}.{}", self.buff_event.unique_index.wrapping_add(1), id0, id1)
-        };
+        let unit_instance_str = self.buff_event.instance_str(id0, id1);
         if self.source_cast_index.is_some() {
             if (self.target_shield != 0 || self.target_shield == 0 && self.source_shield != 0) && self.target_shield != self.source_shield {
                 if self.source_shield != 0 {
@@ -462,6 +448,30 @@ impl Display for ESOLogsBuffLine {
             write!(f, "{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance)
         }
     }
+}
+
+impl ESOLogsBuffEvent {
+    fn instance_str(&self, id0: usize, id1: usize) -> String {
+        let unit_instance_str = if id0 == 0 && id1 == 0 {
+            format!("{}", self.unique_index.wrapping_add(1))
+        } else if id1 == 0 {
+            format!("{}.{}", self.unique_index.wrapping_add(1), id0)
+        } else {
+            format!("{}.{}.{}", self.unique_index.wrapping_add(1), id0, id1)
+        };
+        unit_instance_str
+    }
+
+    // fn instance_str(&self, id0: usize, id1: usize) -> String {
+    //     let unit_instance_str = if id0 == 0 && id1 == 0 {
+    //         format!("({})", self)
+    //     } else if id1 == 0 {
+    //         format!("({}).{}", self, id0)
+    //     } else {
+    //         format!("({}).{}.{}", self, id0, id1)
+    //     };
+    //     unit_instance_str
+    // }
 }
 
 #[derive(Debug, Clone)]
@@ -478,13 +488,7 @@ pub struct ESOLogsBuffStacks {
 impl Display for ESOLogsBuffStacks {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (id0, id1) = self.unit_instance_id;
-        let unit_instance_str = if id0 == 0 && id1 == 0 {
-            format!("{}", self.buff_event.unique_index.wrapping_add(1))
-        } else if id1 == 0 {
-            format!("{}.{}", self.buff_event.unique_index.wrapping_add(1), id0)
-        } else {
-            format!("{}.{}.{}", self.buff_event.unique_index.wrapping_add(1), id0, id1)
-        };
+        let unit_instance_str = self.buff_event.instance_str(id0, id1);
         write!(f, "{}|{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.stacks)
     }
 }
@@ -587,13 +591,7 @@ pub struct ESOLogsCastLine {
 impl Display for ESOLogsCastLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (id0, id1) = self.unit_instance_id;
-        let unit_instance_str = if id0 == 0 && id1 == 0 {
-            format!("{}", self.buff_event.unique_index.wrapping_add(1))
-        } else if id1 == 0 {
-            format!("{}.{}", self.buff_event.unique_index.wrapping_add(1), id0)
-        } else {
-            format!("{}.{}.{}", self.buff_event.unique_index.wrapping_add(1), id0, id1)
-        };
+        let unit_instance_str = self.buff_event.instance_str(id0, id1);
         if let Some(cast_info) = &self.cast_information {
             if self.cast.target_unit_state.unit_state.health == 0 {
                 write!(f, "{}|{}|{}|{}|{}|{}|0|0|{}", self.timestamp, self.line_type, unit_instance_str, self.cast, cast_info.critical, cast_info.hit_value + cast_info.overflow, cast_info.overflow)
@@ -776,15 +774,9 @@ pub struct ESOLogsDamageShielded { // purely for healing purposes. we copy the o
 
 impl Display for ESOLogsDamageShielded {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (id0, id1) = self.unit_instance_id;
-        let unit_instance_str = if id0 == 0 && id1 == 0 {
-            format!("{}", self.buff_event.unique_index.wrapping_add(1))
-        } else if id1 == 0 {
-            format!("{}.{}", self.buff_event.unique_index.wrapping_add(1), id0)
-        } else {
-            format!("{}.{}.{}", self.buff_event.unique_index.wrapping_add(1), id0, id1)
-        };
-        write!(f, "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.shield_source_allegiance, self.shield_recipient_allegiance, self.buff_event.source_unit_index.wrapping_add(1), self.orig_shield_instance_ids.0, self.damage_source_allegiance, 0, self.hit_value, self.source_ability_cast_index.wrapping_add(1))
+        let (id0, id1) = self.orig_shield_instance_ids;
+        let unit_instance_str = self.buff_event.instance_str(id0, id1);
+        write!(f, "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.shield_source_allegiance, self.shield_recipient_allegiance, self.buff_event.source_unit_index.wrapping_add(1), self.unit_instance_id.0, self.damage_source_allegiance, 0, self.hit_value, self.source_ability_cast_index.wrapping_add(1))
     }
 }
 
@@ -802,13 +794,7 @@ pub struct ESOLogsInterrupt {
 impl Display for ESOLogsInterrupt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (id0, id1) = self.unit_instance_id;
-        let unit_instance_str = if id0 == 0 && id1 == 0 {
-            format!("{}", self.buff_event.unique_index.wrapping_add(1))
-        } else if id1 == 0 {
-            format!("{}.{}", self.buff_event.unique_index.wrapping_add(1), id0)
-        } else {
-            format!("{}.{}.{}", self.buff_event.unique_index.wrapping_add(1), id0, id1)
-        };
+        let unit_instance_str = self.buff_event.instance_str(id0, id1);
         write!(f, "{}|{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.interrupted_ability_index.wrapping_add(1))
     }
 }
@@ -828,13 +814,7 @@ pub struct ESOLogsInterruptionEnded {
 impl Display for ESOLogsInterruptionEnded {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (id0, id1) = self.unit_instance_id;
-        let unit_instance_str = if id0 == 0 && id1 == 0 {
-            format!("{}", self.buff_event.unique_index.wrapping_add(1))
-        } else if id1 == 0 {
-            format!("{}.{}", self.buff_event.unique_index.wrapping_add(1), id0)
-        } else {
-            format!("{}.{}.{}", self.buff_event.unique_index.wrapping_add(1), id0, id1)
-        };
+        let unit_instance_str = self.buff_event.instance_str(id0, id1);
         write!(f, "{}|{}|{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.interruption_index.wrapping_add(1), self.magic_number)
     }
 }
@@ -852,13 +832,7 @@ pub struct ESOLogsEndCast {
 impl Display for ESOLogsEndCast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (id0, id1) = self.unit_instance_id;
-        let unit_instance_str = if id0 == 0 && id1 == 0 {
-            format!("{}", self.buff_event.unique_index.wrapping_add(1))
-        } else if id1 == 0 {
-            format!("{}.{}", self.buff_event.unique_index.wrapping_add(1), id0)
-        } else {
-            format!("{}.{}.{}", self.buff_event.unique_index.wrapping_add(1), id0, id1)
-        };
+        let unit_instance_str = self.buff_event.instance_str(id0, id1);
         write!(f, "{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance)
     }
 }
