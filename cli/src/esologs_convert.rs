@@ -838,7 +838,7 @@ impl ESOLogProcessor {
                     }
                 ));
             }
-            EventResult::PowerEnergize => {
+            EventResult::PowerEnergize | EventResult::PowerDrain => {
                 self.add_log_event(ESOLogsEvent::PowerEnergize(
                     ESOLogsPowerEnergize {
                         timestamp: ev.time,
@@ -857,7 +857,7 @@ impl ESOLogProcessor {
                                 champion_points: self.get_cp_for_unit(target.unit_id),
                             },
                         },
-                        hit_value: ev.hit_value,
+                        hit_value: if ev.result == EventResult::PowerEnergize {ev.hit_value.try_into().unwrap()} else {-TryInto::<i32>::try_into(ev.hit_value).unwrap()},
                         overflow: ev.overflow,
                         resource_type: match ev.power_type {
                             1 => ESOLogsResourceType::Magicka,
@@ -975,26 +975,6 @@ impl ESOLogProcessor {
                 }
             }
         };
-
-        // let debug_pattern = [
-        //     "6219258", "COMBAT_EVENT", "DAMAGE", "DISEASE", "1", "28120", "0", "3276875", "117715", "440", "6991/6991", "0/0", "0/0", "0/0", "0/0", "0", "0.3267", "0.6231", "0.9248", "422", "156850/287485", "0/0", "0/0", "0/0", "0/0", "0", "0.3250", "0.6201", "1.9384"
-        // ].iter().map(|s| s.to_string()).collect::<Vec<_>>();
-
-        // if parts == debug_pattern {
-        //     println!("--- DEBUG COMBAT_EVENT PRINT_ALL ---");
-        //     println!("parts: {:?}", parts);
-        //     println!("source: {:?}", source);
-        //     println!("target: {:?}", target);
-        //     println!("ability_id: {:?}", ability_id);
-        //     println!("buff_event: {:?}", buff_event);
-        //     println!("unique_index: {:?}", unique_index);
-        //     println!("ev: {:?}", ev);
-        //     println!("cast_id: {:?}", cast_id);
-        //     println!("index_option: {:?}", index_option);
-        //     // println!("eso_logs_log.units: {:?}", self.eso_logs_log.units);
-        //     println!("eso_logs_log.pets: {:?}", self.eso_logs_log.pets);
-        // }
-
         Ok(())
     }
 
@@ -1118,7 +1098,7 @@ impl ESOLogProcessor {
             self.add_log_event(ESOLogsEvent::BuffLine (
                 ESOLogsBuffLine {
                     timestamp: self.last_known_timestamp,
-                    line_type: if source_allegiance == target_allegiance {ESOLogsLineType::BuffGainedAlly} else {ESOLogsLineType::BuffGainedEnemy},
+                    line_type: if source_allegiance == 16 && target_allegiance == 16 {ESOLogsLineType::BuffGainedAlly} else {ESOLogsLineType::BuffGainedEnemy},
                     buff_event: buff_event,
                     unit_instance_id: instance_ids,
                     source_allegiance,
@@ -1153,7 +1133,6 @@ impl ESOLogProcessor {
                             ESOLogsLineType::BuffStacksUpdatedEnemy
                         }
                     }
-                    
                 };
                 self.add_log_event(ESOLogsEvent::StackUpdate (
                     ESOLogsBuffStacks {
@@ -1353,12 +1332,11 @@ impl ESOLogProcessor {
                     interrupted_ability_index,
                 }));
             }
-        } else if end_reason == Some(CastEndReason::Completed) { // 249171,END_CAST,COMPLETED,6859448,37108
+        } else if end_reason == Some(CastEndReason::Completed) {
             let ability_cast_id = parts[3].parse::<u32>().map_err(|e| format!("Failed to parse ability_cast_id: {}", e))?;
             if !self.eso_logs_log.cast_with_cast_time.contains(&ability_cast_id) {return Ok(())}
             log::trace!("Ability cast id: {}", ability_cast_id);
-            // let completed_ability_id = parts[4].parse::<u32>().unwrap();
-            let buff_index = self.eso_logs_log.cast_id_hashmap.get(&ability_cast_id).unwrap_or(&usize::MAX); // "buff from cast_id should always be something" except when it isn't
+            let buff_index = self.eso_logs_log.cast_id_hashmap.get(&ability_cast_id).unwrap_or(&usize::MAX);
             if *buff_index == usize::MAX {
                 return Err(format!("Completed cast buff index is none"))
             }
@@ -1582,7 +1560,6 @@ pub fn build_master_table(elp: &mut ESOLogProcessor) -> String {
         if buff.icon == default_icon {
             if let Some(icon) = icon_by_name.get(&buff.name) {
                 buff.icon = icon.clone();
-                // buff.name = format!("{}*", buff.name);
             }
         }
 

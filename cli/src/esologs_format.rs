@@ -91,7 +91,7 @@ impl ESOLogsLog {
                     if existing_unit.owner_id != unit.owner_id {
                         existing_unit.owner_id = unit.owner_id;
                         existing_unit.unit_type = unit.unit_type;
-                        log::debug!("Setting {existing_unit} to owner id {}", unit.owner_id);
+                        // log::debug!("Setting {existing_unit} to owner id {}", unit.owner_id);
                     }
                 }
                 return existing_index;
@@ -626,7 +626,7 @@ pub struct ESOLogsPowerEnergize {
     pub line_type: ESOLogsLineType,
     pub buff_event: ESOLogsBuffEvent,
     pub cast: ESOLogsCastBase,
-    pub hit_value: u32,
+    pub hit_value: i32,
     pub overflow: u32,
     pub resource_type: ESOLogsResourceType,
 }

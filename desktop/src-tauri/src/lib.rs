@@ -386,6 +386,7 @@ fn delete_log_file(state: State<'_, AppState>) -> Result<(), String> {
     let file_path = file_paths.first().ok_or("No file path in vector")?;
     let path_ref = file_path.as_path().ok_or("Invalid file path")?;
     std::fs::remove_file(path_ref).map_err(|e| format!("Failed to delete file: {e}"))?;
+    log::info!("Deleted log file: {}", path_ref.to_str().unwrap_or("Unwrap on path_ref failed"));
     Ok(())
 }
 
@@ -1059,7 +1060,10 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
             .send()
             .await;
 
-        let _ = std::fs::remove_dir_all(&tmp_dir);
+        if let Err(e) = std::fs::remove_dir_all(&tmp_dir) {
+            log::warn!("[live_log_upload] Failed to remove tmp dir: {e}");
+        }
+
         log::trace!("[live_log_upload] Temp dir deleted. Task exiting.");
     });
 

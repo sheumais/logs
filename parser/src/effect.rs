@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use crate::{player::Player, set::get_item_type_from_hashmap, unit::UnitState};
+use crate::unit::UnitState;
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Ability {
@@ -199,37 +199,4 @@ pub enum SummonablePets {
     VitalizingGlyphic = 183709,
     GlyphicOfTheTides = 193794,
     ResonatingGlyphic = 193558, // Hostile!
-}
-
-fn update_blockade_ability(ability: &mut Ability, item_type: &crate::set::ItemType) {
-    match item_type {
-        crate::set::ItemType::FrostStaff => {
-            ability.icon = "/esoui/art/icons/ability_destructionstaff_002b.dds".to_string();
-            ability.name = "Blockade of Frost".to_string();
-        },
-        crate::set::ItemType::LightningStaff => {
-            ability.icon = "/esoui/art/icons/ability_destructionstaff_003_b.dds".to_string();
-            ability.name = "Blockade of Storms".to_string();
-        },
-        crate::set::ItemType::FireStaff => {
-            ability.icon = "/esoui/art/icons/ability_destructionstaff_004_b.dds".to_string();
-            ability.name = "Fiery Blockade".to_string();
-        },
-        _ => {},
-    }
-}
-
-pub fn destruction_staff_skill_convert(player: &mut Player) {
-    let item_type = get_item_type_from_hashmap(player.gear.main_hand.item_id);
-    for ability in &mut player.primary_abilities {
-        if ability.id == 39011 {
-            update_blockade_ability(ability, &item_type);
-        }
-    }
-    let backup_item_type = get_item_type_from_hashmap(player.gear.main_hand_backup.item_id);
-    for ability in &mut player.backup_abilities {
-        if ability.id == 39011 {
-            update_blockade_ability(ability, &backup_item_type);
-        }
-    }
 }
