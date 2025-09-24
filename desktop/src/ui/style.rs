@@ -86,6 +86,7 @@ pub fn back_arrow_style() -> Style {
         width: 2em;
         height: 2em;
         margin-left: 1em;
+        margin-top: 0.5em;
         cursor: pointer;
 
         &:hover {

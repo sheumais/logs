@@ -595,6 +595,7 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
             |val| {
                 let _ = window_clone.emit("upload_progress", format!("Processing: {val}%"));
             },
+            &upload_cancel_flag,
         )?;
         log::debug!("Finished split_and_zip_log_by_fight");
 

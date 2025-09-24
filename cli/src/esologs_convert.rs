@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, fs::File, io::{BufRead, BufReader, BufWriter}, path::Path};
+use std::{collections::HashMap, error::Error, fs::File, io::{BufRead, BufReader, BufWriter}, path::Path, sync::atomic::{AtomicBool, Ordering}};
 use std::io::Write;
 use parser::{effect::{self, StatusEffectType}, event::{self, parse_cast_end_reason, CastEndReason, DamageType, EventResult}, parse::{self}, player::{Class, Race}, unit::{self, blank_unit_state, Reaction, UnitState}, EventType, UnitAddedEventType};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
@@ -378,7 +378,7 @@ impl ESOLogProcessor {
             UnitAddedEventType::Player => {
                 let player = parse::player(parts);
 
-                let unit = ESOLogsUnit {
+                let mut unit = ESOLogsUnit {
                     name: player.name.trim_matches('"').to_owned(),
                     player_data: Some(ESOLogsPlayerSpecificData {
                         username: player.display_name,
@@ -403,6 +403,12 @@ impl ESOLogProcessor {
                     champion_points: player.champion_points,
                     owner_id: 0,
                 };
+
+                if unit.name.is_empty() && player.is_grouped_with_local_player {
+                    let id = if player.champion_points > 0 {player.champion_points} else {player.level.into()};
+                    unit.name = format!("Anonymous {}", id);
+                }
+
                 self.map_unit_id_to_monster_id(player.unit_id, &unit);
                 self.eso_logs_log.shield_values.insert(player.unit_id, 0);
                 if let Some(unit_index) = self.eso_logs_log.session_id_to_units_index.get(&unit.unit_id) {
@@ -1388,7 +1394,7 @@ impl ESOLogProcessor {
     }
 }
 
-pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath, output_dir: OutputDir, mut progress_callback: F) -> Result<(), String> where InputPath: AsRef<Path>, OutputDir: AsRef<Path>, F: FnMut(u8) {
+pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath, output_dir: OutputDir, mut progress_callback: F, cancel_flag: &AtomicBool) -> Result<(), String> where InputPath: AsRef<Path>, OutputDir: AsRef<Path>, F: FnMut(u8) {
     if output_dir.as_ref().exists() {
         fs::remove_dir_all(&output_dir)
             .map_err(|e| format!("Failed to remove existing output dir: {e}"))?;
@@ -1422,6 +1428,9 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath
         current_line += 1;
         if current_line % LINE_COUNT_FOR_PROGRESS == 0 {
             progress_callback(((current_line as f64 / total_lines as f64) * 100.0).round() as u8);
+            if cancel_flag.load(Ordering::SeqCst) {
+                return Err("Upload cancelled".to_string());
+            }
         }
 
         let line = line.map_err(|e| format!("Read error: {e}"))?;

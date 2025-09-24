@@ -156,6 +156,7 @@ pub fn upload() -> Html {
                     rewind: false,
                 };
                 upload_progress.set(None);
+                error.set(None);
                 match invoke_result::<EncounterReportCode, String>("upload_log",  
                     &serde_json::json!({
                         "uploadSettings": settings,
@@ -200,6 +201,7 @@ pub fn upload() -> Html {
                     rewind: rewind.unwrap_or(selected_rewind),
                 };
                 upload_progress.set(None);
+                error.set(None);
                 match invoke_result::<EncounterReportCode, String>("live_log_upload",  
                     &serde_json::json!({
                         "uploadSettings": settings,
