@@ -389,8 +389,10 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
     let gear_parts: Vec<&str> = parts[5..parts.len()-2].iter().map(|s| s.as_str()).collect();
 
     let mut processed_gear: Vec<String> = Vec::new();
+    let mut cryptcanon = false;
     for i in gear_parts {
         let gear_piece = gear_piece(i);
+        if gear_piece.item_id == 194509 {cryptcanon = true}
         // let is_mythic = is_mythic_set(gear_piece_obj.set_id);
         let gear_str = i.to_string();
         // if is_mythic { // save for the rainy day where esologs adds functionality for mythic items.. https://discord.com/channels/503331371159257089/714906580646232135/878731437807902760
@@ -405,6 +407,19 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
             frontbar_type = item_type;
         } else if item_slot == GearSlot::MainHandBackup {
             backbar_type = item_type;
+        }
+    }
+
+    if cryptcanon {
+        if primary_ability_id_list.contains(&195031) || backup_ability_id_list.contains(&195031) {cryptcanon = false} else {
+            if primary_ability_id_list.len() == 6 && backup_ability_id_list.len() == 6 {
+                if let Some(last) = primary_ability_id_list.last_mut() {
+                    *last = 195031;
+                }
+                if let Some(last) = backup_ability_id_list.last_mut() {
+                    *last = 195031;
+                }
+            }
         }
     }
 
@@ -460,7 +475,12 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
     new_parts.push(format!("[{}]", primary_ability_id_list.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",")));
     new_parts.push(format!("[{}]", backup_ability_id_list.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",")));
 
-    Some(vec![new_parts.join(",")])
+    let mut result = Vec::new();
+    if cryptcanon {
+        result.push(format!("{},ABILITY_INFO,195031,\"Crypt Transfer\",\"/esoui/art/icons/u38_ability_armor_ultimatetransfer.dds\",F,T", parts[0]));
+    }
+    result.push(new_parts.join(","));
+    Some(result)
 }
 
 fn modify_combat_event(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {

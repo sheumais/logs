@@ -654,6 +654,15 @@ async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings:
                 *end,
         ).await?;
         uploaded_segments += 1;
+        if uploaded_segments % 10 == 0 {
+            log::debug!("Uploading master table due to mod 10");
+            upload_master_table( 
+                &client,
+                &format!("{base}/set-report-master-table/{code}"),
+                last_idx.try_into().unwrap(),
+                &tmp_dir.join("master_table.zip").clone(),
+            ).await?;
+        }
         let _ = window.emit("upload_progress", format!("Uploading: {}%", ((uploaded_segments as f64 / total_segments as f64) * 100.0).round() as u8)); 
     }
     log::info!("Uploading master table ... ");
