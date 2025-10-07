@@ -5,7 +5,7 @@ use std::io::{BufReader, BufWriter, Write, BufRead};
 use std::path::Path;
 use parser::effect::{is_zen_dot, MOULDERING_TAINT_ID, MOULDERING_TAINT_TIME, ZEN_DEBUFF_ID};
 use parser::event::{self, parse_event_result, EventResult};
-use parser::parse::{self, gear_piece, unit_state};
+use parser::parse::{self, gear_piece, unit_state_id_only};
 use parser::player::GearSlot;
 use parser::set::{get_item_type_from_hashmap, ItemType};
 use parser::unit::UnitState;
@@ -18,17 +18,19 @@ pub struct CustomLogData {
     pub scribing_unit_map: HashMap<(String, u32), usize>,
     pub taint_stacks: HashMap<u32, MoulderingTaintState>,
     pub units: HashMap<u32, String>,
+    pub last_combat_event_timestamp: u64,
 }
 
 impl CustomLogData {
     pub fn new() -> Self {
-        CustomLogData {
+        Self {
             zen_stacks: HashMap::new(),
             scribing_abilities: Vec::new(),
             scribing_map: HashMap::new(),
             scribing_unit_map: HashMap::new(),
             taint_stacks: HashMap::new(),
             units: HashMap::new(),
+            last_combat_event_timestamp: 0,
         }
     }
 
@@ -171,25 +173,34 @@ fn check_effect_changed(parts: &[String], zen_hashmap: &mut HashMap<u32, ZenDebu
 const MAX_ZEN_STACKS: u8 = 5;
 
 fn add_zen_stacks(parts: &[String], zen_status: &mut HashMap<u32, ZenDebuffState>) -> Option<Vec<String>> {
-    let source_unit_state = unit_state(&parts, 6);
-    let target_unit_state = if parts[16] == "*" {
-        source_unit_state.clone()
-    } else {
-        unit_state(&parts, 16)
-    };
-
-    let source_unit_id = source_unit_state.unit_id;
-    let target_unit_id = target_unit_state.unit_id;
-
     let is_zen_debuff = parts[5] == ZEN_DEBUFF_ID.to_string();
-    let event_type = parts.get(2).map(|s| EffectChangedEventType::from(s.as_str())).unwrap_or(EffectChangedEventType::Unknown);
-    let ability_id = parts[5].parse::<u32>().unwrap_or(0);
+    let source_unit_state = unit_state_id_only(&parts, 6);
+    let source_unit_id = match source_unit_state {
+        Some(val) => val,
+        None => return None,
+    };
+    let target_unit_id = if parts[16] == "*" {
+        source_unit_id.clone()
+    } else {
+        let t = unit_state_id_only(&parts, 16);
+        if t == None {
+            return None;
+        }
+        t.unwrap()
+    };
 
     let entry = zen_status.entry(target_unit_id).or_insert_with(|| ZenDebuffState {
         active: false,
         source_id: source_unit_id,
         contributing_ability_ids: Vec::new(),
     });
+
+    if !is_zen_debuff && !(source_unit_id == entry.source_id || source_unit_id == target_unit_id) {
+        return None
+    }
+
+    let event_type = parts.get(2).map(|s| EffectChangedEventType::from(s.as_str())).unwrap_or(EffectChangedEventType::Unknown);
+    let ability_id = parts[5].parse::<u32>().unwrap_or(0);
 
     if is_zen_debuff {
         match event_type {
@@ -218,41 +229,39 @@ fn add_zen_stacks(parts: &[String], zen_status: &mut HashMap<u32, ZenDebuffState
         let rest = parts[6..].join(",");
         line.push_str(&rest);
         return Some(vec![line]);
-    } else {
-        if source_unit_id == entry.source_id || source_unit_id == target_unit_id {
-            match event_type {
-                EffectChangedEventType::Gained => {
-                    if !entry.contributing_ability_ids.contains(&ability_id) {
-                        entry.contributing_ability_ids.push(ability_id);
-                        if entry.active {
-                            let stacks = entry.contributing_ability_ids.len().min(MAX_ZEN_STACKS as usize);
-                            let mut line = format!(
-                                "{},{},{},{},{},{},",
-                                parts[0], parts[1], "UPDATED", stacks, parts[4], ZEN_DEBUFF_ID.to_string()
-                            );
-                            let rest = parts[6..].join(",");
-                            line.push_str(&rest);
-                            return Some(vec![line]);
-                        }
+    } else if source_unit_id == entry.source_id || source_unit_id == target_unit_id {
+        match event_type {
+            EffectChangedEventType::Gained => {
+                if !entry.contributing_ability_ids.contains(&ability_id) {
+                    entry.contributing_ability_ids.push(ability_id);
+                    if entry.active {
+                        let stacks = entry.contributing_ability_ids.len().min(MAX_ZEN_STACKS as usize);
+                        let mut line = format!(
+                            "{},{},{},{},{},{},",
+                            parts[0], parts[1], "UPDATED", stacks, parts[4], ZEN_DEBUFF_ID.to_string()
+                        );
+                        let rest = parts[6..].join(",");
+                        line.push_str(&rest);
+                        return Some(vec![line]);
                     }
                 }
-                EffectChangedEventType::Faded => {
-                    if entry.contributing_ability_ids.contains(&ability_id) {
-                        entry.contributing_ability_ids.retain(|&id| id != ability_id);
-                        if entry.active {
-                            let stacks = entry.contributing_ability_ids.len().min(MAX_ZEN_STACKS as usize);
-                            let mut line = format!(
-                                "{},{},{},{},{},{},",
-                                parts[0], parts[1], "UPDATED", stacks, parts[4], ZEN_DEBUFF_ID.to_string()
-                            );
-                            let rest = parts[6..].join(",");
-                            line.push_str(&rest);
-                            return Some(vec![line]);
-                        }
-                    }
-                }
-                _ => {}
             }
+            EffectChangedEventType::Faded => {
+                if entry.contributing_ability_ids.contains(&ability_id) {
+                    entry.contributing_ability_ids.retain(|&id| id != ability_id);
+                    if entry.active {
+                        let stacks = entry.contributing_ability_ids.len().min(MAX_ZEN_STACKS as usize);
+                        let mut line = format!(
+                            "{},{},{},{},{},{},",
+                            parts[0], parts[1], "UPDATED", stacks, parts[4], ZEN_DEBUFF_ID.to_string()
+                        );
+                        let rest = parts[6..].join(",");
+                        line.push_str(&rest);
+                        return Some(vec![line]);
+                    }
+                }
+            }
+            _ => {}
         }
     }
     None
@@ -484,87 +493,100 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
 }
 
 fn modify_combat_event(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
-    let ability_id = parts[8].parse::<u32>().unwrap();
-    // log::trace!("ability_id: {}", ability_id);
-    let time = parts[0].parse().unwrap();
+    let ability_id = match parts[8].parse::<u32>() {
+        Ok(id) => id,
+        Err(_) => return None,
+    };
+    let time = match parts[0].parse::<u64>() {
+        Ok(t) => t,
+        Err(_) => return None,
+    };
+
     let event_type = parse_event_result(&parts[2]);
+
     if event_type == Some(EventResult::SoulGemResurrectionAccepted) {
         let mut lines = Vec::new();
         let mut line = format!("{},BEGIN_CAST,0,F,0,26770,", parts[0]);
-        let rest = parts[9..].join(",");
-        line.push_str(&rest);
+        line.push_str(&parts[9..].join(","));
         lines.push(line);
         lines.push(format!("{},END_CAST,COMPLETED,0,26770", parts[0]));
-
-        return Some(lines)
+        return Some(lines);
     }
+
+    let mo_taint_time = *MOULDERING_TAINT_TIME as u64;
 
     match ability_id {
         id if id == *MOULDERING_TAINT_ID => {
             let source = parse::unit_state(&parts, 9);
             let target = parse::unit_state(&parts, 19);
-            let cast_track_id = parts[7].parse::<u32>().unwrap(); 
-            let entry = custom_log_data.taint_stacks.entry(target.unit_id).or_insert_with(|| MoulderingTaintState {
-                stacks: 0,
-                last_timestamp: time,
-                last_source_unit_state: source,
-                last_cast_id: cast_track_id,
-                last_target_unit_state: target,
-            });
+            let cast_track_id = parts[7].parse::<u32>().unwrap();
+
+            let entry = custom_log_data.taint_stacks.entry(target.unit_id)
+                .or_insert_with(|| MoulderingTaintState {
+                    stacks: 0,
+                    last_timestamp: time,
+                    last_source_unit_state: source,
+                    last_cast_id: cast_track_id,
+                    last_target_unit_state: target,
+                });
+
             entry.stacks += 1;
             entry.last_timestamp = time;
             entry.last_source_unit_state = source;
             entry.last_cast_id = cast_track_id;
             entry.last_target_unit_state = target;
+
             let mut lines: Vec<String> = vec![];
+
             if entry.stacks == 1 {
                 let mut gained_line = format!(
                     "{},{},{},{},{},{},",
-                    time, "EFFECT_CHANGED", "GAINED", "1", cast_track_id, MOULDERING_TAINT_ID.to_string()
+                    time, "EFFECT_CHANGED", "GAINED", "1", cast_track_id, MOULDERING_TAINT_ID
                 );
-                let rest = parts[9..].join(",");
-                gained_line.push_str(&rest);
+                gained_line.push_str(&parts[9..].join(","));
                 lines.push(gained_line);
             }
+
             let mut line = format!(
                 "{},{},{},{},{},{},",
-                time, "EFFECT_CHANGED", "UPDATED", entry.stacks, cast_track_id, MOULDERING_TAINT_ID.to_string()
+                time, "EFFECT_CHANGED", "UPDATED", entry.stacks, cast_track_id, MOULDERING_TAINT_ID
             );
-            let rest = parts[9..].join(",");
-            line.push_str(&rest);
+            line.push_str(&parts[9..].join(","));
             lines.push(line);
             return Some(lines);
         },
         _ => {
             let mut removed = Vec::new();
+            if custom_log_data.taint_stacks.is_empty() {
+                return None;
+            }
+
             for (id, entry) in custom_log_data.taint_stacks.iter_mut() {
-                if parts[19] != "*" {
+                if parts[19] != "*" && parse::unit_state_id_only(&parts, 19) == Some(*id) {
                     let target = parse::unit_state(&parts, 19);
-                    if target.unit_id == *id {
-                        if (time > entry.last_timestamp + *MOULDERING_TAINT_TIME as u64 || (event::parse_event_result(&parts[2]).unwrap() == EventResult::Died || target.health == 0)) && entry.stacks > 0 {
-                            entry.last_timestamp = time;
-                            entry.stacks = 0;
-                            let e = entry.last_source_unit_state;
-                            let mut line = format!(
-                                "{},{},{},{},{},{},{},{}/{},{}/{},{}/{},{}/{},{}/{},{},{},{},{},",
-                                time, "EFFECT_CHANGED", "FADED", "1", entry.last_cast_id, MOULDERING_TAINT_ID.to_string(),
-                                e.unit_id, e.health, e.max_health, e.magicka, e.max_magicka, e.stamina, e.max_stamina, e.ultimate, e.max_ultimate, e.werewolf, e.werewolf_max, e.shield, e.map_x, e.map_y, e.heading
-                            );
-                            let rest = parts[19..].join(",");
-                            line.push_str(&rest);
-                            removed.push(id.clone());
-                            return Some(vec![line]);
-                        }
+                    if (time > entry.last_timestamp + mo_taint_time || (event::parse_event_result(&parts[2]).unwrap() == EventResult::Died || target.health == 0)) && entry.stacks > 0 {
+                        entry.last_timestamp = time;
+                        entry.stacks = 0;
+                        let e = entry.last_source_unit_state;
+                        let mut line = format!(
+                            "{},{},{},{},{},{},{},{}/{},{}/{},{}/{},{}/{},{}/{},{},{},{},{},",
+                            time, "EFFECT_CHANGED", "FADED", "1", entry.last_cast_id, MOULDERING_TAINT_ID,
+                            e.unit_id, e.health, e.max_health, e.magicka, e.max_magicka, e.stamina, e.max_stamina, e.ultimate, e.max_ultimate, e.werewolf, e.werewolf_max, e.shield, e.map_x, e.map_y, e.heading
+                        );
+                        let rest = parts[19..].join(",");
+                        line.push_str(&rest);
+                        removed.push(id.clone());
+                        return Some(vec![line]);
                     }
                 }
-                if time > entry.last_timestamp + 500 + *MOULDERING_TAINT_TIME as u64 && entry.stacks > 0 {
+                if time > entry.last_timestamp + mo_taint_time && entry.stacks > 0 {
                     entry.last_timestamp = time;
                     entry.stacks = 0;
                     let e = entry.last_source_unit_state;
                     let t = entry.last_target_unit_state;
                     let line = format!(
                         "{},{},{},{},{},{},{},{}/{},{}/{},{}/{},{}/{},{}/{},{},{},{},{},{},{}/{},{}/{},{}/{},{}/{},{}/{},{},{},{},{}",
-                        time, "EFFECT_CHANGED", "FADED", "1", entry.last_cast_id, MOULDERING_TAINT_ID.to_string(),
+                        time, "EFFECT_CHANGED", "FADED", "1", entry.last_cast_id, MOULDERING_TAINT_ID,
                         e.unit_id, e.health, e.max_health, e.magicka, e.max_magicka, e.stamina, e.max_stamina, e.ultimate, e.max_ultimate, e.werewolf, e.werewolf_max, e.shield, e.map_x, e.map_y, e.heading,
                         t.unit_id, "0", t.max_health, "0", "0", "0", "0", "0", "0", "0", "0", "0", t.map_x, t.map_y, t.heading
                     );
@@ -578,7 +600,7 @@ fn modify_combat_event(parts: &[String], custom_log_data: &mut CustomLogData) ->
         }
     }
 
-    return None
+    None
 }
 
 fn handle_unit_added(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {

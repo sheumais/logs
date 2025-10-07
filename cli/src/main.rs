@@ -3,7 +3,7 @@ use std::{env, fs};
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
-use cli::esologs_convert::{build_master_table, ESOLogProcessor};
+use cli::esologs_convert::{build_master_table, split_and_zip_log_by_fight, ESOLogProcessor};
 use cli::esologs_format::{ESOLogsEvent, ESOLogsLineType};
 use cli::log_edit::modify_log_file;
 use cli::split_log::split_encounter_file_into_log_files;
@@ -72,6 +72,11 @@ fn main() {
                 log::error!("Error creating output file: report_segments.txt");
                 return;
             }
+        }
+        "esologzip" => {
+            let noop = |_progress: u8| {};
+            let dummy_cancel = std::sync::atomic::AtomicBool::new(false);
+            split_and_zip_log_by_fight(file_path, r#"C:\Users\H\AppData\Local\Temp\esologtool_temporary"#, noop, &dummy_cancel).expect("esologzip shouldn't error");
         }
         "aoe" => {
             let mut eso_log_processor = ESOLogProcessor::new();

@@ -84,8 +84,16 @@ pub struct ESOLogProcessor {
 
 impl ESOLogProcessor {
     pub fn new() -> Self {
+        let mut log = ESOLogsLog::new();
+        log.reserve_capacity(
+            250,
+            500,
+            20_000,
+            10_000,
+            20,
+        );
         Self {
-            eso_logs_log: ESOLogsLog::new(),
+            eso_logs_log: log,
             megaserver: "Unknown".to_owned(),
             timestamp_offset: 0,
             temporary_damage_buffer: 0,
@@ -144,56 +152,56 @@ impl ESOLogProcessor {
         self.eso_logs_log.add_log_event(event);
 
         if let Some(event_ts) = timestamp {
-            let max_diff_ms: u64 = 20;
+            let max_diff_ms: u64 = 5;
             let mut still_pending = Vec::with_capacity(self.pending_death_events.len());
 
             for (death_ts, mut death_event) in self.pending_death_events.drain(..) {
-                if event_ts >= death_ts + max_diff_ms {
-                    let mut forward_match: Option<(usize, u64)> = None;
-                    let mut backward_match: Option<(usize, u64)> = None;
+                if event_ts < death_ts + max_diff_ms {
+                    still_pending.push((death_ts, death_event));
+                    continue;
+                }
 
-                    if let (Some(dc_id), Some(dt_id)) = (get_cast_id(&death_event), get_target_id(&death_event)) {
-                        for (idx, e) in self.eso_logs_log.events.iter().enumerate().rev() {
-                            if !is_damage_event(e) { continue; }
-                            if let (Some(c_id), Some(t_id), Some(ts)) =
-                                (get_cast_id(e), get_target_id(e), event_timestamp(e))
-                            {
-                                if c_id == dc_id && t_id == dt_id {
-                                    if ts >= death_ts {
-                                        let diff = ts - death_ts;
-                                        if diff <= max_diff_ms {
-                                            let better = forward_match.map_or(true, |(_, best_ts)| diff < best_ts - death_ts);
-                                            if better {
-                                                forward_match = Some((idx, ts));
-                                            }
-                                        }
-                                    } else {
-                                        let diff = death_ts - ts;
-                                        if diff <= max_diff_ms {
-                                            let better = backward_match.map_or(true, |(_, best_ts)| diff < death_ts - best_ts);
-                                            if better {
-                                                backward_match = Some((idx, ts));
-                                            }
-                                        }
-                                    }
-                                }
+                let mut best_match: Option<(usize, u64)> = None;
+
+                if let (Some(dc_id), Some(dt_id)) = (get_cast_id(&death_event), get_target_id(&death_event)) {
+                    for (idx, e) in self.eso_logs_log.events.iter().enumerate().rev() {
+                        if !is_damage_event(e) {
+                            continue;
+                        }
+
+                        let (Some(c_id), Some(t_id), Some(ts)) =
+                            (get_cast_id(e), get_target_id(e), event_timestamp(e))
+                        else {
+                            continue;
+                        };
+
+                        if death_ts.saturating_sub(ts) > max_diff_ms {
+                            break;
+                        }
+
+                        if c_id == dc_id && t_id == dt_id {
+                            let diff = if ts > death_ts { ts - death_ts } else { death_ts - ts };
+                            if diff <= max_diff_ms {
+                                best_match = Some((idx, ts));
+                                break;
                             }
                         }
                     }
+                }
 
-                    if let Some((match_idx, match_ts)) = forward_match.or(backward_match) {
-                        set_event_timestamp(&mut death_event, match_ts);
-                        self.eso_logs_log.events.insert(match_idx + 1, death_event);
-                    } else {
-                        let insert_idx = self.eso_logs_log.events.iter()
-                            .position(|e| event_timestamp(e).map_or(false, |ts| ts > death_ts))
-                            .unwrap_or(self.eso_logs_log.events.len());
-                        self.eso_logs_log.events.insert(insert_idx, death_event);
-                    }
+                if let Some((match_idx, match_ts)) = best_match {
+                    set_event_timestamp(&mut death_event, match_ts);
+                    self.eso_logs_log.events.insert(match_idx + 1, death_event);
                 } else {
-                    still_pending.push((death_ts, death_event));
+                    let insert_idx = self.eso_logs_log.events.binary_search_by(|e| {
+                        event_timestamp(e)
+                            .map(|ts| ts.cmp(&death_ts))
+                            .unwrap_or(std::cmp::Ordering::Less)
+                    }).unwrap_or_else(|idx| idx);
+                    self.eso_logs_log.events.insert(insert_idx, death_event);
                 }
             }
+
             self.pending_death_events = still_pending;
         }
     }
@@ -652,8 +660,8 @@ impl ESOLogProcessor {
                                             source_ability_cast_index: index_option.unwrap_or(0),
                                         }));
                                     } else {
-                                        log::trace!("shield error: {:?}", shield_buff_event);
-                                        log::trace!("shield parts: {:?}", parts);
+                                        // log::trace!("shield error: {:?}", shield_buff_event);
+                                        // log::trace!("shield parts: {:?}", parts);
                                     }
                                 }
                             }
@@ -1058,6 +1066,7 @@ impl ESOLogProcessor {
 
     fn handle_effect_changed(&mut self, parts: &[String]) -> Result<(), String> {
         let source = parse::unit_state(parts, 6);
+        if parts.len() == 16 {log::error!("{:?}", parts)}
         let target_equal_source = parts[16] == "*";
         let target = if target_equal_source {
             source.clone()
@@ -1346,7 +1355,7 @@ impl ESOLogProcessor {
             if !self.eso_logs_log.cast_with_cast_time.contains(&ability_cast_id) {
                 return Ok(())
             }
-            log::trace!("Ability cast id: {}", ability_cast_id);
+            // log::trace!("Ability cast id: {}", ability_cast_id);
 
             let buff_index = self.eso_logs_log.cast_id_hashmap
                 .get(&ability_cast_id)

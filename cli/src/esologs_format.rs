@@ -63,6 +63,28 @@ impl ESOLogsLog {
         self.shield_values = HashMap::new();
     }
 
+    pub fn reserve_capacity(
+        &mut self,
+        units: usize,
+        buffs: usize,
+        effects: usize,
+        events: usize,
+        pets: usize,
+    ) {
+        self.units.reserve(units);
+        self.buffs.reserve(buffs);
+        self.effects.reserve(effects);
+        self.events.reserve(events);
+        self.pets.reserve(pets);
+    }
+
+    pub fn reserve_event_capacity(
+        &mut self,
+        events: usize,
+    ) {
+        self.events.reserve(events);
+    }
+
     pub fn add_unit(&mut self, unit: ESOLogsUnit) -> usize {
         let mut id = unit.unit_id;
         if let Some(pd) = &unit.player_data {
