@@ -144,3 +144,8 @@ pub struct UploadSettings {
     pub description: String,
     pub rewind: bool,
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct UpdateInformation {
+    pub version: String,
+}

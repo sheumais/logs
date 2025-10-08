@@ -1,7 +1,7 @@
 use std::{collections::{HashMap, HashSet}, fmt::{self, Display}, hash::Hash};
 use parser::{effect::StatusEffectType, event::DamageType, player::Race, unit::{blank_unit_state, Reaction, UnitState}};
 
-pub const ESO_LOGS_COM_VERSION: &'static str = "8.17.18";
+pub const ESO_LOGS_COM_VERSION: &'static str = "8.17.71";
 pub const ESO_LOGS_PARSER_VERSION: &'static u8 = &11;
 pub const LINE_COUNT_FOR_PROGRESS: usize = 25000usize;
 

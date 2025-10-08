@@ -15,7 +15,7 @@ This application is designed to help you manage and process your Elder Scrolls O
 | Ads & tracking cookies | ❌ | ✅ |
 | Combine log files | ✅ | ❌ |
 | Splits 1 GB log file in<sup>*</sup> | 6s | 52s |
-| Average RAM usage<sup>*</sup> | 6 MB | 550 MB |
+| Average RAM usage<sup>*</sup> | 40 MB | 550 MB |
 | Scribing scripts & more | ✅ | ❌ |
 
 <sub>\* As measured on my computer, approximate</sub>

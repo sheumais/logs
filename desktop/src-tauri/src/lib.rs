@@ -1,5 +1,5 @@
 use cli::{esologs_convert::{build_master_table, build_report_segment, event_timestamp, split_and_zip_log_by_fight, write_zip_with_logtxt, ESOLogProcessor}, esologs_format::{ESO_LOGS_COM_VERSION, ESO_LOGS_PARSER_VERSION, LINE_COUNT_FOR_PROGRESS}, log_edit::{handle_line, CustomLogData}};
-use esologtool_common::{EncounterReportCode, LoginResponse, UploadSettings};
+use esologtool_common::{EncounterReportCode, LoginResponse, UpdateInformation, UploadSettings};
 use reqwest::{multipart::{Form, Part}, Client};
 use serde_json::json;
 use state::AppState;
@@ -1087,6 +1087,35 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
     Ok(report_code)
 }
 
+#[tauri::command]
+async fn download_and_install_update(app: tauri::AppHandle) -> Result<(), String> {
+    let _ = update(app).await;
+    Ok(())
+}
+
+async fn update(app: tauri::AppHandle) -> tauri_plugin_updater::Result<()> {
+  if let Some(update) = app.updater()?.check().await? {
+    let mut downloaded = 0;
+
+    update
+      .download_and_install(
+        |chunk_length, content_length| {
+          downloaded += chunk_length;
+          log::debug!("downloaded {downloaded} from {content_length:?}");
+        },
+        || {
+          log::info!("update downloaded and installing... {}", update.version);
+        },
+      )
+      .await?;
+
+    log::info!("update installed");
+    app.restart();
+  }
+
+  Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let result = Ftail::new()
@@ -1112,7 +1141,7 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                update(handle).await.unwrap();
+                check_for_update(handle).await.unwrap();
             });
             thread::spawn(move || {
                 cli::rich_presence::rich_presence_thread();
@@ -1134,31 +1163,45 @@ pub fn run() {
             cancel_upload_log,
             delete_log_file,
             get_saved_login_response,
-            get_saved_upload_settings
+            get_saved_upload_settings,
+            download_and_install_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
 
-async fn update(app: tauri::AppHandle) -> tauri_plugin_updater::Result<()> {
+async fn check_for_update(app: tauri::AppHandle) -> tauri_plugin_updater::Result<()> {
   if let Some(update) = app.updater()?.check().await? {
     let mut downloaded = 0;
-
     update
-      .download_and_install(
-        |chunk_length, content_length| {
-          downloaded += chunk_length;
-          log::info!("downloaded {downloaded} from {content_length:?}");
-        },
-        || {
-          log::info!("download finished");
-        },
-      )
-      .await?;
-
-    log::info!("update installed");
-    // app.restart();
-  }
+        .download(
+|chunk_length, content_length| {
+            downloaded += chunk_length;
+                log::debug!("downloaded {downloaded} from {content_length:?}");
+            },
+            || {
+                let update_information = UpdateInformation { version: update.version.clone() };
+                if let Some(state) = app.try_state::<AppState>() {
+                    match state.update.write().map_err(|e| e.to_string()) {
+                        Ok(mut l) => {
+                            *l = Some(update_information.clone());
+                        },
+                        Err(e) => {
+                            log::error!("Failed download: {}", e);
+                        }
+                    }
+                };
+                let _ = app.emit("update-available", update_information);
+                log::info!("potential update exists: {}", update.version);
+            },
+        ).await?;
+  } 
+// FOR DEBUGGING PURPOSES
+//   else {
+//     std::thread::sleep(std::time::Duration::from_secs(1));
+//     log::info!("Emitting update-available to front-end");
+//     let _ = app.emit("update-available", UpdateInformation { version: "0.5.0-beta".to_string() });
+//   }
 
   Ok(())
 }

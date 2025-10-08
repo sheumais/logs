@@ -1,4 +1,5 @@
 use dirs::data_local_dir;
+use esologtool_common::UpdateInformation;
 use reqwest::Client;
 use std::{env::temp_dir, fs::{self, create_dir_all, File}, io::Read, path::PathBuf, sync::{atomic::AtomicBool, Arc, RwLock}, time::Duration};
 use tauri_plugin_dialog::FilePath;
@@ -90,6 +91,7 @@ pub struct AppState {
     pub http: RwLock<HttpState>,
     pub esolog_code: RwLock<Option<String>>,
     pub upload_cancel_flag: Arc<AtomicBool>,
+    pub update: RwLock<Option<UpdateInformation>>,
 }
 
 impl AppState {
@@ -100,6 +102,7 @@ impl AppState {
             http: RwLock::new(HttpState::new()),
             esolog_code: RwLock::new(None),
             upload_cancel_flag: Arc::new(AtomicBool::new(false)),
+            update: RwLock::new(None),
         }
     }
 }

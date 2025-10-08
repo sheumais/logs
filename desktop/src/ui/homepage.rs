@@ -1,8 +1,9 @@
 use stylist::yew::styled_component;
+use tauri_sys::core::invoke;
 use yew::prelude::*;
 use yew_router::hooks::use_navigator;
 use yew_icons::IconId;
-use crate::{app::LoginContext, routes::Route, ui::{icon_button::IconButton, login::LoginBox, logo::logo, style::*}};
+use crate::{app::{LoginContext, UpdateContext}, routes::Route, ui::{icon_button::IconButton, login::LoginBox, logo::logo, style::*}};
 
 #[derive(Properties, PartialEq)]
 pub struct HomepageContainerProps {
@@ -68,7 +69,14 @@ pub fn homepage() -> Html {
         })
     };
 
+    let update = Callback::from(move |_| {
+        wasm_bindgen_futures::spawn_local(async move {
+            invoke::<()>("download_and_install_update", &()).await;
+        });
+    });
+
     let login_ctx = use_context::<LoginContext>().expect("LoginContext not found");
+    let update_ctx = use_context::<UpdateContext>().expect("UpdateContext not found");
 
     html! {
         <>
@@ -107,6 +115,11 @@ pub fn homepage() -> Html {
             <div onclick={terms.clone()} class={text_link_style()} style={"position:fixed;bottom:0px;left:0px;padding:0.5em;font-size:1em;"}>
                 {"Terms"}
             </div>
+            if let Some(update_info) = &*update_ctx {
+                <div onclick={update.clone()} style={"position:fixed;bottom:0px;width:30%;left:35%;padding:0.5em;text-align:center;cursor:pointer;"}>
+                    {format!("Update available: {}", update_info.version)}
+                </div>
+            }
         </>
     }
 }
