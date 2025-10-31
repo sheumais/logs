@@ -64,6 +64,7 @@ pub fn is_mythic_set(id: u16) -> bool {
         811 => true,
         812 => true,
         813 => true,
+        845 => true,
         _ => false,
     }
 }

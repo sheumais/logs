@@ -50,7 +50,7 @@ fn set_event_timestamp(e: &mut ESOLogsEvent, timestamp: u64) {
 
 fn is_damage_event(e: &ESOLogsEvent) -> bool {
     match e {
-        ESOLogsEvent::CastLine(cl) => matches!(cl.line_type, ESOLogsLineType::Damage | ESOLogsLineType::DotTick),
+        ESOLogsEvent::CastLine(cl) => matches!(cl.line_type, ESOLogsLineType::Damage | ESOLogsLineType::DotTick | ESOLogsLineType::Death),
         _ => false,
     }
 }
@@ -350,7 +350,8 @@ impl ESOLogProcessor {
                 line_type: ESOLogsLineType::EndCombat,
             }
         ));
-
+        
+        self.eso_logs_log.current_health.clear();
         self.eso_logs_log.fight_units.clear();
         self.eso_logs_log.unit_index_during_fight.clear();
 

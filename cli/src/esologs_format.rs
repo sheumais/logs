@@ -30,6 +30,7 @@ pub struct ESOLogsLog {
     pub pets: Vec<ESOLogsPetRelationship>,
     pub shields: HashMap<u32, HashMap<usize, ESOLogsBuffEventKey2>>,
     pub shield_values: HashMap<u32, u32>,
+    pub current_health: HashMap<u32, u32>,
 }
 
 impl ESOLogsLog {

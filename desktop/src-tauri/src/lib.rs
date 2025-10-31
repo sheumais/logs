@@ -1040,7 +1040,6 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                             }
                             Err(e) => {
                                 log::error!("Segment upload failed: {e}");
-                                segment_id += 1;
                             }
                         }
 
