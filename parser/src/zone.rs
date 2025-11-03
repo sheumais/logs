@@ -71,9 +71,9 @@ pub fn print_parent_zones() {
 
     for parent_id in &unique_parents {
         if let Some(name) = ZONE_TO_NAME.get(parent_id) {
-            println!("{} => , // {}", parent_id, name);
+            println!("{parent_id} => , // {name}");
         } else {
-            println!("{}", parent_id);
+            println!("{parent_id}");
         }
     }
 }
@@ -89,13 +89,13 @@ pub fn print_dungeon_zones() {
 
     for zone_id in &dungeons {
         if let Some(name) = ZONE_TO_NAME.get(zone_id) {
-            println!("{} => , // {}", zone_id, name);
+            println!("{zone_id} => , // {name}");
         } else {
-            println!("{}", zone_id);
+            println!("{zone_id}");
         }
     }
 }
 
 pub fn is_dungeon(zone_id: u16) -> bool {
-    return *ZONE_TO_DUNGEON.get(&zone_id).unwrap_or(&false);
+    *ZONE_TO_DUNGEON.get(&zone_id).unwrap_or(&false)
 }

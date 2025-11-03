@@ -3,7 +3,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use crate::unit::UnitState;
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Ability {
     pub id: u32,
     pub name: Arc<str>,
@@ -13,7 +13,7 @@ pub struct Ability {
     pub scribing: Option<Vec<String>>
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Effect {
     pub ability: Ability,
     pub stack_count: u16,
@@ -79,9 +79,9 @@ pub fn parse_status_effect_type(string: &str) -> StatusEffectType {
     }
 }
 
-pub const ZEN_DEBUFF_ID: &'static u32 = &126597;
-pub const MOULDERING_TAINT_ID: &'static u32 = &150002;
-pub const MOULDERING_TAINT_TIME: &'static u16 = &2500;
+pub const ZEN_DEBUFF_ID: &u32 = &126597;
+pub const MOULDERING_TAINT_ID: &u32 = &150002;
+pub const MOULDERING_TAINT_TIME: &u16 = &2500;
 
 pub fn is_zen_dot(effect_id: u32) -> bool {
     match effect_id {

@@ -1,8 +1,8 @@
 use std::{collections::{HashMap, HashSet}, fmt::{self, Display}, hash::Hash, sync::Arc};
 use parser::{effect::StatusEffectType, event::DamageType, player::Race, unit::{blank_unit_state, Reaction, UnitState}};
 
-pub const ESO_LOGS_COM_VERSION: &'static str = "8.17.85";
-pub const ESO_LOGS_PARSER_VERSION: &'static u8 = &11;
+pub const ESO_LOGS_COM_VERSION: &str = "8.17.85";
+pub const ESO_LOGS_PARSER_VERSION: &u8 = &11;
 pub const LINE_COUNT_FOR_PROGRESS: usize = 25000usize;
 
 #[derive(Default)]
@@ -151,7 +151,7 @@ impl ESOLogsLog {
         if self.objects.contains_key(&object.name) {
             let session_id = self.objects.get(&object.name).unwrap();
             let index = self.session_id_to_units_index.get(session_id).unwrap();
-            let index2 = index.clone();
+            let index2 = *index;
             self.session_id_to_units_index.insert(object.unit_id, *index);
             return index2;
         }
@@ -192,22 +192,22 @@ impl ESOLogsLog {
 
     pub fn unit_index(&self, unit_id: &u32) -> Option<usize> {
         // log::trace!("{:?}", self.unit_id_to_session_id);
-        let res = self.unit_id_to_units_index.get(unit_id).copied();
-        res
+        
+        self.unit_id_to_units_index.get(unit_id).copied()
     }
 
     pub fn object_index(&self, object_id: Arc<str>) -> Option<usize> {
         if let Some(session_id) = self.objects.get(&object_id) {
-            let res = self.session_id_to_units_index.get(session_id).copied();
-            res
+            
+            self.session_id_to_units_index.get(session_id).copied()
         } else {
             None
         }
     }
 
     pub fn buff_index(&self, buff_id: u32) -> Option<usize> {
-        let res = self.buffs_hashmap.get(&buff_id).copied();
-        res
+        
+        self.buffs_hashmap.get(&buff_id).copied()
     }
 
     pub fn add_log_event(&mut self, event: ESOLogsEvent) {
@@ -238,9 +238,9 @@ impl ESOLogsLog {
             if unit.unit_type != Reaction::Hostile {return Some(0)}
         }
 
-        let entry = self.fight_units.entry(unit_index).or_insert_with(Vec::new);
+        let entry = self.fight_units.entry(unit_index).or_default();
         
-        if let Some(&idx) = self.unit_index_during_fight.get(&unit_id) {return Some(idx)}
+        if let Some(&idx) = self.unit_index_during_fight.get(unit_id) {return Some(idx)}
 
         let new_idx = entry.len();
         entry.push(*unit_id);
@@ -250,7 +250,7 @@ impl ESOLogsLog {
 
     pub fn get_reaction_for_unit(&self, unit_id: u32) -> Option<Reaction> {
         if let Some(&unit_index) = self.unit_id_to_units_index.get(&unit_id) {
-            return self.units.get(unit_index).map(|unit| unit.unit_type.clone());
+            return self.units.get(unit_index).map(|unit| unit.unit_type);
         }
         None
     }
@@ -460,13 +460,13 @@ impl Display for ESOLogsBuffLine {
         let (id0, id1) = self.unit_instance_id;
         let unit_instance_str = self.buff_event.instance_str(id0, id1);
         if self.source_cast_index.is_some() {
-            if (self.target_shield != 0 || self.target_shield == 0 && self.source_shield != 0) && self.target_shield != self.source_shield {
+            if (self.source_shield != 0 || self.target_shield != 0) && self.target_shield != self.source_shield  {
                 if self.source_shield != 0 {
                     return write!(f, "{}|{}|{}|{}|{}|A{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.source_cast_index.unwrap().wrapping_add(1), self.source_shield, self.target_shield);
                 }
                 return write!(f, "{}|{}|{}|{}|{}|A{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.source_cast_index.unwrap().wrapping_add(1), self.target_shield);
             }
-            return write!(f, "{}|{}|{}|{}|{}|A{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.source_cast_index.unwrap().wrapping_add(1));
+            write!(f, "{}|{}|{}|{}|{}|A{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.source_cast_index.unwrap().wrapping_add(1))
         } else {
             write!(f, "{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance)
         }
@@ -475,14 +475,14 @@ impl Display for ESOLogsBuffLine {
 
 impl ESOLogsBuffEvent {
     fn instance_str(&self, id0: usize, id1: usize) -> String {
-        let unit_instance_str = if id0 == 0 && id1 == 0 {
+        
+        if id0 == 0 && id1 == 0 {
             format!("{}", self.unique_index.wrapping_add(1))
         } else if id1 == 0 {
             format!("{}.{}", self.unique_index.wrapping_add(1), id0)
         } else {
             format!("{}.{}.{}", self.unique_index.wrapping_add(1), id0, id1)
-        };
-        unit_instance_str
+        }
     }
 }
 
@@ -549,19 +549,17 @@ pub struct ESOLogsCastData {
 impl Display for ESOLogsCastData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(n) = self.override_magic_number {
-            write!(f, "{}", n)
-        } else {
-            if self.hit_value == 0 && self.overflow > 0 {
-                write!(f, "{}|{}|{}", self.critical, if self.replace_hitvalue_overflow { self.hit_value } else { self.overflow }, self.overflow)
-            } else if self.hit_value > 0 && self.overflow == 0 {
-                if self.blocked == false {
-                    write!(f, "{}|{}", self.critical, self.hit_value)
-                } else {
-                    write!(f, "{}|{}|{}|{}", 4, self.hit_value, 0, 1)
-                }
+            write!(f, "{n}")
+        } else if self.hit_value == 0 && self.overflow > 0 {
+            write!(f, "{}|{}|{}", self.critical, if self.replace_hitvalue_overflow { self.hit_value } else { self.overflow }, self.overflow)
+        } else if self.hit_value > 0 && self.overflow == 0 {
+            if !self.blocked {
+                write!(f, "{}|{}", self.critical, self.hit_value)
             } else {
-                write!(f, "{}|{}|{}", self.critical, self.hit_value + self.overflow, self.overflow)
+                write!(f, "{}|{}|{}|{}", 4, self.hit_value, 0, 1)
             }
+        } else {
+            write!(f, "{}|{}|{}", self.critical, self.hit_value + self.overflow, self.overflow)
         }
 
     }
@@ -579,7 +577,7 @@ pub struct ESOLogsCastBase {
 impl Display for ESOLogsCastBase {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let cast_str = if self.cast_id_origin == 0 {
-            format!("")
+            String::new()
         } else {
             format!("|C{}", self.cast_id_origin)
         };

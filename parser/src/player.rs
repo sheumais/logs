@@ -437,7 +437,7 @@ pub struct GearPiece {
 /// If is_cp then level * 10, else level
 pub fn veteran_level_to_cp(level: u8, is_cp: bool) -> u8 {
     if is_cp {
-        (level.saturating_mul(10)).min(u8::MAX)
+        level.saturating_mul(10)
     } else {
         level
     }
@@ -543,9 +543,9 @@ mod tests {
 
     #[test]
     fn test_is_appropriate_level() {
-        assert_eq!(is_appropriate_level(50, false), true);
-        assert_eq!(is_appropriate_level(0, false), false);
-        assert_eq!(is_appropriate_level(200, true), false);
+        assert!(is_appropriate_level(50, false));
+        assert!(!is_appropriate_level(0, false));
+        assert!(!is_appropriate_level(200, true));
     }
 
     #[test]

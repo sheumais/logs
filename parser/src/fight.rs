@@ -21,7 +21,7 @@ impl Fight {
         let mut bosses = Vec::new();
         for unit in &self.monsters {
             if unit.is_boss {
-                bosses.push(unit.unit_id.clone());
+                bosses.push(unit.unit_id);
             }
         }
         if bosses.is_empty() {

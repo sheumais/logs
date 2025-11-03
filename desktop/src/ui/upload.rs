@@ -299,7 +299,7 @@ pub fn upload() -> Html {
                         height={"2em"}
                     />
                     if let Some(code) = report_code.clone().deref() {
-                        <a class={text_link_style().clone()} style={"font-size: large;margin-top:1em;margin-bottom:1em;"} href={format!("https://www.esologs.com/reports/{}", code)} target="_blank" rel="noopener noreferrer">
+                        <a class={text_link_style().clone()} style={"font-size: large;margin-top:1em;margin-bottom:1em;"} href={format!("https://www.esologs.com/reports/{code}")} target="_blank" rel="noopener noreferrer">
                             {"Click to open your encounter log"}
                         </a>
                     }
@@ -319,7 +319,7 @@ pub fn upload() -> Html {
                         height={"2em"}
                     />
                     if let Some(code) = report_code.clone().deref() {
-                        <a class={text_link_style().clone()} style={"font-size: large;margin-top:1em;margin-bottom:1em;"} href={format!("https://www.esologs.com/reports/{}", code)} target="_blank" rel="noopener noreferrer">
+                        <a class={text_link_style().clone()} style={"font-size: large;margin-top:1em;margin-bottom:1em;"} href={format!("https://www.esologs.com/reports/{code}")} target="_blank" rel="noopener noreferrer">
                             {"Click to open your live log"}
                         </a>
                     }
@@ -327,7 +327,7 @@ pub fn upload() -> Html {
                 if let Some(_) = report_code.clone().deref() {
                     if !*has_been_deleted && *is_uploading == UploadState::None {
                         if let Some(code) = report_code.clone().deref() {
-                            <a class={text_link_style().clone()} style={"font-size: large;margin-top:1em;margin-bottom:1em;"} href={format!("https://www.esologs.com/reports/{}", code)} target="_blank" rel="noopener noreferrer">
+                            <a class={text_link_style().clone()} style={"font-size: large;margin-top:1em;margin-bottom:1em;"} href={format!("https://www.esologs.com/reports/{code}")} target="_blank" rel="noopener noreferrer">
                                 {"Click to open your encounter log"}
                             </a>
                         }

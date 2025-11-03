@@ -82,6 +82,12 @@ pub struct ESOLogProcessor {
     zone: Option<u16>,
 }
 
+impl Default for ESOLogProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ESOLogProcessor {
     pub fn new() -> Self {
         let mut log = ESOLogsLog::new();
@@ -114,7 +120,7 @@ impl ESOLogProcessor {
     }
 
     pub fn add_unit(&mut self, unit: ESOLogsUnit) -> usize {
-        return self.eso_logs_log.add_unit(unit)
+        self.eso_logs_log.add_unit(unit)
     }
 
     pub fn map_unit_id_to_monster_id(&mut self, unit_id: u32, unit: &ESOLogsUnit) {
@@ -122,11 +128,11 @@ impl ESOLogProcessor {
     }
 
     pub fn add_object(&mut self, object: ESOLogsUnit) -> usize {
-        return self.eso_logs_log.add_object(object)
+        self.eso_logs_log.add_object(object)
     }
 
     pub fn add_buff(&mut self, buff: ESOLogsBuff) -> bool {
-        return self.eso_logs_log.add_buff(buff)
+        self.eso_logs_log.add_buff(buff)
     }
 
     pub fn add_buff_event(&mut self, buff_event: ESOLogsBuffEvent) -> usize {
@@ -180,7 +186,7 @@ impl ESOLogProcessor {
                         }
 
                         if c_id == dc_id && t_id == dt_id {
-                            let diff = if ts > death_ts { ts - death_ts } else { death_ts - ts };
+                            let diff = ts.abs_diff(death_ts);
                             if diff <= max_diff_ms {
                                 best_match = Some((idx, ts));
                                 break;
@@ -229,7 +235,7 @@ impl ESOLogProcessor {
     pub fn allegiance_from_unit_state(&self, unit_state: UnitState) -> Reaction {
         if unit_state == blank_unit_state() {return Reaction::None}
         let reaction = self.get_reaction_for_unit(unit_state.unit_id);
-        return reaction.unwrap_or(Reaction::None);
+        reaction.unwrap_or(Reaction::None)
     }
 
     pub fn convert_log_file_to_esolog_format(&mut self, file_path: &Path) -> Result<(), Box<dyn Error>> {
@@ -242,7 +248,7 @@ impl ESOLogProcessor {
             let line = match line_result {
                 Ok(l) => l,
                 Err(e) => {
-                    log::warn!("Error reading line: {}", e);
+                    log::warn!("Error reading line: {e}");
                     continue;
                 }
             };
@@ -252,7 +258,7 @@ impl ESOLogProcessor {
             }
             lines += 1;
             if lines % 250_000 == 0 {
-                log::info!("Processed {} lines", lines);
+                log::info!("Processed {lines} lines");
                 log::info!("Length of stuff: buffs:{}, effects:{}, units:{}, lines:{}", self.eso_logs_log.buffs.len(), self.eso_logs_log.effects.len(), self.eso_logs_log.units.len(), self.eso_logs_log.events.len());
             }
         }
@@ -287,11 +293,11 @@ impl ESOLogProcessor {
             EventType::UnitChanged   => self.handle_unit_changed(parts),
             EventType::EndCast       => self.handle_end_cast(parts),
             EventType::UnitRemoved   => Ok(()),
-            EventType::Unknown       => {log::debug!("Unknown log line:\n{:?}", parts); Ok(())}
+            EventType::Unknown       => {log::debug!("Unknown log line:\n{parts:?}"); Ok(())}
         };
         match r {
             Ok(()) => {},
-            Err(e) => {log::debug!("Parts: {:?}", parts); log::debug!("Error: {}", e)},
+            Err(e) => {log::debug!("Parts: {parts:?}"); log::debug!("Error: {e}")},
         }
     }
 
@@ -321,11 +327,11 @@ impl ESOLogProcessor {
 
         let log_ts = parts[2]
             .parse::<u64>()
-            .map_err(|e| format!("Failed to parse log_ts: {}", e))?;
+            .map_err(|e| format!("Failed to parse log_ts: {e}"))?;
 
         let rel_ticks = parts[0]
             .parse::<u64>()
-            .map_err(|e| format!("Failed to parse rel_ticks: {}", e))?;
+            .map_err(|e| format!("Failed to parse rel_ticks: {e}"))?;
 
         self.most_recent_begin_log_timestamp = Some(log_ts);
         self.timestamp_offset = rel_ticks;
@@ -340,7 +346,7 @@ impl ESOLogProcessor {
     fn handle_end_combat(&mut self, parts: &[String]) -> Result<(), String> {
         let rel_ticks = parts[0]
             .parse::<u64>()
-            .map_err(|e| format!("Failed to parse end combat timestamp: {}", e))?;
+            .map_err(|e| format!("Failed to parse end combat timestamp: {e}"))?;
 
         let timestamp = self.calculate_timestamp(rel_ticks);
 
@@ -361,7 +367,7 @@ impl ESOLogProcessor {
     fn handle_begin_combat(&mut self, parts: &[String]) -> Result<(), String> {
         let rel_ticks = parts[0]
             .parse::<u64>()
-            .map_err(|e| format!("Failed to parse begin combat timestamp: {}", e))?;
+            .map_err(|e| format!("Failed to parse begin combat timestamp: {e}"))?;
 
         let timestamp = self.calculate_timestamp(rel_ticks);
 
@@ -415,7 +421,7 @@ impl ESOLogProcessor {
 
                 if unit.name.is_empty() && player.is_grouped_with_local_player {
                     let id = if player.champion_points > 0 {player.champion_points} else {player.level.into()};
-                    unit.name = format!("Anonymous {}", id).into();
+                    unit.name = format!("Anonymous {id}").into();
                 }
 
                 self.map_unit_id_to_monster_id(player.unit_id, &unit);
@@ -500,17 +506,17 @@ impl ESOLogProcessor {
     fn handle_player_info(&mut self, parts: &[String]) -> Result<(), String> {
         let length = parts.len();
         if length < 8 {
-            log::warn!("Invalid PLAYER_INFO line: {:?}", parts);
-            return Err(format!("Player info definition too short"));
+            log::warn!("Invalid PLAYER_INFO line: {parts:?}");
+            return Err("Player info definition too short".to_string());
         }
 
-        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse player_info timestamp {}", e))?);
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse player_info timestamp {e}"))?);
 
         self.add_log_event(ESOLogsEvent::PlayerInfo(
             ESOLogsPlayerBuild {
                 timestamp,
                 line_type: ESOLogsLineType::PlayerInfo,
-                unit_index: self.unit_index(parts[2].parse().map_err(|e| format!("Failed to parse player parts[2]: {}", e))?).ok_or_else(|| format!("Failed to unwrap player unit_index"))?,
+                unit_index: self.unit_index(parts[2].parse().map_err(|e| format!("Failed to parse player parts[2]: {e}"))?).ok_or_else(|| "Failed to unwrap player unit_index".to_string())?,
                 permanent_buffs: parts[3].to_string().into(),
                 buff_stacks: parts[4].to_string().into(),
                 gear: parts[5..length-2].iter().map(|s| s.to_string()).collect(),
@@ -524,17 +530,15 @@ impl ESOLogProcessor {
     fn handle_ability_info(&mut self, parts: &[String]) -> Result<(), String> {
         let ability = parse::ability(parts);
         let interruptible_blockable = (ability.interruptible as u8) * 2 + (ability.blockable as u8);
-        let damage_type = match ability.id {
-            _ => DamageType::None,
-        };
+        let damage_type = DamageType::None;
         let buff = ESOLogsBuff {
-            name: ability.name.into(),
+            name: ability.name,
             damage_type,
             status_type: StatusEffectType::None,
             id: ability.id,
-            icon: ability.icon.strip_suffix(".png").map(|s| s.into()).unwrap_or_else(|| ability.icon).into(),
+            icon: ability.icon.strip_suffix(".png").map(|s| s.into()).unwrap_or_else(|| ability.icon),
             caused_by_id: 0,
-            interruptible_blockable: interruptible_blockable,
+            interruptible_blockable,
         };
         self.add_buff(buff);
         Ok(())
@@ -561,31 +565,31 @@ impl ESOLogProcessor {
     fn handle_combat_event(&mut self, parts: &[String]) -> Result<(), String> {
         let source = parse::unit_state(parts, 9);
         let target = if parts[19] == "*" {
-            source.clone()
+            source
         } else {
             parse::unit_state(parts, 19)
         };
-        let result = event::parse_event_result(&parts[2]).ok_or_else(|| format!("Failed to parse combat event_result"))?;
-        let mut ability_id = parts[8].parse().map_err(|e| format!("Failed to parse ability_id: {}", e))?;
+        let result = event::parse_event_result(&parts[2]).ok_or_else(|| "Failed to parse combat event_result".to_string())?;
+        let mut ability_id = parts[8].parse().map_err(|e| format!("Failed to parse ability_id: {e}"))?;
         if ability_id == 0 && result == EventResult::SoulGemResurrectionAccepted {ability_id = 26770}
         let mut buff_event= ESOLogsBuffEvent {
             unique_index: 0,
             source_unit_index: self.unit_index(source.unit_id).ok_or_else(|| format!("source_unit_index {} is out of bounds", source.unit_id))?,
             target_unit_index: self.unit_index(target.unit_id).ok_or_else(|| format!("target_unit_index {} is out of bounds", target.unit_id))?,
-            buff_index: self.buff_index(ability_id).ok_or_else(|| format!("buff_index {} is out of bounds", ability_id))?,
+            buff_index: self.buff_index(ability_id).ok_or_else(|| format!("buff_index {ability_id} is out of bounds"))?,
         };
         let unique_index = self.add_buff_event(buff_event);
         buff_event.unique_index = unique_index;
-        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {}", e))?);
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {e}"))?);
         let ev = event::Event {
             time: timestamp,
             result,
             damage_type: event::parse_damage_type(&parts[3]),
-            power_type: parts[4].parse().map_err(|e| format!("Failed to parse power_type: {}", e))?,
-            hit_value: parts[5].parse().map_err(|e| format!("Failed to parse hit_value: {}", e))?,
-            overflow: parts[6].parse().map_err(|e| format!("Failed to parse overflow: {}", e))?,
-            cast_track_id: parts[7].parse().map_err(|e| format!("Failed to parse cast_track_id: {}", e))?,
-            ability_id: ability_id,
+            power_type: parts[4].parse().map_err(|e| format!("Failed to parse power_type: {e}"))?,
+            hit_value: parts[5].parse().map_err(|e| format!("Failed to parse hit_value: {e}"))?,
+            overflow: parts[6].parse().map_err(|e| format!("Failed to parse overflow: {e}"))?,
+            cast_track_id: parts[7].parse().map_err(|e| format!("Failed to parse cast_track_id: {e}"))?,
+            ability_id,
             source_unit_state: source,
             target_unit_state: target,
         };
@@ -687,7 +691,7 @@ impl ESOLogProcessor {
                     ESOLogsCastLine {
                         timestamp: ev.time,
                         line_type: ESOLogsLineType::Damage,
-                        buff_event: buff_event,
+                        buff_event,
                         unit_instance_id: instance_ids,
                         cast: ESOLogsCastBase {
                             source_allegiance,
@@ -724,7 +728,7 @@ impl ESOLogProcessor {
                     ESOLogsCastLine {
                         timestamp: ev.time,
                         line_type: ESOLogsLineType::Damage,
-                        buff_event: buff_event,
+                        buff_event,
                         unit_instance_id: instance_ids,
                         cast: ESOLogsCastBase {
                             source_allegiance,
@@ -782,7 +786,7 @@ impl ESOLogProcessor {
                             EventResult::Damage | EventResult::CriticalDamage => ESOLogsLineType::Damage,
                             _ => ESOLogsLineType::DotTick,
                         },
-                        buff_event: buff_event,
+                        buff_event,
                         unit_instance_id: instance_ids,
                         cast: ESOLogsCastBase {
                             source_allegiance,
@@ -828,7 +832,7 @@ impl ESOLogProcessor {
                             EventResult::HotTick | EventResult::HotTickCritical => {ESOLogsLineType::HotTick}
                             _ => {ESOLogsLineType::Heal}
                         },
-                        buff_event: buff_event,
+                        buff_event,
                         unit_instance_id: instance_ids,
                         cast: ESOLogsCastBase {
                             source_allegiance,
@@ -859,7 +863,7 @@ impl ESOLogProcessor {
                     ESOLogsPowerEnergize {
                         timestamp: ev.time,
                         line_type: ESOLogsLineType::PowerEnergize,
-                        buff_event: buff_event,
+                        buff_event,
                         cast: ESOLogsCastBase {
                             source_allegiance,
                             target_allegiance,
@@ -891,9 +895,9 @@ impl ESOLogProcessor {
                 let timestamp = ev.time+1;
                 let death_event = ESOLogsEvent::CastLine(
                     ESOLogsCastLine {
-                        timestamp: timestamp.clone(),
+                        timestamp,
                         line_type: ESOLogsLineType::Death,
-                        buff_event: buff_event,
+                        buff_event,
                         unit_instance_id: instance_ids,
                         cast: ESOLogsCastBase {
                             source_allegiance,
@@ -920,7 +924,7 @@ impl ESOLogProcessor {
                     ESOLogsCastLine {
                         timestamp: ev.time,
                         line_type: ESOLogsLineType::Damage,
-                        buff_event: buff_event,
+                        buff_event,
                         unit_instance_id: instance_ids,
                         cast: ESOLogsCastBase {
                             source_allegiance,
@@ -954,7 +958,7 @@ impl ESOLogProcessor {
                     ESOLogsCastLine {
                         timestamp: ev.time,
                         line_type: ESOLogsLineType::Resurrect,
-                        buff_event: buff_event,
+                        buff_event,
                         unit_instance_id: (0, 0), // can only ever resurrect a player or companion, who should always have instance id of 0
                         cast: ESOLogsCastBase {
                             source_allegiance,
@@ -999,13 +1003,13 @@ impl ESOLogProcessor {
     fn handle_begin_cast(&mut self, parts: &[String]) -> Result<(), String> {
         let source = parse::unit_state(parts, 6);
         let target = if parts[16] == "*" {
-            source.clone()
+            source
         } else {
             parse::unit_state(parts, 16)
         };
-        let ability_id = parts[5].parse().map_err(|e| format!("Failed to parse ability_id: {}", e))?;
-        let cast_time = parts[2].parse::<u32>().map_err(|e| format!("Failed to parse cast_time: {}", e))?;
-        let cast_track_id = parts[4].parse::<u32>().map_err(|e| format!("Failed to parse cast_track_id: {}", e))?;
+        let ability_id = parts[5].parse().map_err(|e| format!("Failed to parse ability_id: {e}"))?;
+        let cast_time = parts[2].parse::<u32>().map_err(|e| format!("Failed to parse cast_time: {e}"))?;
+        let cast_track_id = parts[4].parse::<u32>().map_err(|e| format!("Failed to parse cast_track_id: {e}"))?;
         if cast_time > 0 {
             self.eso_logs_log.cast_with_cast_time.insert(cast_track_id);
         }
@@ -1013,9 +1017,9 @@ impl ESOLogProcessor {
             unique_index: 0,
             source_unit_index: self.unit_index(source.unit_id).ok_or_else(|| format!("source_unit_index {} is out of bounds", source.unit_id))?,
             target_unit_index: self.unit_index(target.unit_id).ok_or_else(|| format!("target_unit_index {} is out of bounds", target.unit_id))?,
-            buff_index: self.buff_index(ability_id).ok_or_else(|| format!("buff_index {} is out of bounds", ability_id))?,
+            buff_index: self.buff_index(ability_id).ok_or_else(|| format!("buff_index {ability_id} is out of bounds"))?,
         };
-        let cast_id: u32 = parts[4].parse().map_err(|e| format!("Failed to parse cast_id: {}", e))?;
+        let cast_id: u32 = parts[4].parse().map_err(|e| format!("Failed to parse cast_id: {e}"))?;
         buff_event.unique_index = self.add_buff_event(buff_event);
         if cast_id != 0 {
             self.eso_logs_log.buffs_hashmap.insert(cast_id, buff_event.buff_index);
@@ -1029,8 +1033,8 @@ impl ESOLogProcessor {
         let instance_ids = (self.index_in_session(source.unit_id).unwrap_or(0), self.index_in_session(target.unit_id).unwrap_or(0));
         self.eso_logs_log.cast_id_source_unit_id.insert(cast_id, source.unit_id);
         self.eso_logs_log.cast_id_target_unit_id.insert(cast_id, target.unit_id);
-        if self.eso_logs_log.bosses.contains_key(&source.unit_id) {
-            if source == target {
+        if self.eso_logs_log.bosses.contains_key(&source.unit_id)
+            && source == target {
                 if let Some(buff) = self.eso_logs_log.buffs.get(buff_event.buff_index) {
                     if let Some(unit_index) = self.eso_logs_log.unit_index(&source.unit_id) {
                         if let Some(unit) = self.eso_logs_log.units.get_mut(unit_index) {
@@ -1039,19 +1043,18 @@ impl ESOLogProcessor {
                     }
                 }
             }
-        }
-        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {}", e))?);
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {e}"))?);
         self.last_known_timestamp = timestamp;
         self.add_log_event(ESOLogsEvent::CastLine(
             ESOLogsCastLine {
                 timestamp: self.last_known_timestamp,
                 line_type: if cast_time > 0 {ESOLogsLineType::CastWithCastTime} else {ESOLogsLineType::Cast},
-                buff_event: buff_event,
+                buff_event,
                 unit_instance_id: instance_ids,
                 cast: ESOLogsCastBase {
                     source_allegiance,
                     target_allegiance,
-                    cast_id_origin: parts[4].parse().map_err(|e| format!("Failed to parse cast_id_origin: {}", e))?,
+                    cast_id_origin: parts[4].parse().map_err(|e| format!("Failed to parse cast_id_origin: {e}"))?,
                     source_unit_state: ESOLogsUnitState {
                         unit_state: source,
                         champion_points: self.get_cp_for_unit(source.unit_id),
@@ -1069,21 +1072,21 @@ impl ESOLogProcessor {
 
     fn handle_effect_changed(&mut self, parts: &[String]) -> Result<(), String> {
         let source = parse::unit_state(parts, 6);
-        if parts.len() == 16 {log::error!("{:?}", parts)}
+        if parts.len() == 16 {log::error!("{parts:?}")}
         let target_equal_source = parts[16] == "*";
         let target = if target_equal_source {
-            source.clone()
+            source
         } else {
             parse::unit_state(parts, 16)
         };
-        let ability_id = parts[5].parse().map_err(|e| format!("Failed to parse timestamp: {}", e))?;
+        let ability_id = parts[5].parse().map_err(|e| format!("Failed to parse timestamp: {e}"))?;
         let mut buff_event= ESOLogsBuffEvent {
             unique_index: 0,
             source_unit_index: self.unit_index(source.unit_id).ok_or_else(|| format!("source_unit_index {} is out of bounds", source.unit_id))?,
             target_unit_index: self.unit_index(target.unit_id).ok_or_else(|| format!("target_unit_index {} is out of bounds", target.unit_id))?,
-            buff_index: self.buff_index(ability_id).ok_or_else(|| format!("buff_index {} is out of bounds", ability_id))?,
+            buff_index: self.buff_index(ability_id).ok_or_else(|| format!("buff_index {ability_id} is out of bounds"))?,
         };
-        let cast_id: u32 = parts[4].parse().map_err(|e| format!("Failed to parse cast_id: {}", e))?;
+        let cast_id: u32 = parts[4].parse().map_err(|e| format!("Failed to parse cast_id: {e}"))?;
         buff_event.unique_index = self.add_buff_event(buff_event);
         let index = self.eso_logs_log.buffs_hashmap.get(&cast_id).copied();
         if let Some(caused_by_idx_raw) = index {
@@ -1113,14 +1116,14 @@ impl ESOLogProcessor {
             Self::update_shield_history(&mut self.eso_logs_log, target.unit_id, target.shield, &shield_buff_event);
         }
         let instance_ids = (self.index_in_session(source.unit_id).unwrap_or(0), self.index_in_session(target.unit_id).unwrap_or(0));
-        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {}", e))?);
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {e}"))?);
         self.last_known_timestamp = timestamp;
         if parts[2] == "GAINED" {
             self.add_log_event(ESOLogsEvent::BuffLine (
                 ESOLogsBuffLine {
                     timestamp: self.last_known_timestamp,
                     line_type: if source_allegiance == 16 && target_allegiance == 16 {ESOLogsLineType::BuffGainedAlly} else {ESOLogsLineType::BuffGainedEnemy},
-                    buff_event: buff_event,
+                    buff_event,
                     unit_instance_id: instance_ids,
                     source_allegiance,
                     target_allegiance,
@@ -1134,7 +1137,7 @@ impl ESOLogProcessor {
                 ESOLogsBuffLine {
                     timestamp: self.last_known_timestamp,
                     line_type: if source_allegiance == target_allegiance {ESOLogsLineType::BuffFadedAlly} else {ESOLogsLineType::BuffFadedEnemy},
-                    buff_event: buff_event,
+                    buff_event,
                     unit_instance_id: instance_ids,
                     source_allegiance,
                     target_allegiance,
@@ -1149,17 +1152,15 @@ impl ESOLogProcessor {
                 if source_allegiance == 32 {source_allegiance = 16}
                 if target_allegiance == 32 {target_allegiance = 16}
                 let line_type = {
-                    if source == target {ESOLogsLineType::StacksUpdatedSelf} else {
-                        if source_allegiance == target_allegiance {ESOLogsLineType::BuffStacksUpdatedAlly} else {
-                            ESOLogsLineType::BuffStacksUpdatedEnemy
-                        }
+                    if source == target {ESOLogsLineType::StacksUpdatedSelf} else if source_allegiance == target_allegiance {ESOLogsLineType::BuffStacksUpdatedAlly} else {
+                        ESOLogsLineType::BuffStacksUpdatedEnemy
                     }
                 };
                 self.add_log_event(ESOLogsEvent::StackUpdate (
                     ESOLogsBuffStacks {
                         timestamp: self.last_known_timestamp,
                         line_type,
-                        buff_event: buff_event,
+                        buff_event,
                         unit_instance_id: instance_ids,
                         source_allegiance,
                         target_allegiance,
@@ -1175,7 +1176,7 @@ impl ESOLogProcessor {
         let zone_id = parts[2].parse().unwrap_or(0);
         let zone_name: Arc<str> = parts[3].to_string().trim_matches('"').into();
         let map_url = parts[4].trim_matches('"').to_lowercase().into();
-        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {}", e))?);
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {e}"))?);
         self.add_log_event(ESOLogsEvent::MapInfo(ESOLogsMapInfo {
             timestamp,
             line_type: ESOLogsLineType::MapInfo,
@@ -1195,11 +1196,11 @@ impl ESOLogProcessor {
             "NORMAL" => 1,
             "VETERAN" => 2,
             _ => {
-                log::warn!("Unknown zone difficulty: {}", difficulty);
+                log::warn!("Unknown zone difficulty: {difficulty}");
                 0
             }
         };
-        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {}", e))?);
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {e}"))?);
         self.add_log_event(ESOLogsEvent::ZoneInfo(ESOLogsZoneInfo {
             timestamp,
             line_type: ESOLogsLineType::ZoneInfo,
@@ -1216,7 +1217,7 @@ impl ESOLogProcessor {
         let duration = parts[3].parse::<u64>().unwrap_or(0);
         let success = parse::is_true(&parts[4]);
         let final_score = parts[5].parse::<u32>().unwrap_or(0);
-        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {}", e))?);
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {e}"))?);
         self.add_log_event(ESOLogsEvent::EndTrial(
             ESOLogsEndTrial {
                 timestamp,
@@ -1249,16 +1250,16 @@ impl ESOLogProcessor {
             unique_index: 0,
             source_unit_index: source_id,
             target_unit_index: source_id,
-            buff_index: buff_index,
+            buff_index,
         };
         let unique_index = self.add_buff_event(buff_event);
         buff_event.unique_index = unique_index;
-        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {}", e))?);
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {e}"))?);
         let health_recovery = ESOLogsHealthRecovery {
             timestamp,
             line_type: ESOLogsLineType::HotTick,
-            buff_event: buff_event,
-            effective_regen: parts[2].parse::<u32>().map_err(|e| format!("Failed to parse effective_regen: {}", e))?,
+            buff_event,
+            effective_regen: parts[2].parse::<u32>().map_err(|e| format!("Failed to parse effective_regen: {e}"))?,
             unit_state: ESOLogsUnitState { unit_state: source, champion_points: self.get_cp_for_unit(source.unit_id) }
         };
         self.add_log_event(ESOLogsEvent::HealthRecovery(health_recovery));
@@ -1266,7 +1267,7 @@ impl ESOLogProcessor {
     }
 
     fn handle_effect_info(&mut self, parts: &[String]) -> Result<(), String> {
-        let effect_id: u32 = parts[2].parse().map_err(|e| format!("Failed to parse effect_id: {}", e))?;
+        let effect_id: u32 = parts[2].parse().map_err(|e| format!("Failed to parse effect_id: {e}"))?;
         // let effect_type = effect::parse_effect_type(parts[3]);
         let status_effect_type = effect::parse_status_effect_type(&parts[4]);
         if let Some(&idx) = self.eso_logs_log.buffs_hashmap.get(&effect_id) {
@@ -1278,10 +1279,10 @@ impl ESOLogProcessor {
     }
 
     fn handle_unit_changed(&mut self, parts: &[String]) -> Result<(), String> {
-        let unit_id = parts[2].parse().map_err(|e| format!("Failed to parse unit_id: {}", e))?;
+        let unit_id = parts[2].parse().map_err(|e| format!("Failed to parse unit_id: {e}"))?;
         let unit_index = self.unit_index(unit_id);
         if unit_index.is_some() {
-            let unit = &mut self.eso_logs_log.units[unit_index.ok_or_else(|| format!("Failed to unwrap unit_index"))?];
+            let unit = &mut self.eso_logs_log.units[unit_index.ok_or_else(|| "Failed to unwrap unit_index".to_string())?];
             unit.unit_type = unit::match_reaction(&parts[11]);
         }
         Ok(())
@@ -1289,45 +1290,45 @@ impl ESOLogProcessor {
 
     fn handle_end_cast(&mut self, parts: &[String]) -> Result<(), String> {
         let end_reason = parse_cast_end_reason(&parts[2]);
-        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {}", e))?);
+        let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {e}"))?);
         if end_reason == Some(CastEndReason::Interrupted) {
-            let interrupted_cast_id = parts[3].parse::<u32>().map_err(|e| format!("Failed to parse interrupted_cast_id: {}", e))?;
-            let interrupted_ability = parts[4].parse::<u32>().map_err(|e| format!("Failed to parse interrupted_ability_id: {}", e))?;
-            let interrupting_ability = parts[5].parse::<u32>().map_err(|e| format!("Failed to parse interrupting_ability_id: {}", e))?;
-            let interrupting_unit = parts[6].parse::<u32>().map_err(|e| format!("Failed to parse interrupting_unit_id: {}", e))?; // can be zero sometimes
+            let interrupted_cast_id = parts[3].parse::<u32>().map_err(|e| format!("Failed to parse interrupted_cast_id: {e}"))?;
+            let interrupted_ability = parts[4].parse::<u32>().map_err(|e| format!("Failed to parse interrupted_ability_id: {e}"))?;
+            let interrupting_ability = parts[5].parse::<u32>().map_err(|e| format!("Failed to parse interrupting_ability_id: {e}"))?;
+            let interrupting_unit = parts[6].parse::<u32>().map_err(|e| format!("Failed to parse interrupting_unit_id: {e}"))?; // can be zero sometimes
             let mut target_id_option = self.eso_logs_log.cast_id_source_unit_id.get(&interrupted_cast_id).cloned();
 
-            if interrupting_unit == 0 {return Err(format!("Interrupting unit has id zero"))}
+            if interrupting_unit == 0 {return Err("Interrupting unit has id zero".to_string())}
 
             if target_id_option.is_none() {
                 if let Some(last_interrupt) = &self.last_interrupt {
-                    target_id_option = Some(last_interrupt.clone());
+                    target_id_option = Some(*last_interrupt);
                 } else {
-                    return Err(format!("source for interrupted cast doesn't exist: {:?}", parts));
+                    return Err(format!("source for interrupted cast doesn't exist: {parts:?}"));
                 }
             }
 
-            let target_id = target_id_option.ok_or_else(|| format!("Failed to unwrap target_id_option"))?.clone();
+            let target_id = target_id_option.ok_or_else(|| "Failed to unwrap target_id_option".to_string())?;
             let target_index = self.eso_logs_log.unit_index(&target_id)
-                .ok_or_else(|| format!("every target id should map to a unit: {}", target_id))?;
+                .ok_or_else(|| format!("every target id should map to a unit: {target_id}"))?;
             let target = self.eso_logs_log.units.get(target_index)
-                .ok_or_else(|| format!("every target index should be a unit: {}", target_index))?;
+                .ok_or_else(|| format!("every target index should be a unit: {target_index}"))?;
             let target_allegiance = Self::allegiance_from_reaction(target.unit_type);
             let target_session_index = self.eso_logs_log.index_in_session(&target_id).unwrap_or(0);
             let source_index = self.unit_index(interrupting_unit)
-                .ok_or_else(|| format!("interrupting unit should always exist: {}", interrupting_unit))?;
+                .ok_or_else(|| format!("interrupting unit should always exist: {interrupting_unit}"))?;
             let source = self.eso_logs_log.units.get(source_index)
-                .ok_or_else(|| format!("interrupting unit should always exist: {}", source_index))?;
+                .ok_or_else(|| format!("interrupting unit should always exist: {source_index}"))?;
             let source_allegiance = Self::allegiance_from_reaction(source.unit_type);
             let instance_id = self.eso_logs_log.index_in_session(&interrupting_unit).unwrap_or(0);
             let interrupted_ability_index = self.buff_index(interrupted_ability)
-                .ok_or_else(|| format!("interrupted ability should always be something: {}", interrupted_ability))?;
+                .ok_or_else(|| format!("interrupted ability should always be something: {interrupted_ability}"))?;
             let interrupted_ability_from_table = self.eso_logs_log.buffs.get(interrupted_ability_index)
-                .ok_or_else(|| format!("index should always be at a point into buffs: {}", interrupted_ability_index))?;
+                .ok_or_else(|| format!("index should always be at a point into buffs: {interrupted_ability_index}"))?;
             let interrupting_ability_index = self.buff_index(interrupting_ability)
-                .ok_or_else(|| format!("interrupting ability should be something: {}", interrupting_ability))?;
+                .ok_or_else(|| format!("interrupting ability should be something: {interrupting_ability}"))?;
             let interrupting_ability_from_table = self.eso_logs_log.buffs.get(interrupting_ability_index)
-                .ok_or_else(|| format!("index should always be at a point into buffs: {}", interrupting_ability_index))?;
+                .ok_or_else(|| format!("index should always be at a point into buffs: {interrupting_ability_index}"))?;
 
 
             if interrupting_ability_from_table.name == interrupted_ability_from_table.name {return Err(format!("Ability {} interrupted itself", interrupted_ability_from_table.name))}
@@ -1340,13 +1341,13 @@ impl ESOLogProcessor {
 
             let buff_index = self.eso_logs_log.effects_hashmap.get(&new_cast_key);
             if let Some(index) = buff_index {
-                let buff = self.eso_logs_log.effects.get(*index).ok_or_else(|| format!("buff index {} should always point to an effect", index))?;
+                let buff = self.eso_logs_log.effects.get(*index).ok_or_else(|| format!("buff index {index} should always point to an effect"))?;
 
                 self.add_log_event(ESOLogsEvent::Interrupt(
                 ESOLogsInterrupt {
                     timestamp,
                     line_type: ESOLogsLineType::Interrupted,
-                    buff_event: buff.clone(),
+                    buff_event: *buff,
                     unit_instance_id: (instance_id, target_session_index),
                     source_allegiance,
                     target_allegiance,
@@ -1355,7 +1356,7 @@ impl ESOLogProcessor {
             }
         } else if end_reason == Some(CastEndReason::Completed) {
             let ability_cast_id = parts[3].parse::<u32>()
-                .map_err(|e| format!("Failed to parse ability_cast_id: {}", e))?;
+                .map_err(|e| format!("Failed to parse ability_cast_id: {e}"))?;
 
             if !self.eso_logs_log.cast_with_cast_time.contains(&ability_cast_id) {
                 return Ok(())
@@ -1366,38 +1367,35 @@ impl ESOLogProcessor {
                 .get(&ability_cast_id)
                 .unwrap_or(&usize::MAX);
             if *buff_index == usize::MAX {
-                return Err(format!("Completed cast buff index is none"))
+                return Err("Completed cast buff index is none".to_string())
             }
 
-            let buff = self.eso_logs_log.effects
+            let buff = *self.eso_logs_log.effects
                 .get(*buff_index)
-                .ok_or_else(|| format!("buff_index {} is out of bounds in effects", buff_index))?
-                .clone();
+                .ok_or_else(|| format!("buff_index {buff_index} is out of bounds in effects"))?;
             let caster_id_option = self.eso_logs_log.cast_id_source_unit_id.get(&ability_cast_id);
             if caster_id_option.is_none() {
-                return Err(format!("caster_id of completed cast of ability cast id {} is none", ability_cast_id))
+                return Err(format!("caster_id of completed cast of ability cast id {ability_cast_id} is none"))
             }
 
-            let caster_id = caster_id_option
-                .ok_or_else(|| format!("Failed to unwrap caster_id_option"))?
-                .clone();
+            let caster_id = *caster_id_option
+                .ok_or_else(|| "Failed to unwrap caster_id_option".to_string())?;
             let caster_index = self.eso_logs_log.unit_index(&caster_id)
-                .ok_or_else(|| format!("every target id should map to a unit: {}", caster_id))?;
+                .ok_or_else(|| format!("every target id should map to a unit: {caster_id}"))?;
             let caster = self.eso_logs_log.units
                 .get(caster_index)
-                .ok_or_else(|| format!("every target index should be a unit: {}", caster_index))?;
+                .ok_or_else(|| format!("every target index should be a unit: {caster_index}"))?;
             let caster_allegiance = Self::allegiance_from_reaction(caster.unit_type);
             let caster_session_index = self.eso_logs_log.index_in_session(&caster_id).unwrap_or(0);
-            let target_id = self.eso_logs_log.cast_id_target_unit_id
+            let target_id = *self.eso_logs_log.cast_id_target_unit_id
                 .get(&ability_cast_id)
-                .ok_or_else(|| format!("every cast id should have a target: {}", ability_cast_id))?
-                .clone();
+                .ok_or_else(|| format!("every cast id should have a target: {ability_cast_id}"))?;
             let (target_allegiance, target_session_index) = if target_id != 0 {
                 let target_index = self.eso_logs_log.unit_index(&target_id)
-                    .ok_or_else(|| format!("every target id should have an index: {}", target_id))?;
+                    .ok_or_else(|| format!("every target id should have an index: {target_id}"))?;
                 let target = self.eso_logs_log.units
                     .get(target_index)
-                    .ok_or_else(|| format!("every target index should point to a unit: {}", target_index))?;
+                    .ok_or_else(|| format!("every target index should point to a unit: {target_index}"))?;
                 let target_allegiance = Self::allegiance_from_reaction(target.unit_type);
                 let target_session_index = self.eso_logs_log.index_in_session(&target_id).unwrap_or(0);
                 (target_allegiance, target_session_index)
@@ -1412,10 +1410,10 @@ impl ESOLogProcessor {
                 ESOLogsEndCast {
                     timestamp,
                     line_type: ESOLogsLineType::Cast,
-                    buff_event: buff.clone(),
+                    buff_event: buff,
                     unit_instance_id: (caster_session_index, target_session_index),
                     source_allegiance: caster_allegiance,
-                    target_allegiance: target_allegiance
+                    target_allegiance
                 }
             ));
         }
@@ -1445,7 +1443,7 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath
 
     let input_file = File::open(&input_path)
         .map_err(|e| format!("Failed to open input file: {e}"))?;
-    let mut lines = BufReader::new(input_file).lines();
+    let lines = BufReader::new(input_file).lines();
 
     let mut elp = ESOLogProcessor::new();
     let mut custom_state = CustomLogData::new();
@@ -1453,7 +1451,7 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath
 
     let mut first_timestamp: Option<u64> = None;
     let mut current_line: usize = 0;
-    while let Some(line) = lines.next() {
+    for line in lines {
         current_line += 1;
         if current_line % LINE_COUNT_FOR_PROGRESS == 0 {
             progress_callback(((current_line as f64 / total_lines as f64) * 100.0).round() as u8);
@@ -1499,7 +1497,7 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath
             if !events.is_empty() {
                 let mut last_ts = event_timestamp(&events[events.len()-1]);
                 if last_ts.is_some() && first_timestamp.is_some() {
-                    last_ts = Some(last_ts.ok_or_else(|| format!("Failed to unwrap last_timestamp"))? + first_timestamp.ok_or_else(|| format!("Failed to unwrap first timestamp"))?);
+                    last_ts = Some(last_ts.ok_or_else(|| "Failed to unwrap last_timestamp".to_string())? + first_timestamp.ok_or_else(|| "Failed to unwrap first timestamp".to_string())?);
                 }
                 if let (Some(first), Some(last)) = (first_timestamp, last_ts) {
                     use std::io::Write;
@@ -1509,7 +1507,7 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath
                         .append(true)
                         .open(timestamps_path)
                         .map_err(|e| format!("Failed to open timestamps file: {e}"))?;
-                    writeln!(file, "{},{}", first, last)
+                    writeln!(file, "{first},{last}")
                         .map_err(|e| format!("Failed to write timestamps: {e}"))?;
                 }
             }
@@ -1523,7 +1521,7 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath
 
     let tbl_zip = output_dir
         .as_ref()
-        .join(format!("master_table.zip"));
+        .join("master_table.zip");
     let tbl_data = build_master_table(&mut elp);
     write_zip_with_logtxt(tbl_zip, tbl_data.as_bytes())?;
 
@@ -1556,7 +1554,7 @@ pub fn build_report_segment(elp: &ESOLogProcessor) -> String {
     let mut out = String::with_capacity(elp.eso_logs_log.events.len() * 64);
     let server_id = if elp.megaserver == "NA Megaserver".into() { 1 } else { 2 };
 
-    out.push_str(&format!("15|{}\n", server_id));
+    out.push_str(&format!("15|{server_id}\n"));
     out.push_str(&format!("{}\n", elp.eso_logs_log.events.len()));
 
     for e in &elp.eso_logs_log.events {
@@ -1651,7 +1649,7 @@ pub fn build_master_table(elp: &mut ESOLogProcessor) -> String {
     }
 
     let server_id = if elp.megaserver == "\"NA Megaserver\"".into() { 1 } else { 2 };
-    out.push_str(&format!("15|{}|\n", server_id));
+    out.push_str(&format!("15|{server_id}|\n"));
 
     out.push_str(&format!("{}\n", elp.eso_logs_log.units.len()));
     for u in &elp.eso_logs_log.units {

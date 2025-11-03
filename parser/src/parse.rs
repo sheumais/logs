@@ -23,7 +23,7 @@ fn parse_pair(s: &str) -> (u32, u32) {
 
 pub fn unit_state(parts: &[String], start_index: usize) -> unit::UnitState {
     if parts.len() < start_index + 10 {
-        eprintln!("Impossible unit state: {:?}", parts);
+        eprintln!("Impossible unit state: {parts:?}");
         return blank_unit_state();
     }
 
@@ -34,7 +34,7 @@ pub fn unit_state(parts: &[String], start_index: usize) -> unit::UnitState {
     ] = match slice {
         [a, b, c, d, e, f, g, h, i, j] => [a, b, c, d, e, f, g, h, i, j],
         _ => {
-            eprintln!("Invalid unit state slice: {:?}", parts);
+            eprintln!("Invalid unit state slice: {parts:?}");
             return blank_unit_state();
         }
     };
@@ -66,7 +66,7 @@ pub fn unit_state(parts: &[String], start_index: usize) -> unit::UnitState {
 
 pub fn unit_state_id_only(parts: &[String], start_index: usize) -> Option<u32> {
     if parts.len() <= start_index {
-        eprintln!("Impossible unit state: {:?}", parts);
+        eprintln!("Impossible unit state: {parts:?}");
         return None;
     }
 
@@ -148,10 +148,10 @@ pub fn object(parts: &[String]) -> Unit {
 
 pub fn gear_piece(part: &str) -> GearPiece {
     let split: Vec<&str> = part.split(',').collect();
-    if split.len() < 3 {println!("Gear piece malformed: {:?}", split); return empty_gear_piece()}
+    if split.len() < 3 {println!("Gear piece malformed: {split:?}"); return empty_gear_piece()}
     let level = split[9].parse::<u8>().unwrap_or(u8::MAX);
     let slot = player::match_gear_slot(split[0]);
-    let is_cp = split.get(8).map_or(false, |v| is_true(v));
+    let is_cp = split.get(8).is_some_and(|v| is_true(v));
     let quality = split.get(10).map(|v| player::match_gear_quality(v)).unwrap_or(player::GearQuality::None);
 
     let enchant = if is_appropriate_level(level, is_cp) {
@@ -191,7 +191,7 @@ pub fn ability(parts: &[String]) -> Ability {
         icon: parts[4]
             .trim_matches('"')
             .split('/')
-            .last()
+            .next_back()
             .unwrap()
             .replace(".dds", ".png")
             .into(),
@@ -225,8 +225,7 @@ pub fn effect(parts: &[String], ability_lookup: &HashMap<u32, Ability>) -> Effec
 }
 
 pub fn handle_line(line: &str) -> Vec<String> {
-    let mut result = Vec::new();
-    result.reserve(17);
+    let mut result = Vec::with_capacity(17);
 
     let bytes = line.as_bytes();
     let len = bytes.len();
@@ -251,9 +250,7 @@ pub fn handle_line(line: &str) -> Vec<String> {
                 bracket_level += 1;
             }
             b']' if !in_quotes => {
-                if bracket_level > 0 {
-                    bracket_level -= 1;
-                }
+                bracket_level = bracket_level.saturating_sub(1);
             }
             b',' if bracket_level == 0 && !in_quotes => {
                 if start < i {
@@ -425,7 +422,7 @@ mod tests {
         assert_eq!(gear.gear_trait, GearTrait::Nirnhoned);
         assert_eq!(gear.quality, GearQuality::Legendary);
         assert_eq!(gear.set_id, 691);
-        assert_eq!(is_mythic_set(gear.set_id), true);
+        assert!(is_mythic_set(gear.set_id));
         assert!(gear.enchant.is_some());
     }
 
@@ -541,7 +538,7 @@ mod tests {
         let gear_piece = empty_gear_piece();
         assert_eq!(gear_piece.enchant, None);
         assert_eq!(gear_piece.gear_trait, GearTrait::None);
-        assert_eq!(gear_piece.is_cp, false);
+        assert!(!gear_piece.is_cp);
         assert_eq!(gear_piece.item_id, 0);
         assert_eq!(gear_piece.level, 0);
         assert_eq!(gear_piece.quality, GearQuality::None);
@@ -564,7 +561,7 @@ mod tests {
             assert_eq!(gear.quality, GearQuality::Arcane);
             assert_eq!(gear.set_id, 640);
             assert!(gear.enchant.is_none());
-            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Medium);
+            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Medium);
         }
 
         {
@@ -598,7 +595,7 @@ mod tests {
                 enchant_level: 5,
                 enchant_quality: GearQuality::Legendary
             }));
-            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Heavy);
+            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Heavy);
         }
 
         {
@@ -610,7 +607,7 @@ mod tests {
             assert_eq!(gear.quality, GearQuality::Magic);
             assert_eq!(gear.set_id, 0);
             assert!(gear.enchant.is_none());
-            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Medium);
+            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Medium);
         }
 
         {
@@ -621,7 +618,7 @@ mod tests {
             assert_eq!(gear.gear_trait, GearTrait::Divines);
             assert_eq!(gear.quality, GearQuality::Arcane);
             assert_eq!(gear.set_id, 640);
-            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Shield);
+            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Shield);
         }
 
         {
@@ -632,7 +629,7 @@ mod tests {
             assert_eq!(gear.gear_trait, GearTrait::Divines);
             assert_eq!(gear.quality, GearQuality::Normal);
             assert_eq!(gear.set_id, 640);
-            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Light);
+            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Light);
         }
 
         {
@@ -648,7 +645,7 @@ mod tests {
                 enchant_level: 35,
                 enchant_quality: GearQuality::Magic
             }));
-            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Heavy);
+            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Heavy);
         }
 
         {
@@ -664,7 +661,7 @@ mod tests {
                 enchant_level: 35,
                 enchant_quality: GearQuality::Arcane
             }));
-            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Heavy);
+            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Heavy);
         }
 
         {
@@ -690,7 +687,7 @@ mod tests {
             assert_eq!(gear.item_id, 44904);
             assert_eq!(gear.gear_trait, GearTrait::None);
             assert_eq!(gear.quality, GearQuality::Legendary);
-            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Mara);
+            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Mara);
         }
 
         {
@@ -713,7 +710,7 @@ mod tests {
                 enchant_level: 30,
                 enchant_quality: GearQuality::Normal
             }));
-            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Light);
+            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Light);
         }
 
         {
@@ -729,7 +726,7 @@ mod tests {
                 enchant_level: 35,
                 enchant_quality: GearQuality::Artifact
             }));
-            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Dagger);
+            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Dagger);
         }
 
         {
@@ -745,7 +742,7 @@ mod tests {
                 enchant_level: 35,
                 enchant_quality: GearQuality::Arcane
             }));
-            assert_eq!(get_item_type_from_hashmap(gear.item_id.clone()), ItemType::Mace);
+            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Mace);
         }
     }
 }

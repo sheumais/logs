@@ -17,7 +17,7 @@ pub fn split_encounter_file_into_log_files(file_path: &Path) -> Result<(), Box<d
         let timestamp = parts.next();
 
         if let (Some("BEGIN_LOG"), Some(time)) = (linetype, timestamp) {
-            let out_name = format!("Split-encounter-{}.log", time);
+            let out_name = format!("Split-encounter-{time}.log");
             let out_path = file_path.parent().unwrap_or_else(|| Path::new(".")).join(out_name);
             current_writer = Some(File::create(out_path)?);
         }
@@ -39,7 +39,7 @@ pub fn combine_encounter_log_files(file_paths: &[PathBuf]) -> Result<(), Box<dyn
     let mut first_reader = BufReader::new(first_file);
     let mut first_line = String::new();
     first_reader.read_line(&mut first_line)?;
-    let start_timestamp = first_line.splitn(4, ',').nth(2)
+    let start_timestamp = first_line.split(',').nth(2)
         .ok_or("Malformed BEGIN_LOG line in first file")?
         .trim();
 
@@ -47,11 +47,11 @@ pub fn combine_encounter_log_files(file_paths: &[PathBuf]) -> Result<(), Box<dyn
     let mut last_reader = BufReader::new(last_file);
     let mut last_line = String::new();
     last_reader.read_line(&mut last_line)?;
-    let end_timestamp = last_line.splitn(4, ',').nth(2)
+    let end_timestamp = last_line.split(',').nth(2)
         .ok_or("Malformed BEGIN_LOG line in last file")?
         .trim();
 
-    let out_name = format!("Combined-encounter-{}-{}.log", start_timestamp, end_timestamp);
+    let out_name = format!("Combined-encounter-{start_timestamp}-{end_timestamp}.log");
     let out_path = Path::new(&out_name);
     let mut out_file = File::create(out_path)?;
 

@@ -49,8 +49,8 @@ pub fn login_component() -> Html {
 
 #[function_component(LoginScreen)]
 pub fn login_screen() -> Html {
-    let username = use_state(|| String::new());
-    let password = use_state(|| String::new());
+    let username = use_state(String::new);
+    let password = use_state(String::new);
     let logging_in = use_state(|| false);
     let error = use_state(|| None as Option<String>);
 
@@ -86,12 +86,11 @@ pub fn login_screen() -> Html {
             let logging_in = logging_in.clone();
             let error = error.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                if *logging_in == true {
-                    return;
-                } else if *username == "" || *password == "" {
+                if *logging_in {
+                } else if (*username).is_empty() || (*password).is_empty() {
                     error.set(Some("Email and password cannot be empty".to_string()));
                     return;
-                } {
+                } else {
                     logging_in.set(true);
                     error.set(None);
                     match invoke_result::<LoginResponse, String>(

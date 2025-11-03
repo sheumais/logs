@@ -30,43 +30,7 @@ pub fn get_set_name(id: u16) -> Option<&'static str> {
 }
 
 pub fn is_mythic_set(id: u16) -> bool {
-    match id {
-        501 => true,
-        503 => true,
-        505 => true,
-        519 => true,
-        520 => true,
-        521 => true,
-        575 => true,
-        576 => true,
-        593 => true,
-        594 => true,
-        596 => true,
-        597 => true,
-        625 => true,
-        626 => true,
-        627 => true,
-        654 => true,
-        655 => true,
-        656 => true,
-        657 => true,
-        658 => true,
-        674 => true,
-        675 => true,
-        676 => true,
-        691 => true,
-        692 => true,
-        693 => true,
-        694 => true,
-        760 => true,
-        761 => true,
-        762 => true,
-        811 => true,
-        812 => true,
-        813 => true,
-        845 => true,
-        _ => false,
-    }
+    matches!(id, 501 | 503 | 505 | 519 | 520 | 521 | 575 | 576 | 593 | 594 | 596 | 597 | 625 | 626 | 627 | 654 | 655 | 656 | 657 | 658 | 674 | 675 | 676 | 691 | 692 | 693 | 694 | 760 | 761 | 762 | 811 | 812 | 813 | 845)
 }
 
 
@@ -113,7 +77,7 @@ pub enum ItemType {
 }
 
 pub fn get_item_type_from_hashmap(id: u32) -> ItemType {
-    match ITEM_TYPES.get(&id).map(|s| *s) {
+    match ITEM_TYPES.get(&id).copied() {
         Some("AXE") => ItemType::Axe,
         Some("DAGGER") => ItemType::Dagger,
         Some("MACE") => ItemType::Mace,
@@ -159,22 +123,13 @@ pub fn get_item_type_name(item_type: ItemType) -> &'static str {
 }
 
 pub fn is_weapon_slot(slot: &GearSlot) -> bool {
-    match slot {
-        GearSlot::MainHand | GearSlot::MainHandBackup | GearSlot::OffHand | GearSlot::OffHandBackup => true,
-        _ => false
-    }
+    matches!(slot, GearSlot::MainHand | GearSlot::MainHandBackup | GearSlot::OffHand | GearSlot::OffHandBackup)
 }
 
 pub fn is_armour_slot(slot: &GearSlot) -> bool {
-    match slot {
-        GearSlot::Chest | GearSlot::Head | GearSlot::Shoulders | GearSlot::Hands | GearSlot::Waist | GearSlot::Legs | GearSlot::Feet => true,
-        _ => false
-    }
+    matches!(slot, GearSlot::Chest | GearSlot::Head | GearSlot::Shoulders | GearSlot::Hands | GearSlot::Waist | GearSlot::Legs | GearSlot::Feet)
 }
 
 pub fn is_jewellery_slot(slot: &GearSlot) -> bool {
-    match slot {
-        GearSlot::Necklace | GearSlot::Ring1 | GearSlot::Ring2 => true,
-        _ => false
-    }
+    matches!(slot, GearSlot::Necklace | GearSlot::Ring1 | GearSlot::Ring2)
 }

@@ -1186,7 +1186,7 @@ async fn check_for_update(app: tauri::AppHandle) -> tauri_plugin_updater::Result
                             *l = Some(update_information.clone());
                         },
                         Err(e) => {
-                            log::error!("Failed download: {}", e);
+                            log::error!("Failed download: {e}");
                         }
                     }
                 };

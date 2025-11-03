@@ -281,24 +281,11 @@ pub fn parse_event_result(event_result: &str) -> Option<EventResult> {
 }
 
 pub fn is_damage_event(event_result: EventResult) -> bool {
-    match event_result {
-        EventResult::Damage => true,
-        EventResult::BlockedDamage => true,
-        EventResult::CriticalDamage => true,
-        EventResult::DotTick => true,
-        EventResult::DotTickCritical => true,
-        _ => false,
-    }
+    matches!(event_result, EventResult::Damage | EventResult::BlockedDamage | EventResult::CriticalDamage | EventResult::DotTick | EventResult::DotTickCritical)
 }
 
 pub fn is_heal_event(event_result: EventResult) -> bool {
-    match event_result {
-        EventResult::Heal => true,
-        EventResult::HotTick => true,
-        EventResult::HotTickCritical => true,
-        EventResult::CriticalHeal => true,
-        _ => false,
-    }
+    matches!(event_result, EventResult::Heal | EventResult::HotTick | EventResult::HotTickCritical | EventResult::CriticalHeal)
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]

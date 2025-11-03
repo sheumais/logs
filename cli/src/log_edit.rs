@@ -22,6 +22,12 @@ pub struct CustomLogData {
     pub last_combat_event_timestamp: u64,
 }
 
+impl Default for CustomLogData {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CustomLogData {
     pub fn new() -> Self {
         Self {
@@ -76,7 +82,7 @@ pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
         let line = match line_result {
             Ok(l) => l,
             Err(e) => {
-                log::warn!("Error reading line: {}", e);
+                log::warn!("Error reading line: {e}");
                 continue;
             }
         };
@@ -100,8 +106,8 @@ pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
     let mut writer = BufWriter::new(file);
 
     for line in &modified_lines {
-        writeln!(writer, "{}", line)
-            .map_err(|e| format!("Failed to write line: {}", e))?;
+        writeln!(writer, "{line}")
+            .map_err(|e| format!("Failed to write line: {e}"))?;
     }
     Ok(())
 }
@@ -155,19 +161,19 @@ fn check_line_for_edits(parts: &[String], custom_log_data: &mut CustomLogData) -
     }
 }
 
-const PRAGMATIC: &'static u32 = &186369;
-const EXHAUSTING: &'static u32 = &186780;
+const PRAGMATIC: &u32 = &186369;
+const EXHAUSTING: &u32 = &186780;
 
 fn check_effect_changed(parts: &[String], zen_hashmap: &mut HashMap<u32, ZenDebuffState>) -> Option<Vec<String>> {
     if parts.len() < 17 {
         return None;
     }
     match &parts[5] {
-        id if *id == PRAGMATIC.to_string() => return add_arcanist_beam_cast(parts),
-        id if *id == EXHAUSTING.to_string() => return add_arcanist_beam_cast(parts),
-        id if *id == ZEN_DEBUFF_ID.to_string() => return add_zen_stacks(parts, zen_hashmap),
-        id if is_zen_dot(id.parse::<u32>().unwrap_or(0)) => return add_zen_stacks(parts, zen_hashmap),
-        _ => return None,
+        id if *id == PRAGMATIC.to_string() => add_arcanist_beam_cast(parts),
+        id if *id == EXHAUSTING.to_string() => add_arcanist_beam_cast(parts),
+        id if *id == ZEN_DEBUFF_ID.to_string() => add_zen_stacks(parts, zen_hashmap),
+        id if is_zen_dot(id.parse::<u32>().unwrap_or(0)) => add_zen_stacks(parts, zen_hashmap),
+        _ => None,
     }
 }
 
@@ -175,18 +181,13 @@ const MAX_ZEN_STACKS: u8 = 5;
 
 fn add_zen_stacks(parts: &[String], zen_status: &mut HashMap<u32, ZenDebuffState>) -> Option<Vec<String>> {
     let is_zen_debuff = parts[5] == ZEN_DEBUFF_ID.to_string();
-    let source_unit_state = unit_state_id_only(&parts, 6);
-    let source_unit_id = match source_unit_state {
-        Some(val) => val,
-        None => return None,
-    };
+    let source_unit_state = unit_state_id_only(parts, 6);
+    let source_unit_id = source_unit_state?;
     let target_unit_id = if parts[16] == "*" {
-        source_unit_id.clone()
+        source_unit_id
     } else {
-        let t = unit_state_id_only(&parts, 16);
-        if t == None {
-            return None;
-        }
+        let t = unit_state_id_only(parts, 16);
+        t?;
         t.unwrap()
     };
 
@@ -196,7 +197,7 @@ fn add_zen_stacks(parts: &[String], zen_status: &mut HashMap<u32, ZenDebuffState
         contributing_ability_ids: Vec::new(),
     });
 
-    if !is_zen_debuff && !(source_unit_id == entry.source_id || source_unit_id == target_unit_id) {
+    if !(is_zen_debuff || source_unit_id == entry.source_id || source_unit_id == target_unit_id) {
         return None
     }
 
@@ -225,7 +226,7 @@ fn add_zen_stacks(parts: &[String], zen_status: &mut HashMap<u32, ZenDebuffState
         let stacks = entry.contributing_ability_ids.len().min(MAX_ZEN_STACKS as usize);
         let mut line = format!(
             "{},{},{},{},{},{},",
-            parts[0], parts[1], parts[2], stacks, parts[4], ZEN_DEBUFF_ID.to_string()
+            parts[0], parts[1], parts[2], stacks, parts[4], ZEN_DEBUFF_ID
         );
         let rest = parts[6..].join(",");
         line.push_str(&rest);
@@ -239,7 +240,7 @@ fn add_zen_stacks(parts: &[String], zen_status: &mut HashMap<u32, ZenDebuffState
                         let stacks = entry.contributing_ability_ids.len().min(MAX_ZEN_STACKS as usize);
                         let mut line = format!(
                             "{},{},{},{},{},{},",
-                            parts[0], parts[1], "UPDATED", stacks, parts[4], ZEN_DEBUFF_ID.to_string()
+                            parts[0], parts[1], "UPDATED", stacks, parts[4], ZEN_DEBUFF_ID
                         );
                         let rest = parts[6..].join(",");
                         line.push_str(&rest);
@@ -254,7 +255,7 @@ fn add_zen_stacks(parts: &[String], zen_status: &mut HashMap<u32, ZenDebuffState
                         let stacks = entry.contributing_ability_ids.len().min(MAX_ZEN_STACKS as usize);
                         let mut line = format!(
                             "{},{},{},{},{},{},",
-                            parts[0], parts[1], "UPDATED", stacks, parts[4], ZEN_DEBUFF_ID.to_string()
+                            parts[0], parts[1], "UPDATED", stacks, parts[4], ZEN_DEBUFF_ID
                         );
                         let rest = parts[6..].join(",");
                         line.push_str(&rest);
@@ -285,7 +286,7 @@ fn add_arcanist_beam_cast(parts: &[String]) -> Option<Vec<String>> {
             return Some(vec![format!("{},{},{},{},{}", parts[0], "END_CAST", "COMPLETED", parts[4], parts[5])]);
         }
     }
-    return None;
+    None
 }
 
 fn check_ability_info(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
@@ -324,12 +325,12 @@ fn check_ability_info(parts: &[String], custom_log_data: &mut CustomLogData) -> 
         let signature_script = &scribing_ability.scribing.as_ref().unwrap()[1];
         let affix_script = &scribing_ability.scribing.as_ref().unwrap()[2];
         let new_name = format!("{} ({} / {})", &scribing_ability.name, signature_script, affix_script);
-        return Some(vec![
+        Some(vec![
             format!("{},{},{},\"{}\",\"{}\",{},{},\"{}\",\"{}\",\"{}\"",
                 parts[0], "ABILITY_INFO", scribing_ability.id, new_name, scribing_ability.icon, "F", "T", focus_script, signature_script, affix_script),
             format!("{},{},{},\"{}\",\"{}\",{},{},\"{}\",\"{}\",\"{}\"",
                 parts[0], "ABILITY_INFO", ability_id_clone, ability_name_clone, scribing_ability.icon, "F", "T", focus_script, signature_script, affix_script)
-        ]);
+        ])
     } else if parts[2] == PRAGMATIC.to_string() || parts[2] == EXHAUSTING.to_string() {
         add_arcanist_beam_information(parts)
     } else if parts[2].parse::<u32>().ok() == Some(BLOCKADE_DEFAULT) {
@@ -348,7 +349,7 @@ fn add_arcanist_beam_information(parts: &[String]) -> Option<Vec<String>> {
         lines.push(format!("{},{},{},{},{},{},{}", parts[0], parts[1], EXHAUSTING, parts[3], "\"/esoui/art/icons/ability_arcanist_002_a.dds\"", "F", "T"));
         return Some(lines);
     }
-    return None;
+    None
 }
 
 fn add_arcanist_beam_effect_information(parts: &[String]) -> Option<Vec<String>> {
@@ -360,7 +361,7 @@ fn add_arcanist_beam_effect_information(parts: &[String]) -> Option<Vec<String>>
         lines.push(format!("{},{},{},{},{},{}", parts[0], "EFFECT_INFO", EXHAUSTING, "BUFF", "NONE", "NEVER"));
         return Some(lines);
     }
-    return None;
+    None
 }
 
 const BLOCKADE_FIRE: u32 = 39012;
@@ -380,7 +381,7 @@ fn add_blockade_versions(parts: &[String]) -> Option<Vec<String>> {
     lines.push(format!("{},{},{},\"{}\",\"{}\",{},{}", parts[0], "ABILITY_INFO", BLOCKADE_FIRE, "Blockade of Fire", "/esoui/art/icons/ability_destructionstaff_004_b.dds", "F", "T"));
     lines.push(format!("{},{},{},\"{}\",\"{}\",{},{}", parts[0], "ABILITY_INFO", BLOCKADE_STORMS, "Blockade of Storms", "/esoui/art/icons/ability_destructionstaff_003_b.dds", "F", "T"));
     lines.push(format!("{},{},{},\"{}\",\"{}\",{},{}", parts[0], "ABILITY_INFO", BLOCKADE_FROST, "Blockade of Frost", "/esoui/art/icons/ability_destructionstaff_002b.dds", "F", "T"));
-    return Some(lines);
+    Some(lines)
 }
 
 fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
@@ -410,7 +411,7 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
         //         gear_str.replace_range(pos..pos + "LEGENDARY".len(), "MYTHIC_OVERRIDE");
         //     }
         // }
-        processed_gear.push(format!("[{}]", gear_str));
+        processed_gear.push(format!("[{gear_str}]"));
         let item_slot = gear_piece.slot;
         let item_type = get_item_type_from_hashmap(gear_piece.item_id);
         if item_slot == GearSlot::MainHand {
@@ -421,14 +422,12 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
     }
 
     if cryptcanon {
-        if primary_ability_id_list.contains(&195031) || backup_ability_id_list.contains(&195031) {cryptcanon = false} else {
-            if primary_ability_id_list.len() == 6 && backup_ability_id_list.len() == 6 {
-                if let Some(last) = primary_ability_id_list.last_mut() {
-                    *last = 195031;
-                }
-                if let Some(last) = backup_ability_id_list.last_mut() {
-                    *last = 195031;
-                }
+        if primary_ability_id_list.contains(&195031) || backup_ability_id_list.contains(&195031) {cryptcanon = false} else if primary_ability_id_list.len() == 6 && backup_ability_id_list.len() == 6 {
+            if let Some(last) = primary_ability_id_list.last_mut() {
+                *last = 195031;
+            }
+            if let Some(last) = backup_ability_id_list.last_mut() {
+                *last = 195031;
             }
         }
     }
@@ -518,8 +517,8 @@ fn modify_combat_event(parts: &[String], custom_log_data: &mut CustomLogData) ->
 
     match ability_id {
         id if id == *MOULDERING_TAINT_ID => {
-            let source = parse::unit_state(&parts, 9);
-            let target = parse::unit_state(&parts, 19);
+            let source = parse::unit_state(parts, 9);
+            let target = parse::unit_state(parts, 19);
             let cast_track_id = parts[7].parse::<u32>().unwrap();
 
             let entry = custom_log_data.taint_stacks.entry(target.unit_id)
@@ -563,8 +562,8 @@ fn modify_combat_event(parts: &[String], custom_log_data: &mut CustomLogData) ->
             }
 
             for (id, entry) in custom_log_data.taint_stacks.iter_mut() {
-                if parts[19] != "*" && parse::unit_state_id_only(&parts, 19) == Some(*id) {
-                    let target = parse::unit_state(&parts, 19);
+                if parts[19] != "*" && parse::unit_state_id_only(parts, 19) == Some(*id) {
+                    let target = parse::unit_state(parts, 19);
                     if (time > entry.last_timestamp + mo_taint_time || (event::parse_event_result(&parts[2]).unwrap() == EventResult::Died || target.health == 0)) && entry.stacks > 0 {
                         entry.last_timestamp = time;
                         entry.stacks = 0;
@@ -576,7 +575,7 @@ fn modify_combat_event(parts: &[String], custom_log_data: &mut CustomLogData) ->
                         );
                         let rest = parts[19..].join(",");
                         line.push_str(&rest);
-                        removed.push(id.clone());
+                        removed.push(*id);
                         return Some(vec![line]);
                     }
                 }
@@ -591,7 +590,7 @@ fn modify_combat_event(parts: &[String], custom_log_data: &mut CustomLogData) ->
                         e.unit_id, e.health, e.max_health, e.magicka, e.max_magicka, e.stamina, e.max_stamina, e.ultimate, e.max_ultimate, e.werewolf, e.werewolf_max, e.shield, e.map_x, e.map_y, e.heading,
                         t.unit_id, "0", t.max_health, "0", "0", "0", "0", "0", "0", "0", "0", "0", t.map_x, t.map_y, t.heading
                     );
-                    removed.push(id.clone());
+                    removed.push(*id);
                     return Some(vec![line]);
                 }
             }

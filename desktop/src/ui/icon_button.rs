@@ -41,7 +41,7 @@ pub fn icon_button(props: &IconButtonProps) -> Html {
                 width={props.width.clone()}
                 height={props.height.clone()}
                 class={props.class.clone()}
-                icon_id={props.icon_id.clone()}
+                icon_id={props.icon_id}
                 onclick={props.onclick.clone()}
             />
             <div class={if *hovered {

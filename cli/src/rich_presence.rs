@@ -60,9 +60,7 @@ pub fn rich_presence_thread() {
             custom_path
         } else {
             log::warn!(
-                "Configured path {:?} does not exist, falling back to default {:?}",
-                custom_path,
-                default_path
+                "Configured path {custom_path:?} does not exist, falling back to default {default_path:?}"
             );
             default_path
         }
@@ -111,10 +109,7 @@ pub fn rich_presence_thread() {
     let mut client = DiscordIpcClient::new(CLIENT_ID);
 
     let e = client.connect();
-    match e {
-        Err(e) => {log::error!("Discord Rich Presence failed to connect: {:?}", e); log::info!("This will occur if Discord is in administrator mode, and ESO Log Tool is not. That may or may not be the cause here."); panic!()},
-        Ok(_) => {},
-    }
+    if let Err(e) = e {log::error!("Discord Rich Presence failed to connect: {e:?}"); log::info!("This will occur if Discord is in administrator mode, and ESO Log Tool is not. That may or may not be the cause here."); panic!()}
 
     loop {
         if input_file
@@ -138,7 +133,7 @@ pub fn rich_presence_thread() {
             let text = String::from_utf8_lossy(&buffer[..=last_nl]);
 
             for line in text.lines() {
-                let parts: Vec<String> = parser::parse::handle_line(&line);
+                let parts: Vec<String> = parser::parse::handle_line(line);
 
                 if parts.len() < 2 {
                     continue;
@@ -189,20 +184,20 @@ pub fn rich_presence_thread() {
         }
         let zone_name = rich_presence.zone_name.clone().unwrap_or_else(|| "Unknown Zone".to_string());
         // let map_name = rich_presence.map_name.clone();
-        let zone_difficulty = rich_presence.zone_difficulty.clone().unwrap_or_else(|| ZoneDifficulty::None);
+        let zone_difficulty = rich_presence.zone_difficulty.clone().unwrap_or(ZoneDifficulty::None);
 
         let time = match (rich_presence.timestamp_begin_log, rich_presence.timestamp_latest_map) {
             (Some(begin), Some(map_offset)) => Some(((begin + map_offset) / 1000) as i64),
             (Some(begin), None) => Some((begin / 1000) as i64),
             _ => None,
         };
-        log::debug!("timestamp: {:?}", time);
+        log::debug!("timestamp: {time:?}");
 
         // let is_trial = is_trial(zone_id);
 
         let large_icon = &zone_icon.unwrap_or(FALLBACK_IMAGE.to_string());
         let activity_assets = Assets::new()
-            .large_image(&large_icon)
+            .large_image(large_icon)
             .large_text(&zone_name);
 
         let difficulty_text = match zone_difficulty {
@@ -211,7 +206,7 @@ pub fn rich_presence_thread() {
             ZoneDifficulty::Veteran => "Veteran ",
             ZoneDifficulty::Hardmode => "Hardmode ",
         };
-        let details_text = format!("{}{}", difficulty_text, zone_name);
+        let details_text = format!("{difficulty_text}{zone_name}");
 
         let mut activity = activity::Activity::new()
             .details(&details_text)
@@ -233,7 +228,7 @@ pub fn rich_presence_thread() {
         }
 
         let e = client.set_activity(activity);
-        log::debug!("{:?}", e);
+        log::debug!("{e:?}");
         
     }
 }

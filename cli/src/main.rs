@@ -17,7 +17,7 @@ fn main() {
         .init();
     match result {
         Ok(_) => log::info!("Logging initialised"),
-        Err(e) => println!("Error initialising logging: {}", e),
+        Err(e) => println!("Error initialising logging: {e}"),
     }
 
     let args: Vec<String> = env::args().collect();
@@ -29,25 +29,25 @@ fn main() {
         }
         "modify" => {
             if let Err(e) = modify_log_file(Path::new(file_path)) {
-                log::error!("Error modifying log file: {}", e);
+                log::error!("Error modifying log file: {e}");
             }
         }
         "split" => {
             if let Err(e) = split_encounter_file_into_log_files(Path::new(file_path)) {
-                log::error!("Error splitting log file: {}", e);
+                log::error!("Error splitting log file: {e}");
             }
         }
         "esolog" => {
             let mut eso_log_processor = ESOLogProcessor::new();
             if let Err(e) = eso_log_processor.convert_log_file_to_esolog_format(Path::new(file_path)) {
-                log::error!("Error splitting log file: {}", e);
+                log::error!("Error splitting log file: {e}");
             }
 
             if let Ok(file) = File::create("C:/Users/H/Downloads/master_table.txt") {
                 let mut writer = BufWriter::new(file);
                 let master_table = build_master_table(&mut eso_log_processor);
                 if let Err(e) = write!(writer, "{master_table}") {
-                    log::error!("Error writing master_table: {}", e);
+                    log::error!("Error writing master_table: {e}");
                 }
             } else {
                 log::error!("Error creating output file: master_table.txt");
@@ -60,17 +60,16 @@ fn main() {
 
                 for line in &eso_log_processor.eso_logs_log.events {
                     if let Err(e) = writeln!(writer, "{line}") {
-                        log::warn!("Error writing events: {}", e);
+                        log::warn!("Error writing events: {e}");
                         break;
                     }
                 }
 
                 if let Err(e) = writer.flush() {
-                    log::warn!("Error flushing writer: {}", e);
+                    log::warn!("Error flushing writer: {e}");
                 }
             } else {
                 log::error!("Error creating output file: report_segments.txt");
-                return;
             }
         }
         "esologzip" => {
@@ -82,7 +81,7 @@ fn main() {
             let mut eso_log_processor = ESOLogProcessor::new();
 
             if let Err(e) = eso_log_processor.convert_log_file_to_esolog_format(Path::new(file_path)) {
-                log::error!("Error converting log file: {}", e);
+                log::error!("Error converting log file: {e}");
                 return;
             }
 
@@ -127,8 +126,8 @@ fn main() {
 
             for event in &eso_log_processor.eso_logs_log.events {
                 if let ESOLogsEvent::CastLine(cast_line) = event {
-                    if matches!(cast_line.line_type, ESOLogsLineType::Damage | ESOLogsLineType::DotTick) {
-                        if cast_line.cast.source_allegiance == 16 && cast_line.cast.target_allegiance == 64 {
+                    if matches!(cast_line.line_type, ESOLogsLineType::Damage | ESOLogsLineType::DotTick)
+                        && cast_line.cast.source_allegiance == 16 && cast_line.cast.target_allegiance == 64 {
                             if let Some(cast_info) = &cast_line.cast_information {
                                 if cast_info.hit_value > 0 {
                                     let cast_id = cast_line.cast.cast_id_origin;
@@ -139,7 +138,6 @@ fn main() {
                                 }
                             }
                         }
-                    }
                 }
             }
 
@@ -196,8 +194,8 @@ fn main() {
                 .filter_map(|line| line.split(',').next())
                 .collect();
             let id_list = ids.join(",");
-            let sql = format!("ability.id IN ({})", id_list);
-            log::info!("{}", sql);
+            let sql = format!("ability.id IN ({id_list})");
+            log::info!("{sql}");
         }
         "parentzones" => {
             parser::zone::print_parent_zones();

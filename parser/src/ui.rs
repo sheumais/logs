@@ -133,33 +133,32 @@ pub fn print_colour_test() {
     println!("Gear Quality Colours:");
     for gear_quality in gear_qualities.iter() {
         let colour = Colour::from_gear_quality(*gear_quality);
-        let colour_name = format!("{:?}", gear_quality);
+        let colour_name = format!("{gear_quality:?}");
         let output = foreground_rgb(&colour_name, colour);
-        println!("{}", output);
+        println!("{output}");
     }
 
     println!("\nDamage Type Colours:");
     for damage_type in damage_types.iter() {
         let colour = Colour::from_damage_type(*damage_type);
-        let colour_name = format!("{:?}", damage_type);
+        let colour_name = format!("{damage_type:?}");
         let output = foreground_rgb(&colour_name, colour);
-        println!("{}", output);
+        println!("{output}");
     }
 
     println!("\nClass Colours:");
     for class_id in class_ids.iter() {
         let colour = Colour::from_class_id(*class_id);
-        let colour_name = format!("{:?}", class_id);
+        let colour_name = format!("{class_id:?}");
         let output = foreground_rgb(&colour_name, colour);
-        println!("{}", output);
+        println!("{output}");
     }
 }
 
 
 impl fmt::Display for Loadout {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let gear_pieces = vec![
-            &self.head,
+        let gear_pieces = [&self.head,
             &self.shoulders,
             &self.chest,
             &self.hands,
@@ -174,8 +173,7 @@ impl fmt::Display for Loadout {
             &self.poison,
             &self.main_hand_backup,
             &self.off_hand_backup,
-            &self.backup_poison,
-        ];
+            &self.backup_poison];
 
         let gear_list: Vec<String> = gear_pieces
             .iter()
@@ -184,7 +182,7 @@ impl fmt::Display for Loadout {
             .collect();
 
         let result = gear_list.join("\n");
-        write!(f, "{}", result)
+        write!(f, "{result}")
     }
 }
 
@@ -196,16 +194,16 @@ impl fmt::Display for GearPiece {
         if set::is_mythic_set(self.set_id) {colour = Colour::from_tuple(Colour::MYTHIC);}
         let set_name = set::get_set_name(self.set_id);
 
-        let mut display_text = format!("");
+        let mut display_text = String::new();
 
         display_text.push_str(&format!("{:?} ", self.slot));
 
         if !player::is_maximum_item_level(self.level, self.is_cp) {
-            display_text.push_str(&format!("{}{:?} ", cp_string, level));
+            display_text.push_str(&format!("{cp_string}{level:?} "));
         }
 
         if let Some(name) = set_name {
-            display_text.push_str(&format!("{} ", name));
+            display_text.push_str(&format!("{name} "));
         }
 
         if set::get_item_type_from_hashmap(self.item_id) != crate::set::ItemType::Unknown {
@@ -219,14 +217,14 @@ impl fmt::Display for GearPiece {
         if self.enchant.is_some() {
             let enchant_unwrapped = self.enchant.clone().unwrap();
             if enchant_unwrapped.enchant_type != EnchantType::Invalid {
-                display_text.push_str(&format!("{} ", enchant_unwrapped));
+                display_text.push_str(&format!("{enchant_unwrapped} "));
             }
         }
 
         // display_text.push_str(&format!("({})", self.item_id));
 
         let colored_text = foreground_rgb(&display_text, colour);
-        write!(f, "{}", colored_text)
+        write!(f, "{colored_text}")
     }
 }
 
@@ -242,10 +240,10 @@ impl fmt::Display for GearEnchant {
         );
 
         if !player::is_maximum_item_level(self.enchant_level, self.is_cp) {
-            display_text.push_str(&format!(" {}{:?}", cp_string, level));
+            display_text.push_str(&format!(" {cp_string}{level:?}"));
         }
 
         let colored_text = foreground_rgb(&display_text, color);
-        write!(f, "{}", colored_text)
+        write!(f, "{colored_text}")
     }
 }
