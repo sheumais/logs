@@ -187,13 +187,14 @@ pub fn ability(parts: &[String]) -> Ability {
     let id: u32 = parts[2].parse().unwrap();
     Ability {
         id,
-        name: parts[3].trim_matches('"').to_string(),
+        name: parts[3].trim_matches('"').into(),
         icon: parts[4]
             .trim_matches('"')
             .split('/')
             .last()
             .unwrap()
-            .replace(".dds", ".png"),
+            .replace(".dds", ".png")
+            .into(),
         interruptible: is_true(&parts[5]),
         blockable: is_true(&parts[6]),
         scribing: if parts.len() == 10 {
@@ -437,8 +438,8 @@ mod tests {
 
         let ability = ability(&parts);
         assert_eq!(ability.id, 183430);
-        assert_eq!(ability.name, "Runic Sunder");
-        assert_eq!(ability.icon, "ability_arcanist_007_a.png");
+        assert_eq!(ability.name, "Runic Sunder".into());
+        assert_eq!(ability.icon, "ability_arcanist_007_a.png".into());
         assert!(!ability.interruptible);
         assert!(ability.blockable);
         assert!(ability.scribing.is_none());
@@ -454,8 +455,8 @@ mod tests {
 
         let ability = ability(&parts);
         assert_eq!(ability.id, 217784);
-        assert_eq!(ability.name, "Leashing Soul");
-        assert_eq!(ability.icon, "ability_grimoire_soulmagic1.png");
+        assert_eq!(ability.name, "Leashing Soul".into());
+        assert_eq!(ability.icon, "ability_grimoire_soulmagic1.png".into());
         assert!(!ability.interruptible);
         assert!(ability.blockable);
         assert_eq!(ability.scribing.unwrap(), vec!["Pull", "Druid's Resurgence", "Cowardice"]);
@@ -466,8 +467,8 @@ mod tests {
         let mut abilities = HashMap::new();
         abilities.insert(85843, Ability {
             id: 85843,
-            name: "Harvest".to_string(),
-            icon: "ability_warden_007.png".to_string(),
+            name: "Harvest".into(),
+            icon: "ability_warden_007.png".into(),
             interruptible: false,
             blockable: true,
             scribing: None,

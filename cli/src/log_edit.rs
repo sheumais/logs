@@ -3,6 +3,7 @@ use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Write, BufRead};
 use std::path::Path;
+use std::sync::Arc;
 use parser::effect::{is_zen_dot, MOULDERING_TAINT_ID, MOULDERING_TAINT_TIME, ZEN_DEBUFF_ID};
 use parser::event::{self, parse_event_result, EventResult};
 use parser::parse::{self, gear_piece, unit_state_id_only};
@@ -15,9 +16,9 @@ pub struct CustomLogData {
     pub zen_stacks: HashMap<u32, ZenDebuffState>,
     pub scribing_abilities: Vec<ScribingAbility>,
     pub scribing_map: HashMap<u32, usize>,
-    pub scribing_unit_map: HashMap<(String, u32), usize>,
+    pub scribing_unit_map: HashMap<(Arc<str>, u32), usize>,
     pub taint_stacks: HashMap<u32, MoulderingTaintState>,
-    pub units: HashMap<u32, String>,
+    pub units: HashMap<u32, Arc<str>>,
     pub last_combat_event_timestamp: u64,
 }
 
@@ -59,8 +60,8 @@ const BEGIN_SCRIBING_ABILITIES: u32 = 1000;
 #[derive(Debug, Clone)]
 pub struct ScribingAbility {
     pub id: u32,
-    pub name: String,
-    pub icon: String,
+    pub name: Arc<str>,
+    pub icon: Arc<str>,
     pub scribing: Option<Vec<String>>,
 }
 
@@ -433,7 +434,7 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
     }
 
     let player_id = parts[2].parse::<u32>().unwrap();
-    let player_name = custom_log_data.units.get(&player_id).cloned().unwrap_or_else(|| player_id.to_string());
+    let player_name = custom_log_data.units.get(&player_id).cloned().unwrap_or_else(|| player_id.to_string().into());
 
     for id in &mut primary_ability_id_list {
         if matches!(*id, BLOCKADE_DEFAULT | BLOCKADE_FIRE | BLOCKADE_FROST | BLOCKADE_STORMS) {
@@ -608,9 +609,10 @@ fn handle_unit_added(parts: &[String], custom_log_data: &mut CustomLogData) -> O
         match event {
             UnitAddedEventType::Player => {
                 let player = parse::player(parts);
-                if player.name == "Offline" || player.name.len() < 3 {return None;}
-                custom_log_data.units.insert(player.unit_id, player.name.clone());
-                custom_log_data.units.insert(player.player_per_session_id, player.name);
+                let name: Arc<str> = player.name.into();
+                if name == "Offline".into() || name.len() < 3 {return None;}
+                custom_log_data.units.insert(player.unit_id, name.clone());
+                custom_log_data.units.insert(player.player_per_session_id, name);
             },
             UnitAddedEventType::Monster => {
                 // let monster = parse::monster(parts);

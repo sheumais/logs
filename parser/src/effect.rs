@@ -1,11 +1,13 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 use crate::unit::UnitState;
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Ability {
     pub id: u32,
-    pub name: String,
-    pub icon: String,
+    pub name: Arc<str>,
+    pub icon: Arc<str>,
     pub interruptible: bool,
     pub blockable: bool,
     pub scribing: Option<Vec<String>>

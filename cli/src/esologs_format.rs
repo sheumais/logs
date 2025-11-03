@@ -1,7 +1,7 @@
-use std::{collections::{HashMap, HashSet}, fmt::{self, Display}, hash::Hash};
+use std::{collections::{HashMap, HashSet}, fmt::{self, Display}, hash::Hash, sync::Arc};
 use parser::{effect::StatusEffectType, event::DamageType, player::Race, unit::{blank_unit_state, Reaction, UnitState}};
 
-pub const ESO_LOGS_COM_VERSION: &'static str = "8.17.71";
+pub const ESO_LOGS_COM_VERSION: &'static str = "8.17.85";
 pub const ESO_LOGS_PARSER_VERSION: &'static u8 = &11;
 pub const LINE_COUNT_FOR_PROGRESS: usize = 25000usize;
 
@@ -14,7 +14,7 @@ pub struct ESOLogsLog {
     pub unit_id_to_units_index: HashMap<u32, usize>,
     pub fight_units: HashMap<usize, Vec<u32>>,
     pub unit_index_during_fight: HashMap<u32, usize>,
-    pub objects: HashMap<String, u32>,
+    pub objects: HashMap<Arc<str>, u32>,
     pub players: HashMap<u32, bool>,
     pub bosses: HashMap<u32, bool>,
     pub buffs: Vec<ESOLogsBuff>,
@@ -196,7 +196,7 @@ impl ESOLogsLog {
         res
     }
 
-    pub fn object_index(&self, object_id: String) -> Option<usize> {
+    pub fn object_index(&self, object_id: Arc<str>) -> Option<usize> {
         if let Some(session_id) = self.objects.get(&object_id) {
             let res = self.session_id_to_units_index.get(session_id).copied();
             res
@@ -214,13 +214,13 @@ impl ESOLogsLog {
         self.events.push(event);
     }
 
-    pub fn get_buff_icon(&self, buff_id: u32) -> String {
+    pub fn get_buff_icon(&self, buff_id: u32) -> Arc<str> {
         if let Some(&idx) = self.buffs_hashmap.get(&buff_id) {
             if let Some(buff) = self.buffs.get(idx) {
                 return buff.icon.clone();
             }
         }
-        "nil".to_string()
+        "nil".into()
     }
 
     pub fn get_cp_for_unit(&self, unit_id: u32) -> u16 {
@@ -301,21 +301,21 @@ impl Display for ESOLogsEvent {
 
 #[derive(Debug, Clone)]
 pub struct ESOLogsPlayerSpecificData {
-    pub username: String,
+    pub username: Arc<str>,
     pub character_id: u64,
     pub is_logging_player: bool
 }
 
 #[derive(Debug, Clone)]
 pub struct ESOLogsUnit {
-    pub name: String,
+    pub name: Arc<str>,
     pub player_data: Option<ESOLogsPlayerSpecificData>,
     pub unit_type: Reaction,
     pub unit_id: u32,
     pub class: u8,
-    pub server_string: String,
+    pub server_string: Arc<str>,
     pub race: Race,
-    pub icon: Option<String>, // nil for players & objects, default to death_recap_melee_basic
+    pub icon: Option<Arc<str>>, // nil for players & objects, default to death_recap_melee_basic
     pub champion_points: u16,
     pub owner_id: u32,
 }
@@ -347,11 +347,11 @@ impl Display for ESOLogsUnit {
 
 #[derive(Clone, Debug)]
 pub struct ESOLogsBuff {
-    pub name: String,
+    pub name: Arc<str>,
     pub damage_type: DamageType,
     pub status_type: StatusEffectType,
     pub id: u32,
-    pub icon: String,
+    pub icon: Arc<str>,
     pub caused_by_id: u32, // this can be itself, or another id (skills have their own id here). if none, then = 0
     pub interruptible_blockable: u8 // interruptible * 2 + blockable * 1 = number
 }
@@ -484,17 +484,6 @@ impl ESOLogsBuffEvent {
         };
         unit_instance_str
     }
-
-    // fn instance_str(&self, id0: usize, id1: usize) -> String {
-    //     let unit_instance_str = if id0 == 0 && id1 == 0 {
-    //         format!("({})", self)
-    //     } else if id1 == 0 {
-    //         format!("({}).{}", self, id0)
-    //     } else {
-    //         format!("({}).{}.{}", self, id0, id1)
-    //     };
-    //     unit_instance_str
-    // }
 }
 
 #[derive(Debug, Clone)]
@@ -669,7 +658,7 @@ pub struct ESOLogsZoneInfo {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
     pub zone_id: u16,
-    pub zone_name: String,
+    pub zone_name: Arc<str>,
     pub zone_difficulty: u8, // 0 none, 1 = normal, 2 = veteran
 }
 
@@ -684,8 +673,8 @@ pub struct ESOLogsMapInfo {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
     pub map_id: u16,
-    pub map_name: String,
-    pub map_image_url: String,
+    pub map_name: Arc<str>,
+    pub map_image_url: Arc<str>,
 }
 
 impl Display for ESOLogsMapInfo {
@@ -699,11 +688,11 @@ pub struct ESOLogsPlayerBuild {
     pub timestamp: u64,
     pub line_type: ESOLogsLineType,
     pub unit_index: usize,
-    pub permanent_buffs: String,
-    pub buff_stacks: String,
+    pub permanent_buffs: Arc<str>,
+    pub buff_stacks: Arc<str>,
     pub gear: Vec<String>,
-    pub primary_abilities: String,
-    pub backup_abilities: String,
+    pub primary_abilities: Arc<str>,
+    pub backup_abilities: Arc<str>,
 }
 
 impl Display for ESOLogsPlayerBuild {
