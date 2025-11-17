@@ -988,6 +988,7 @@ async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_
                         let tbl_zip =
                             tmp_dir.join("master_table.zip");
 
+                        elp.remove_overabundant_events();
                         let seg_data = build_report_segment(&elp);
                         write_zip_with_logtxt(&seg_zip, seg_data.as_bytes())
                             .expect("seg zip write failed");

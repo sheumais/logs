@@ -337,7 +337,7 @@ impl Display for ESOLogsUnit {
             let is_logging_player = if player_data.is_logging_player { "T" } else { "F" };
             let icon = "nil";
             write!(f, "{}^{}^{}^{}|{}|{}|{}|{}|{}|{}|{}", 
-            name, username, character_id, is_logging_player, reaction, self.unit_id, self.class, self.server_string, self.race, icon, self.champion_points)
+            name, username, character_id, is_logging_player, "1" /*Hardcoded reaction*/, self.unit_id, self.class, self.server_string, self.race, icon, self.champion_points)
         } else {
             write!(f, "{}|{}|{}|{}|{}|{}|{}|{}",
             self.name, reaction, self.unit_id, self.class, self.server_string, self.race, self.icon.as_ref().map_or("nil", |v| v), self.champion_points)

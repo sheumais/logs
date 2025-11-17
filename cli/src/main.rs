@@ -42,7 +42,7 @@ fn main() {
             if let Err(e) = eso_log_processor.convert_log_file_to_esolog_format(Path::new(file_path)) {
                 log::error!("Error splitting log file: {e}");
             }
-
+            eso_log_processor.remove_overabundant_events();
             if let Ok(file) = File::create("C:/Users/H/Downloads/master_table.txt") {
                 let mut writer = BufWriter::new(file);
                 let master_table = build_master_table(&mut eso_log_processor);
@@ -71,6 +71,44 @@ fn main() {
             } else {
                 log::error!("Error creating output file: report_segments.txt");
             }
+            let mut id_hashmap: HashMap<u32, u32> = HashMap::new();
+            for event in &eso_log_processor.eso_logs_log.events {
+                match event {
+                    ESOLogsEvent::BuffLine(e) => {
+                        let id_index = e.buff_event.buff_index;
+                        if id_index > eso_log_processor.eso_logs_log.buffs.len() {continue;}
+                        let ability_id = eso_log_processor.eso_logs_log.buffs[id_index].id;
+                        let current = id_hashmap.get(&ability_id);
+                        let new_value = if let Some(c) = current {
+                            c + 1
+                        } else {
+                            1
+                        };
+                        id_hashmap.insert(ability_id, new_value);
+                    },
+                    ESOLogsEvent::CastLine(e) => {
+                        let id_index = e.buff_event.buff_index;
+                        if id_index > eso_log_processor.eso_logs_log.buffs.len() {continue;}
+                        let ability_id = eso_log_processor.eso_logs_log.buffs[id_index].id;
+                        let current = id_hashmap.get(&ability_id);
+                        let new_value = if let Some(c) = current {
+                            c + 1
+                        } else {
+                            1
+                        };
+                        id_hashmap.insert(ability_id, new_value);
+                    },
+                    _ => {},
+                }
+            }
+            let vec: Vec<(u32, u32)> = id_hashmap.into_iter().collect();
+            let mut sum = 0;
+            for entry in vec {
+                sum += entry.1;
+                if entry.1 < 10 {continue;}
+                println!("{},{}", entry.0, entry.1);
+            }
+            println!("{}", sum);
         }
         "esologzip" => {
             let noop = |_progress: u8| {};

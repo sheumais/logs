@@ -55,16 +55,20 @@ pub fn modify_screen() -> Html {
                 <BackArrow/>
             </div>
             <div class={container_style().clone()}>
-                <div class={classes!(icon_wrapper_style().clone())}>
-                    if !*has_chosen_file {
-                        <IconButton
-                            icon_id={IconId::LucideUpload}
-                            description={"Select an encounter log"}
-                            onclick={Some(select_log.clone())}
-                            class={icon_border_style()}
-                        />
-                    }
-                </div>
+                if !*has_chosen_file {
+                    <IconButton
+                        icon_id={IconId::LucideUpload}
+                        description={"Select an encounter log"}
+                        onclick={Some(select_log.clone())}
+                        class={icon_border_style()}
+                    />
+                    <div class={paragraph_style()}>
+                        {"This will create a new, modified log file with fixes applied. This can then be uploaded using the official esologs.com uploader."}
+                    </div>
+                    <div class={paragraph_style()}>
+                        {"If you intended to upload a log directly to esologs.com, please press the back arrow and log in instead."}
+                    </div>
+                }
                 <div class={
                     if *is_modifying {
                         classes!(header_style().clone())
