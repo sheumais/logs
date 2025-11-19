@@ -291,7 +291,7 @@ enum PickerType {
     MultipleFolders,
 }
 
-fn pick_files_internal(
+async fn pick_files_internal(
     window: &Window,
     picker_type: PickerType,
     state: &State<'_, AppState>,
@@ -365,18 +365,18 @@ fn pick_files_internal(
 }
 
 #[tauri::command]
-fn pick_and_load_file(window: Window, state: State<'_, AppState>) -> Result<(), String> {
-    pick_files_internal(&window, PickerType::SingleFile, &state)
+async fn pick_and_load_file(window: Window, state: State<'_, AppState>) -> Result<(), String> {
+    pick_files_internal(&window, PickerType::SingleFile, &state).await
 }
 
 #[tauri::command]
-fn pick_and_load_files(window: Window, state: State<'_, AppState>) -> Result<(), String> {
-    pick_files_internal(&window, PickerType::MultipleFiles, &state)
+async fn pick_and_load_files(window: Window, state: State<'_, AppState>) -> Result<(), String> {
+    pick_files_internal(&window, PickerType::MultipleFiles, &state).await
 }
 
 #[tauri::command]
-fn pick_and_load_folder(window: Window, state: State<'_, AppState>) -> Result<(), String> {
-    pick_files_internal(&window, PickerType::Folder, &state)
+async fn pick_and_load_folder(window: Window, state: State<'_, AppState>) -> Result<(), String> {
+    pick_files_internal(&window, PickerType::Folder, &state).await
 }
 
 #[tauri::command]
