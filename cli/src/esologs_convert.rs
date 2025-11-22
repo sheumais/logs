@@ -667,7 +667,7 @@ impl ESOLogProcessor {
                 let instance_ids = (self.index_in_session(source.unit_id).unwrap_or(0), self.index_in_session(target.unit_id).unwrap_or(0));
                 self.add_log_event(ESOLogsEvent::CastLine(
                     ESOLogsCastLine {
-                        timestamp: ev.time,
+                        timestamp: timestamp,
                         line_type: ESOLogsLineType::Damage,
                         buff_event,
                         unit_instance_id: instance_ids,
@@ -722,7 +722,7 @@ impl ESOLogProcessor {
                 let instance_ids = (self.index_in_session(source.unit_id).unwrap_or(0), self.index_in_session(target.unit_id).unwrap_or(0));
                 self.add_log_event(ESOLogsEvent::CastLine(
                     ESOLogsCastLine {
-                        timestamp: ev.time,
+                        timestamp: timestamp,
                         line_type: match ev.result {
                             EventResult::Damage | EventResult::CriticalDamage | EventResult::BlockedDamage => ESOLogsLineType::Damage,
                             _ => ESOLogsLineType::DotTick,
@@ -753,9 +753,9 @@ impl ESOLogProcessor {
                     }
                 ));
                 if should_add_death_event {
-                    if timestamp - self.last_death_events.get(&buff_event.target_unit_index).unwrap_or(&0) < 1000 {return Ok(())}
+                    if timestamp - self.last_death_events.get(&buff_event.target_unit_index).unwrap_or(&0) < 3000 {return Ok(())}
                     self.last_death_events.insert(buff_event.target_unit_index, timestamp);
-                    if source_allegiance == 32 {source_allegiance = 64}
+                    if source_allegiance == 32 {source_allegiance = 64} // if it's not an enemy then it is a friend (edge case)
                     self.add_log_event(ESOLogsEvent::CastLine(
                         ESOLogsCastLine {
                             timestamp,
@@ -822,7 +822,7 @@ impl ESOLogProcessor {
             EventResult::PowerEnergize | EventResult::PowerDrain => {
                 self.add_log_event(ESOLogsEvent::PowerEnergize(
                     ESOLogsPowerEnergize {
-                        timestamp: ev.time,
+                        timestamp: timestamp,
                         line_type: ESOLogsLineType::PowerEnergize,
                         buff_event,
                         cast: ESOLogsCastBase {
@@ -850,40 +850,11 @@ impl ESOLogProcessor {
                 ));
                 return Ok(())
             }
-            // EventResult::Died | EventResult::DiedXP | EventResult::KillingBlow => {
-            //     let instance_ids = (self.index_in_session(source.unit_id).unwrap_or(0), self.index_in_session(target.unit_id).unwrap_or(0));
-            //     if source_allegiance == 32 {source_allegiance = 64}
-            //     let timestamp = ev.time+1;
-            //     let death_event = ESOLogsEvent::CastLine(
-            //         ESOLogsCastLine {
-            //             timestamp,
-            //             line_type: ESOLogsLineType::Death,
-            //             buff_event,
-            //             unit_instance_id: instance_ids,
-            //             cast: ESOLogsCastBase {
-            //                 source_allegiance,
-            //                 target_allegiance,
-            //                 cast_id_origin: ev.cast_track_id,
-            //                 source_unit_state: ESOLogsUnitState {
-            //                     unit_state: source,
-            //                     champion_points: self.get_cp_for_unit(source.unit_id),
-            //                 },
-            //                 target_unit_state: ESOLogsUnitState {
-            //                     unit_state: target,
-            //                     champion_points: self.get_cp_for_unit(target.unit_id),
-            //                 },
-            //             },
-            //             cast_information: None,
-            //         }
-            //     );
-            //     self.pending_death_events.push((timestamp, death_event));
-            //     return Ok(());
-            // }
             EventResult::Immune => {
                 let instance_ids = (self.index_in_session(source.unit_id).unwrap_or(0), self.index_in_session(target.unit_id).unwrap_or(0));
                 self.add_log_event(ESOLogsEvent::CastLine(
                     ESOLogsCastLine {
-                        timestamp: ev.time,
+                        timestamp: timestamp,
                         line_type: ESOLogsLineType::Damage,
                         buff_event,
                         unit_instance_id: instance_ids,
@@ -904,7 +875,7 @@ impl ESOLogProcessor {
                             critical,
                             hit_value: ev.hit_value,
                             overflow: ev.overflow,
-                            override_magic_number: Some(10),
+                            override_magic_number: Some(10), // magic number that just works based on observed log uploads. todo: figure out 1-9, 11-??
                             replace_hitvalue_overflow: false,
                             blocked: false,
                         })
@@ -915,9 +886,10 @@ impl ESOLogProcessor {
                 self.last_interrupt = Some(target.unit_id);
             }
             EventResult::SoulGemResurrectionAccepted => {
+                self.last_death_events.insert(buff_event.target_unit_index, 0); // reset death event cooldown so that if they instantly die, get ressed, and then die it is fine. todo: check if works with necro res.
                 self.add_log_event(ESOLogsEvent::CastLine(
                     ESOLogsCastLine {
-                        timestamp: ev.time,
+                        timestamp,
                         line_type: ESOLogsLineType::Resurrect,
                         buff_event,
                         unit_instance_id: (0, 0), // can only ever resurrect a player or companion, who should always have instance id of 0
