@@ -1518,6 +1518,7 @@ pub fn build_master_table(elp: &mut ESOLogProcessor) -> String {
             220015 => Some("gear_lucentguardian_heavy_head_a".into()), // lucent echoes
             147459 => Some("antiquities_ornate_necklace_3".into()), // pearls of ehlnofey
             117714 | 117693 => Some("ability_necromancer_002_a".into()), // blastbones grey-ed out
+            89109 => Some("ability_warden_017_b".into()), // Bull Netch (thanks sparkrip)
             _ => None,
         };
         if let Some(icon) = new_icon {
