@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}, error::Error, fs::File, io::{BufRead, BufReader, BufWriter}, path::Path, sync::{Arc, atomic::{AtomicBool, Ordering}}};
 use std::io::Write;
-use parser::{effect::{self, StatusEffectType}, event::{self, parse_cast_end_reason, CastEndReason, DamageType, EventResult}, parse::{self}, player::{Class, Race}, unit::{self, blank_unit_state, Reaction, UnitState}, EventType, UnitAddedEventType};
+use parser::{EventType, UnitAddedEventType, effect::{self, StatusEffectType}, event::{self, CastEndReason, DamageType, EventResult, is_damage_event, parse_cast_end_reason}, parse::{self}, player::{Class, Race}, unit::{self, Reaction, UnitState, blank_unit_state}};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
 use std::fs;
 
@@ -38,6 +38,7 @@ pub struct ESOLogProcessor {
     base_timestamp: Option<u64>,
     most_recent_begin_log_timestamp: Option<u64>,
     zone: Option<u16>,
+    in_combat: bool,
 }
 
 impl Default for ESOLogProcessor {
@@ -67,6 +68,7 @@ impl ESOLogProcessor {
             base_timestamp: None,
             most_recent_begin_log_timestamp: None,
             zone: None,
+            in_combat: false,
         }
     }
 
@@ -333,6 +335,8 @@ impl ESOLogProcessor {
                 line_type: ESOLogsLineType::EndCombat,
             }
         ));
+
+        self.in_combat = false;
         
         self.eso_logs_log.current_health.clear();
         self.eso_logs_log.fight_units.clear();
@@ -354,6 +358,8 @@ impl ESOLogProcessor {
                 line_type: ESOLogsLineType::BeginCombat,
             }
         ));
+
+        self.in_combat = true;
 
         Ok(())
     }
@@ -547,6 +553,7 @@ impl ESOLogProcessor {
             parse::unit_state(parts, 19)
         };
         let result = event::parse_event_result(&parts[2]).ok_or_else(|| "Failed to parse combat event_result".to_string())?;
+        if is_damage_event(result) && !self.in_combat {return Ok(())}
         let mut ability_id = parts[8].parse().map_err(|e| format!("Failed to parse ability_id: {e}"))?;
         if ability_id == 0 && result == EventResult::SoulGemResurrectionAccepted {ability_id = 26770}
         let mut buff_event= ESOLogsBuffEvent {
@@ -587,6 +594,7 @@ impl ESOLogProcessor {
 
         match ev.result {
             EventResult::DamageShielded => {
+                if ev.hit_value == 0 {return Ok(())};
                 self.temporary_damage_buffer = ev.hit_value;
                 let instance_ids = (
                     self.index_in_session(source.unit_id).unwrap_or(0),
@@ -696,6 +704,8 @@ impl ESOLogProcessor {
                 ));
             }
             EventResult::Damage | EventResult::DotTick | EventResult::CriticalDamage | EventResult::DotTickCritical => {
+                // if self.in_combat == false {return Ok(())}
+                if ev.hit_value == 0 && ev.overflow == 0 {return Ok(())}
                 if !self.eso_logs_log.bosses.contains_key(&source.unit_id)  && buff_event.source_unit_index < self.eso_logs_log.units.len() {
                     let unit = &mut self.eso_logs_log.units[buff_event.source_unit_index];
                     if icon != "nil".into() && icon != "death_recap_melee_basic".into() {

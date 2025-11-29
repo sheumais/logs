@@ -79,12 +79,7 @@ impl ESOLogsLog {
         self.pets.reserve(pets);
     }
 
-    pub fn reserve_event_capacity(
-        &mut self,
-        events: usize,
-    ) {
-        self.events.reserve(events);
-    }
+    pub fn reserve_event_capacity(&mut self, events: usize) {self.events.reserve(events)}
 
     pub fn add_unit(&mut self, unit: ESOLogsUnit) -> usize {
         let mut id = unit.unit_id;
@@ -236,6 +231,7 @@ impl ESOLogsLog {
         // let session_id = *self.unit_id_to_session_id.get(&unit_id)?;
         if let Some(unit) = self.units.get(unit_index) {
             if unit.unit_type != Reaction::Hostile {return Some(0)}
+            if self.bosses.contains_key(unit_id) {return Some(0)}
         }
 
         let entry = self.fight_units.entry(unit_index).or_default();
