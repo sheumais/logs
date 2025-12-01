@@ -7,6 +7,7 @@ pub mod ui;
 pub mod unit;
 pub mod parse;
 pub mod zone;
+pub mod subclassing;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EventType {

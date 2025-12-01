@@ -9,6 +9,7 @@ use parser::event::{self, parse_event_result, EventResult};
 use parser::parse::{self, gear_piece, unit_state_id_only};
 use parser::player::GearSlot;
 use parser::set::{get_item_type_from_hashmap, ItemType};
+use parser::subclassing::{Subclass, ability_id_to_subclassing, subclass_to_icon, subclass_to_name};
 use parser::unit::UnitState;
 use parser::{EffectChangedEventType, EventType, UnitAddedEventType};
 
@@ -20,6 +21,8 @@ pub struct CustomLogData {
     pub taint_stacks: HashMap<u32, MoulderingTaintState>,
     pub units: HashMap<u32, Arc<str>>,
     pub last_combat_event_timestamp: u64,
+    pub subclassing_map: HashMap<String, Option<Vec<Subclass>>>,
+    pub known_ids: HashMap<u32, bool>,
 }
 
 impl Default for CustomLogData {
@@ -38,12 +41,15 @@ impl CustomLogData {
             taint_stacks: HashMap::new(),
             units: HashMap::new(),
             last_combat_event_timestamp: 0,
+            subclassing_map: HashMap::new(),
+            known_ids: HashMap::new(),
         }
     }
 
     pub fn reset(&mut self) {
-        self.zen_stacks = HashMap::new();
-        self.taint_stacks = HashMap::new();
+        self.zen_stacks.clear();
+        self.taint_stacks.clear();
+        self.subclassing_map.clear();
     }
 }
 
@@ -153,7 +159,7 @@ fn check_line_for_edits(parts: &[String], custom_log_data: &mut CustomLogData) -
     match event {
         EventType::EffectChanged => check_effect_changed(parts, &mut custom_log_data.zen_stacks),
         EventType::AbilityInfo => check_ability_info(parts, custom_log_data),
-        EventType::EffectInfo => add_arcanist_beam_effect_information(parts),
+        EventType::EffectInfo => add_arcanist_beam_effect_information(parts, custom_log_data),
         EventType::PlayerInfo => modify_player_data(parts, custom_log_data),
         EventType::CombatEvent => modify_combat_event(parts, custom_log_data),
         EventType::UnitAdded => handle_unit_added(parts, custom_log_data),
@@ -331,34 +337,37 @@ fn check_ability_info(parts: &[String], custom_log_data: &mut CustomLogData) -> 
             format!("{},{},{},\"{}\",\"{}\",{},{},\"{}\",\"{}\",\"{}\"",
                 parts[0], "ABILITY_INFO", ability_id_clone, ability_name_clone, scribing_ability.icon, "F", "T", focus_script, signature_script, affix_script)
         ])
-    } else if parts[2] == PRAGMATIC.to_string() || parts[2] == EXHAUSTING.to_string() {
-        add_arcanist_beam_information(parts)
-    } else if parts[2].parse::<u32>().ok() == Some(BLOCKADE_DEFAULT) {
-        add_blockade_versions(parts)     
+    } else if (parts[2] == PRAGMATIC.to_string() && !custom_log_data.known_ids.contains_key(PRAGMATIC)) || (parts[2] == EXHAUSTING.to_string() && !custom_log_data.known_ids.contains_key(EXHAUSTING)) {
+        add_arcanist_beam_information(parts, custom_log_data)
+    } else if parts[2].parse::<u32>().ok() == Some(BLOCKADE_DEFAULT) && !custom_log_data.known_ids.contains_key(&BLOCKADE_DEFAULT) {
+        add_blockade_versions(parts, custom_log_data)
     } else {
+        custom_log_data.known_ids.insert(ability.id, true);
         return None
     }
 }
 
-fn add_arcanist_beam_information(parts: &[String]) -> Option<Vec<String>> {
+fn add_arcanist_beam_information(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
     let mut lines = Vec::new();
-    if parts[2] == PRAGMATIC.to_string() {
+    if parts[2] == PRAGMATIC.to_string() && !custom_log_data.known_ids.contains_key(PRAGMATIC) {
         lines.push(format!("{},{},{},{},{},{},{}", parts[0], parts[1], PRAGMATIC, parts[3], "\"/esoui/art/icons/ability_arcanist_002_b.dds\"", "F", "T"));
         return Some(lines);
-    } else if parts[2] == EXHAUSTING.to_string() {
+    } else if parts[2] == EXHAUSTING.to_string() && !custom_log_data.known_ids.contains_key(EXHAUSTING) {
         lines.push(format!("{},{},{},{},{},{},{}", parts[0], parts[1], EXHAUSTING, parts[3], "\"/esoui/art/icons/ability_arcanist_002_a.dds\"", "F", "T"));
         return Some(lines);
     }
     None
 }
 
-fn add_arcanist_beam_effect_information(parts: &[String]) -> Option<Vec<String>> {
+fn add_arcanist_beam_effect_information(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
     let mut lines = Vec::new();
-    if parts[2] == PRAGMATIC.to_string() {
+    if parts[2] == PRAGMATIC.to_string() && !custom_log_data.known_ids.contains_key(PRAGMATIC) {
         lines.push(format!("{},{},{},{},{},{}", parts[0], "EFFECT_INFO", PRAGMATIC, "BUFF", "NONE", "NEVER"));
+        custom_log_data.known_ids.insert(*PRAGMATIC, true);
         return Some(lines);
-    } else if parts[2] == EXHAUSTING.to_string() {
+    } else if parts[2] == EXHAUSTING.to_string() && !custom_log_data.known_ids.contains_key(EXHAUSTING) {
         lines.push(format!("{},{},{},{},{},{}", parts[0], "EFFECT_INFO", EXHAUSTING, "BUFF", "NONE", "NEVER"));
+        custom_log_data.known_ids.insert(*EXHAUSTING, true);
         return Some(lines);
     }
     None
@@ -369,7 +378,7 @@ const BLOCKADE_STORMS: u32 = 39018;
 const BLOCKADE_FROST: u32 = 39028;
 const BLOCKADE_DEFAULT: u32 = 39011;
 
-fn add_blockade_versions(parts: &[String]) -> Option<Vec<String>> {
+fn add_blockade_versions(parts: &[String], custom_log_data: &mut CustomLogData) -> Option<Vec<String>> {
     let mut lines = Vec::new();
     // ABILITY_INFO,39011,"Elemental Blockade","/esoui/art/icons/ability_destructionstaff_002a.dds",T,T
     // ABILITY_INFO,39028,"Blockade of Frost","/esoui/art/icons/ability_destructionstaff_002b.dds",F,T
@@ -381,6 +390,10 @@ fn add_blockade_versions(parts: &[String]) -> Option<Vec<String>> {
     lines.push(format!("{},{},{},\"{}\",\"{}\",{},{}", parts[0], "ABILITY_INFO", BLOCKADE_FIRE, "Blockade of Fire", "/esoui/art/icons/ability_destructionstaff_004_b.dds", "F", "T"));
     lines.push(format!("{},{},{},\"{}\",\"{}\",{},{}", parts[0], "ABILITY_INFO", BLOCKADE_STORMS, "Blockade of Storms", "/esoui/art/icons/ability_destructionstaff_003_b.dds", "F", "T"));
     lines.push(format!("{},{},{},\"{}\",\"{}\",{},{}", parts[0], "ABILITY_INFO", BLOCKADE_FROST, "Blockade of Frost", "/esoui/art/icons/ability_destructionstaff_002b.dds", "F", "T"));
+    custom_log_data.known_ids.insert(BLOCKADE_FIRE, true);
+    custom_log_data.known_ids.insert(BLOCKADE_STORMS, true);
+    custom_log_data.known_ids.insert(BLOCKADE_FROST, true);
+    custom_log_data.known_ids.insert(BLOCKADE_DEFAULT, true);
     Some(lines)
 }
 
@@ -472,21 +485,46 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
             }
         }
     }
+
+    let mut result = Vec::new();
+
+    let mut long_term_buffs: Vec<u32> = parts[3].split(',').map(|x| x.parse::<u32>().unwrap_or_default()).collect();
+    let mut long_term_buff_stacks: Vec<u8> = parts[4].split(',').map(|x| x.parse::<u8>().unwrap_or_default()).collect();
+    let mut subclasses_to_append = Vec::new();
+    for ability_id in &mut long_term_buffs {
+        if let Some(subclass) = ability_id_to_subclassing(*ability_id) {
+            if !custom_log_data.known_ids.contains_key(&(subclass as u32)) {
+                let subclass_definition = format!("{},ABILITY_INFO,{},\"Subclass: {}\",\"{}\",F,T", parts[0], subclass as u32, subclass_to_name(subclass), subclass_to_icon(subclass));
+                let subclass_effect_info = format!("{},EFFECT_INFO,{},BUFF,NONE,DEFAULT", parts[0], subclass as u32);
+                result.push(subclass_definition);
+                result.push(subclass_effect_info);
+                custom_log_data.known_ids.insert(subclass as u32, true);
+            }
+            subclasses_to_append.push(subclass);
+        }
+    }
+    subclasses_to_append.sort_unstable();
+    subclasses_to_append.dedup();
+    for subclass in &subclasses_to_append {
+        long_term_buffs.push(subclass.clone() as u32);
+        long_term_buff_stacks.push(1);
+    }
+    custom_log_data.subclassing_map.insert(player_name.to_string(), Some(subclasses_to_append));
     
     let mut new_parts: Vec<String> = vec![
         format!("{}", parts[0]),
         format!("{}", parts[1]),
         format!("{}", parts[2]),
-        format!("[{}]", parts[3]),
-        format!("[{}]", parts[4]),
+        format!("[{}]", long_term_buffs.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",")),
+        format!("[{}]", long_term_buff_stacks.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",")),
     ];
     new_parts.push(format!("[{}]", processed_gear.join(",")));
     new_parts.push(format!("[{}]", primary_ability_id_list.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",")));
     new_parts.push(format!("[{}]", backup_ability_id_list.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",")));
 
-    let mut result = Vec::new();
-    if cryptcanon {
+    if cryptcanon && !custom_log_data.known_ids.contains_key(&195031) {
         result.push(format!("{},ABILITY_INFO,195031,\"Crypt Transfer\",\"/esoui/art/icons/u38_ability_armor_ultimatetransfer.dds\",F,T", parts[0]));
+        custom_log_data.known_ids.insert(195031, true);
     }
     result.push(new_parts.join(","));
     Some(result)
