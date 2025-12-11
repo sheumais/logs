@@ -491,11 +491,21 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
     let mut long_term_buffs: Vec<u32> = parts[3].split(',').map(|x| x.parse::<u32>().unwrap_or_default()).collect();
     let mut long_term_buff_stacks: Vec<u8> = parts[4].split(',').map(|x| x.parse::<u8>().unwrap_or_default()).collect();
     let mut subclasses_to_append = Vec::new();
-    for ability_id in &mut long_term_buffs {
+    for ability_id in long_term_buffs.iter().chain(primary_ability_id_list.iter()).chain(backup_ability_id_list.iter()) {
         if let Some(subclass) = ability_id_to_subclassing(*ability_id) {
             if !custom_log_data.known_ids.contains_key(&(subclass as u32)) {
-                let subclass_definition = format!("{},ABILITY_INFO,{},\"Subclass: {}\",\"{}\",F,T", parts[0], subclass as u32, subclass_to_name(subclass), subclass_to_icon(subclass));
-                let subclass_effect_info = format!("{},EFFECT_INFO,{},BUFF,NONE,DEFAULT", parts[0], subclass as u32);
+                let subclass_definition = format!(
+                    "{},ABILITY_INFO,{},\"Subclass: {}\",\"{}\",F,T",
+                    parts[0],
+                    subclass as u32,
+                    subclass_to_name(subclass),
+                    subclass_to_icon(subclass)
+                );
+                let subclass_effect_info = format!(
+                    "{},EFFECT_INFO,{},BUFF,NONE,DEFAULT",
+                    parts[0],
+                    subclass as u32
+                );
                 result.push(subclass_definition);
                 result.push(subclass_effect_info);
                 custom_log_data.known_ids.insert(subclass as u32, true);

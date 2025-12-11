@@ -1,0 +1,39 @@
+6,BEGIN_LOG,1756726761222,15,"NA Megaserver","en","eso.live.11.1"
+6,ZONE_CHANGED,1479,"Willowpond Haven",NONE
+6,UNIT_ADDED,1,PLAYER,T,3,0,F,1,5,"Ūrō","@TheMrPancake",1800204486173734503,50,1874,0,PLAYER_ALLY,T
+6,UNIT_ADDED,23,PLAYER,F,4,0,F,117,4,"Redacted","@Redacted",1000000,50,2318,0,PLAYER_ALLY,T
+2368,UNIT_ADDED,268435458,MONSTER,F,0,76887,F,0,0,"Target Skeleton, Humanoid","",0,50,0,0,NEUTRAL,F
+2368,MAP_CHANGED,2529,"Willowpond Haven","housing/u41_blackwoodlagoon_ext"
+2408,BEGIN_COMBAT
+2408,ABILITY_INFO,217460,"Warding Burst","/esoui/art/icons/ability_grimoire_soulmagic2.dds",F,T,"Damage Shield","Class Mastery","Intellect and Endurance"
+2408,ABILITY_INFO,217784,"Leashing Soul","/esoui/art/icons/ability_grimoire_soulmagic1.dds",F,T,"Pull","Druid's Resurgence","Maim"
+2409,PLAYER_INFO,1,[],[],[],[217460,217784],[217460,217784]
+2409,ABILITY_INFO,186366,"Pragmatic Fatecarver","/esoui/art/icons/ability_arcanist_002_b.dds",T,T
+2409,ABILITY_INFO,182977,"Escalating Runeblades","/esoui/art/icons/ability_arcanist_001_b.dds",F,T
+2409,ABILITY_INFO,38901,"Quick Cloak","/esoui/art/icons/ability_dualwield_004_a.dds",F,T
+2409,ABILITY_INFO,63044,"Radiant Glory","/esoui/art/icons/ability_templar_under_exposure.dds",T,T
+2409,ABILITY_INFO,40195,"Camouflaged Hunter","/esoui/art/icons/ability_fightersguild_002_b.dds",F,T
+2409,ABILITY_INFO,36514,"Soul Harvest","/esoui/art/icons/ability_nightblade_007_b.dds",F,T
+2409,ABILITY_INFO,22095,"Solar Barrage","/esoui/art/icons/ability_templar_solar_power.dds",F,T
+2409,ABILITY_INFO,39011,"Elemental Blockade","/esoui/art/icons/ability_destructionstaff_002a.dds",T,T
+2409,ABILITY_INFO,217460,"Warding Burst","/esoui/art/icons/ability_grimoire_soulmagic2.dds",F,T,"Damage Shield","Crusader's Defiance","Savagery and Prophecy"
+2409,ABILITY_INFO,217784,"Leashing Soul","/esoui/art/icons/ability_grimoire_soulmagic1.dds",F,T,"Pull","Anchorite's Potency","Resolve"
+2409,ABILITY_INFO,25267,"Concealed Weapon","/esoui/art/icons/ability_nightblade_002_b.dds",F,T
+2409,ABILITY_INFO,189867,"The Languid Eye","/esoui/art/icons/ability_arcanist_006_b.dds",F,T
+2409,PLAYER_INFO,23,[],[],[],[186366,182977,38901,63044,40195,36514],[22095,39011,217460,217784,25267,189867]
+3051,UNIT_CHANGED,268435458,0,0,"Target Skeleton, Humanoid","",0,50,0,0,HOSTILE,F
+7995,END_COMBAT
+55677,UNIT_CHANGED,268435458,0,0,"Target Skeleton, Humanoid","",0,50,0,0,NEUTRAL,F
+55697,BEGIN_COMBAT
+55698,ABILITY_INFO,217784,"Leashing Soul","/esoui/art/icons/ability_grimoire_soulmagic1.dds",F,T,"Pull","Lingering Torment","Defile"
+55698,PLAYER_INFO,1,[],[],[],[217460,217784],[217460,217784]
+55698,PLAYER_INFO,23,[],[],[],[186366,182977,38901,63044,40195,36514],[22095,39011,217460,217784,25267,189867]
+56617,UNIT_CHANGED,268435458,0,0,"Target Skeleton, Humanoid","",0,50,0,0,HOSTILE,F
+62358,END_COMBAT
+91262,UNIT_CHANGED,268435458,0,0,"Target Skeleton, Humanoid","",0,50,0,0,NEUTRAL,F
+91282,BEGIN_COMBAT
+91282,PLAYER_INFO,1,[],[],[],[217460,217784],[217460,217784]
+91282,PLAYER_INFO,23,[],[],[],[186366,182977,38901,63044,40195,36514],[22095,39011,217460,217784,25267,189867]
+92223,UNIT_CHANGED,268435458,0,0,"Target Skeleton, Humanoid","",0,50,0,0,HOSTILE,F
+96123,END_COMBAT
+103484,END_LOG
