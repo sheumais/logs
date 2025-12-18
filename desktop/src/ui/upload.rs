@@ -1,7 +1,7 @@
 use std::ops::Deref;
 use std::rc::Rc;
 
-use esologtool_common::{EncounterReportCode, UploadSettings};
+use esologtool_common::{EncounterReportCode, LabelValue, UploadSettings};
 use futures::StreamExt;
 use tauri_sys::core::{invoke, invoke_result};
 use tauri_sys::event;
@@ -46,8 +46,10 @@ pub fn upload() -> Html {
     let guild = use_state(|| None::<i32>);
     let region = use_state(|| None::<u8>);
     let visibility = use_state(|| None::<u8>);
-    let description = use_state(|| "".to_string());
+    let tag = use_state(|| None::<i32>);
+    let description = use_state(|| String::new());
     let rewind = use_state(|| None::<bool>);
+    let description_memory = use_state(|| None::<bool>);
     let report_code = use_state(|| None::<String>);
     let error = use_state(|| None::<String>);
     let is_uploading = use_state(|| UploadState::None);
@@ -58,6 +60,70 @@ pub fn upload() -> Html {
     let selected_region = saved_settings.map(|s| s.region).unwrap_or_else(|| 1);
     let selected_visibility = saved_settings.map(|s| s.visibility).unwrap_or_else(|| 2);
     let selected_rewind = saved_settings.map(|s| s.rewind).unwrap_or_else(|| false);
+    let selected_description_remember = saved_settings.map(|s| s.remember_description).unwrap_or_else(|| false);
+    let selected_tag = saved_settings.map(|s| s.tag).unwrap_or_else(|| None);
+
+    {
+        let description = description.clone();
+        let saved_settings = (*upload_settings_ctx).clone();
+        let description_memory = description_memory.clone();
+
+        use_effect_with(saved_settings,
+            move |saved_settings| {
+                if let Some(settings) = saved_settings.as_ref() {
+                    if settings.remember_description {
+                        description.set(settings.description.clone());
+                        description_memory.set(Some(true));
+                    }
+                }
+                || ()
+            },
+        );
+    }
+    let active_guild_id: i32 = guild.unwrap_or(selected_guild);
+    {
+        let tag = tag.clone();
+        let login_ctx = login_ctx.clone();
+        let selected_tag = selected_tag.clone();
+
+        use_effect_with(active_guild_id, move |guild_id| {
+            if let Some(login) = login_ctx.as_ref() {
+                if let Some(tags) = login.tags_for_guild(*guild_id) {
+                    let selected = selected_tag.unwrap_or(-1);
+                    if tags.iter().any(|t| t.value == selected) {
+                        tag.set(Some(selected));
+                        return;
+                    }
+                }
+            }
+            tag.set(None);
+        });
+    }
+    let guild_tags: Option<&Vec<LabelValue>> = login_ctx
+        .as_ref()
+        .and_then(|login| {
+            if active_guild_id < 0 {
+                None
+            } else {
+                login
+                    .report_tag_select_items
+                    .get(&active_guild_id.to_string())
+            }
+        });
+
+    let tag_options = if let Some(tags) = guild_tags {
+        tags.iter()
+            .map(|t| {
+                html! {
+                    <option value={t.value.to_string()} selected={t.value == selected_tag.unwrap_or(-1)}>
+                        { &t.label }
+                    </option>
+                }
+            })
+            .collect::<Html>()
+    } else {
+        html! {}
+    };
 
     let upload_progress = use_state(|| None::<String>);
 
@@ -73,6 +139,7 @@ pub fn upload() -> Html {
         });
         || ()
     });
+
     let upload_effect = upload_progress.clone();
     use_effect(move || {
         let upload_progress = upload_effect.clone();
@@ -85,7 +152,6 @@ pub fn upload() -> Html {
         });
         || ()
     });
-
 
     let on_guild_change = {
         let guild = guild.clone();
@@ -111,6 +177,14 @@ pub fn upload() -> Html {
             visibility.set(parsed);
         })
     };
+    let on_tag_change = {
+        let tag = tag.clone();
+        Callback::from(move |e: Event| {
+            let sel: HtmlInputElement = e.target_unchecked_into();
+            let parsed = sel.value().parse::<i32>().ok();
+            tag.set(parsed);
+        })
+    };
     let on_description_input = {
         let description = description.clone();
         Callback::from(move |e: InputEvent| {
@@ -125,6 +199,13 @@ pub fn upload() -> Html {
             rewind.set(Some(input.checked()));
         })
     };
+    let on_memory_change = {
+        let description_memory = description_memory.clone();
+        Callback::from(move |e: Event| {
+            let input: HtmlInputElement = e.target_unchecked_into();
+            description_memory.set(Some(input.checked()));
+        })
+    };
 
     let upload_log = {
         let upload_progress = upload_progress.clone();
@@ -135,6 +216,8 @@ pub fn upload() -> Html {
         let region = region.clone();
         let visibility = visibility.clone();
         let description = description.clone();
+        let description_memory = description_memory.clone();
+        let tag = tag.clone();
         move |_| {
             let upload_progress = upload_progress.clone();
             let report_code = report_code.clone();
@@ -144,16 +227,20 @@ pub fn upload() -> Html {
             let region = region.clone();
             let visibility = visibility.clone();
             let description = description.clone();
+            let description_memory = description_memory.clone();
+            let tag = tag.clone();
             wasm_bindgen_futures::spawn_local(async move {
                 invoke::<()>("pick_and_load_file", &()).await;
 
                 is_uploading.set(UploadState::UploadingLog);
                 let settings = UploadSettings { 
-                    guild: guild.unwrap_or(selected_guild), 
-                    visibility: visibility.unwrap_or(selected_visibility), 
+                    guild: guild.unwrap_or(selected_guild),
+                    visibility: visibility.unwrap_or(selected_visibility),
                     region: region.unwrap_or(selected_region),
                     description: description.to_string(),
                     rewind: false,
+                    tag: *tag,
+                    remember_description: description_memory.unwrap_or(false),
                 };
                 upload_progress.set(None);
                 error.set(None);
@@ -179,6 +266,8 @@ pub fn upload() -> Html {
         let visibility = visibility.clone();
         let description = description.clone();
         let rewind = rewind.clone();
+        let description_memory = description_memory.clone();
+        let tag = tag.clone();
         move |_| {
             let upload_progress = upload_progress.clone();
             let report_code = report_code.clone();
@@ -189,20 +278,24 @@ pub fn upload() -> Html {
             let visibility = visibility.clone();
             let description = description.clone();
             let rewind = rewind.clone();
+            let description_memory = description_memory.clone();
+            let tag = tag.clone();
             wasm_bindgen_futures::spawn_local(async move {
                 invoke::<()>("pick_and_load_folder", &()).await;
 
                 is_uploading.set(UploadState::LiveLogging);
                 let settings = UploadSettings { 
-                    guild: guild.unwrap_or(selected_guild), 
-                    visibility: visibility.unwrap_or(selected_visibility), 
+                    guild: guild.unwrap_or(selected_guild),
+                    visibility: visibility.unwrap_or(selected_visibility),
                     region: region.unwrap_or(selected_region),
                     description: description.to_string(),
                     rewind: rewind.unwrap_or(selected_rewind),
+                    tag: *tag,
+                    remember_description: description_memory.unwrap_or(false),
                 };
                 upload_progress.set(None);
                 error.set(None);
-                match invoke_result::<EncounterReportCode, String>("live_log_upload",  
+                match invoke_result::<EncounterReportCode, String>("live_log_upload",
                     &serde_json::json!({
                         "uploadSettings": settings,
                     })).await {
@@ -258,7 +351,7 @@ pub fn upload() -> Html {
 
         let visibility_options = login.report_visibility_select_items.iter().map(|v| {
             html! {
-                <option value={v.value.to_string()} selected={v.value == selected_visibility}>{ &v.label }</option>
+                <option value={v.value.to_string()} selected={v.value as u8 == selected_visibility}>{ &v.label }</option>
             }
         }).collect::<Html>();
 
@@ -282,9 +375,9 @@ pub fn upload() -> Html {
     html! {
         <div>
             if *is_uploading == UploadState::None {<BackArrow/>}
-            <div class={container_style().clone()}>
+            <div style="gap: 0px;" class={container_style().clone()}>
                 if *is_uploading == UploadState::UploadingLog {
-                    <h3 style="margin-top:2em;">{"Please be patient while your log file is processed. This can take multiple minutes."}</h3>
+                    <h3>{"Please be patient while your log file is processed. This can take multiple minutes."}</h3>
                     if let Some(progress) = upload_progress.as_ref() {
                         <div>
                             { progress }
@@ -342,7 +435,7 @@ pub fn upload() -> Html {
                     }
                 } else if *is_uploading == UploadState::None {
                     <div style="width: min-content; margin: 0.5em;">
-                        <h3 style="margin-top:2em;">{"Specify how to upload your log:"}</h3>
+                        <h3>{"Specify how to upload your log:"}</h3>
                         <div style="display:inline-flex;gap:1em;">
                             <select onchange={on_guild_change} name={"guild"} autocomplete="off">
                                 { guild_options }
@@ -353,8 +446,17 @@ pub fn upload() -> Html {
                             <select onchange={on_visibility_change} name={"visibility"} autocomplete="off">
                                 { visibility_options }
                             </select>
+                            { if guild_tags.is_some() {
+                                html! {
+                                    <select onchange={on_tag_change}>
+                                        { tag_options }
+                                    </select>
+                                }
+                            } else {
+                                html! {}
+                            }}
                         </div>
-                        <h3 style="margin-top:2em;">{"Give your log a description:"}</h3>
+                        <h3 style="margin-top:1em;">{"Give your log a description:"}</h3>
                         <textarea
                             name={"description"}
                             autocomplete="off"
@@ -363,12 +465,27 @@ pub fn upload() -> Html {
                             placeholder="Description"
                             style="width:100%;padding:0.2em;border:0px;resize:none;margin-bottom:1.5em;"
                         />
-                        <h3 style="margin-top:2em;margin-bottom:1.5em;display:inline;margin-right:1em;">{"(Live log) Upload entire file:"}</h3>
-                        <input 
-                            type="checkbox" 
-                            checked={rewind.unwrap_or(selected_rewind)}
-                            onchange={on_rewind_change}
-                        />
+                        <div style="margin-top:1em;">
+                            <h3 style="display:inline; margin-right:1em;">
+                                {"(Live log) Upload entire file:"}
+                            </h3>
+                            <input 
+                                type="checkbox"
+                                checked={rewind.unwrap_or(selected_rewind)}
+                                onchange={on_rewind_change}
+                            />
+                        </div>
+
+                        <div style="margin-top:1em; margin-bottom:1.5em;">
+                            <h3 style="display:inline; margin-right:1em;">
+                                {"Remember Description:"}
+                            </h3>
+                            <input 
+                                type="checkbox"
+                                checked={description_memory.unwrap_or(selected_description_remember)}
+                                onchange={on_memory_change}
+                            />
+                        </div>
                     </div>
                     <div class={icon_wrapper_style().clone()}>
                         <IconButton

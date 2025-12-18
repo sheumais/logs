@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -11,7 +13,20 @@ pub struct LoginResponse {
     pub report_visibility_select_items: Vec<LabelValue>,
     #[serde(rename = "regionOrServerSelectItems")]
     pub region_or_server_select_items: Vec<ValueLabel>,
+    #[serde(rename = "reportTagSelectItems", default)]
+    pub report_tag_select_items: HashMap<String, Vec<LabelValue>>,
 }
+
+impl LoginResponse {
+    pub fn tags_for_guild(&self, guild_id: i32) -> Option<&Vec<LabelValue>> {
+        if guild_id < 0 {
+            None
+        } else {
+            self.report_tag_select_items.get(&guild_id.to_string())
+        }
+    }
+}
+
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -122,7 +137,7 @@ pub struct Region {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct LabelValue {
     pub label: String,
-    pub value: u8,
+    pub value: i32,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -143,6 +158,8 @@ pub struct UploadSettings {
     pub region: u8,
     pub description: String,
     pub rewind: bool,
+    pub tag: Option<i32>,
+    pub remember_description: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]

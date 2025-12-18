@@ -30,55 +30,57 @@ pub enum Subclass {
 }
 
 pub fn subclass_to_name(subclass: Subclass) -> String {
-    match subclass {
-        Subclass::DarkMagic => "Dark Magic".to_string(),
-        Subclass::DaedricSummoning => "Daedric Summoning".to_string(),
-        Subclass::StormCalling => "Storm Calling".to_string(),
-        Subclass::AedricSpear => "Aedric Spear".to_string(),
-        Subclass::DawnsWrath => "Dawn's Wrath".to_string(),
-        Subclass::RestoringLight => "Restoring Light".to_string(),
-        Subclass::ArdentFlame => "Ardent Flame".to_string(),
-        Subclass::DraconicPower => "Draconic Power".to_string(),
-        Subclass::EarthenHeart => "Earthen Heart".to_string(),
-        Subclass::Assassination => "Assassination".to_string(),
-        Subclass::Shadow => "Shadow".to_string(),
-        Subclass::Siphoning => "Siphoning".to_string(),
-        Subclass::AnimalCompanions => "Animal Companions".to_string(),
-        Subclass::GreenBalance => "Green Balance".to_string(),
-        Subclass::WintersEmbrace => "Winter's Embrace".to_string(),
-        Subclass::GraveLord => "Grave Lord".to_string(),
-        Subclass::BoneTyrant => "Bone Tyrant".to_string(),
-        Subclass::LivingDeath => "Living Death".to_string(),
-        Subclass::HeraldOfTheTome => "Herald of the Tome".to_string(),
-        Subclass::SoldierOfApocrypha => "Soldier of Apocrypha".to_string(),
-        Subclass::CurativeRuneforms => "Curative Runeforms".to_string(),
-    }
+    let name = match subclass {
+        Subclass::DarkMagic => "Dark Magic",
+        Subclass::DaedricSummoning => "Daedric Summoning",
+        Subclass::StormCalling => "Storm Calling",
+        Subclass::AedricSpear => "Aedric Spear",
+        Subclass::DawnsWrath => "Dawn's Wrath",
+        Subclass::RestoringLight => "Restoring Light",
+        Subclass::ArdentFlame => "Ardent Flame",
+        Subclass::DraconicPower => "Draconic Power",
+        Subclass::EarthenHeart => "Earthen Heart",
+        Subclass::Assassination => "Assassination",
+        Subclass::Shadow => "Shadow",
+        Subclass::Siphoning => "Siphoning",
+        Subclass::AnimalCompanions => "Animal Companions",
+        Subclass::GreenBalance => "Green Balance",
+        Subclass::WintersEmbrace => "Winter's Embrace",
+        Subclass::GraveLord => "Grave Lord",
+        Subclass::BoneTyrant => "Bone Tyrant",
+        Subclass::LivingDeath => "Living Death",
+        Subclass::HeraldOfTheTome => "Herald of the Tome",
+        Subclass::SoldierOfApocrypha => "Soldier of Apocrypha",
+        Subclass::CurativeRuneforms => "Curative Runeforms",
+    };
+    return name.to_string()
 }
 
 pub fn subclass_to_icon(subclass: Subclass) -> String {
-    match subclass {
-        Subclass::DarkMagic => "ability_sorcerer_thunderstomp".to_string(),
-        Subclass::DaedricSummoning => "ability_sorcerer_speedy_familiar".to_string(),
-        Subclass::StormCalling => "ability_sorcerer_endless_fury".to_string(),
-        Subclass::AedricSpear => "ability_templar_ripping_spear".to_string(),
-        Subclass::DawnsWrath => "ability_templar_power_of_the_light".to_string(),
-        Subclass::RestoringLight => "ability_templar_purifying_ritual".to_string(),
-        Subclass::ArdentFlame => "ability_dragonknight_001_b".to_string(),
-        Subclass::DraconicPower => "ability_dragonknight_007_b".to_string(),
-        Subclass::EarthenHeart => "ability_dragonknight_017a".to_string(),
-        Subclass::Assassination => "ability_nightblade_017_b".to_string(),
-        Subclass::Shadow => "ability_nightblade_004_a".to_string(),
-        Subclass::Siphoning => "ability_nightblade_013_b".to_string(),
-        Subclass::AnimalCompanions => "ability_warden_013_b".to_string(),
-        Subclass::GreenBalance => "ability_warden_007_b".to_string(),
-        Subclass::WintersEmbrace => "ability_warden_003_b".to_string(),
-        Subclass::GraveLord => "ability_necromancer_001_b".to_string(),
-        Subclass::BoneTyrant => "ability_necromancer_008_b".to_string(),
-        Subclass::LivingDeath => "ability_necromancer_013_a".to_string(),
-        Subclass::HeraldOfTheTome => "ability_arcanist_003_a".to_string(),
-        Subclass::SoldierOfApocrypha => "ability_arcanist_008_b".to_string(),
-        Subclass::CurativeRuneforms => "ability_arcanist_013_a".to_string(),
-    }
+    let icon = match subclass {
+        Subclass::DarkMagic => "ability_sorcerer_thunderstomp",
+        Subclass::DaedricSummoning => "ability_sorcerer_speedy_familiar",
+        Subclass::StormCalling => "ability_sorcerer_endless_fury",
+        Subclass::AedricSpear => "ability_templar_ripping_spear",
+        Subclass::DawnsWrath => "ability_templar_power_of_the_light",
+        Subclass::RestoringLight => "ability_templar_purifying_ritual",
+        Subclass::ArdentFlame => "ability_dragonknight_001_b",
+        Subclass::DraconicPower => "ability_dragonknight_007_b",
+        Subclass::EarthenHeart => "ability_dragonknight_017a",
+        Subclass::Assassination => "ability_nightblade_017_b",
+        Subclass::Shadow => "ability_nightblade_004_a",
+        Subclass::Siphoning => "ability_nightblade_013_b",
+        Subclass::AnimalCompanions => "ability_warden_013_b",
+        Subclass::GreenBalance => "ability_warden_007_b",
+        Subclass::WintersEmbrace => "ability_warden_003_b",
+        Subclass::GraveLord => "ability_necromancer_001_b",
+        Subclass::BoneTyrant => "ability_necromancer_008_b",
+        Subclass::LivingDeath => "ability_necromancer_013_a",
+        Subclass::HeraldOfTheTome => "ability_arcanist_003_a",
+        Subclass::SoldierOfApocrypha => "ability_arcanist_008_b",
+        Subclass::CurativeRuneforms => "ability_arcanist_013_a",
+    };
+    return icon.to_string()
 }
 
 /// If player has a buff or skill slotted with the given ability id, what subclass does it guarantee they have (if any)?
@@ -86,7 +88,8 @@ pub fn ability_id_to_subclassing(ability_id: u32) -> Option<Subclass> {
     match ability_id {
         
         UNHOLY_KNOWLEDGE | BLOOD_MAGIC | PERSISTENCE | EXPLOITATION
-        | CRYSTAL_SHARD | CRYSTAL_WEAPON | CRYSTAL_FRAGMENTS | ENCASE | SHATTERING_SPINES | VIBRANT_SHROUD | RUNE_PRISON | RUNE_CAGE | DEFENSIVE_RUNE | DARK_EXCHANGE | DARK_DEAL | DARK_CONVERSION | DAEDRIC_MINES | DAEDRIC_TOMB | DAEDRIC_REFUGE | NEGATE_MAGIC | SUPRESSION_FIELD | ABORPTION_FIELD=> Some(Subclass::DarkMagic),
+        | CRYSTAL_SHARD | CRYSTAL_WEAPON | CRYSTAL_FRAGMENTS | ENCASE | SHATTERING_SPINES | VIBRANT_SHROUD | RUNE_PRISON | RUNE_CAGE | DEFENSIVE_RUNE | DARK_EXCHANGE | DARK_DEAL | DARK_CONVERSION | DAEDRIC_MINES | DAEDRIC_TOMB | DAEDRIC_REFUGE | NEGATE_MAGIC | SUPRESSION_FIELD | ABORPTION_FIELD
+        => Some(Subclass::DarkMagic),
         
         REBATE | POWER_STONE | DAEDRIC_PROTECTION | EXPERT_SUMMONER
         | SUMMON_UNSTABLE_FAMILIAR | SUMMON_UNSTABLE_CLANNFEAR | SUMMON_VOLATILE_FAMILIAR | DAEDRIC_CURSE | DAEDRIC_PREY | HAUNTING_CURSE | SUMMON_WINGED_TWILIGHT | SUMMON_TWILIGHT_TORMENTER | SUMMON_TWILIGHT_MATRIARCH | CONJURED_WARD | HARDENED_WARD | REGENERATIVE_WARD | BOUND_ARMOUR | BOUND_ARMAMENTS | BOUND_AEGIS | SUMMON_STORM_ATRONACH | GREATER_STORM_ATRONACH | SUMMON_CHARGED_ATRONACH

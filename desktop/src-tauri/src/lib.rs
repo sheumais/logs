@@ -456,6 +456,7 @@ async fn login(state: tauri::State<'_, AppState>, username: String, password: St
     }
     log::debug!("{:?}", resp.headers());
     let text = resp.text().await.map_err(|e| format!("Failed to read response text: {e}"))?;
+    log::debug!("{}", text);
     let body: LoginResponse = serde_json::from_str(&text).map_err(|e| format!("Invalid JSON: {e}"))?;
     {
         let http = state.http.read().unwrap();
@@ -510,6 +511,15 @@ async fn create_report(
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards")
         .as_millis();
+    let tag = if let Some(t) = settings.tag {
+        if t == -1 {
+            None
+        } else {
+            Some(t)
+        }
+    } else {
+        None
+    };
 
     let payload = json!({
         "clientVersion": ESO_LOGS_COM_VERSION,
@@ -519,7 +529,7 @@ async fn create_report(
         "fileName": "Encounter.log",
         "serverOrRegion": settings.region,
         "visibility": settings.visibility,
-        "reportTagId": null,
+        "reportTagId": tag,
         "description": settings.description,
         "guildId": if settings.guild == -1 { None } else { Some(settings.guild) },
     });
