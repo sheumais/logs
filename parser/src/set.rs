@@ -1,13 +1,11 @@
 use std::collections::HashMap;
 use lazy_static::lazy_static;
 use crate::player::GearSlot;
+use esosim_data::item_type::ItemType;
 
 lazy_static! {
     static ref SETS: HashMap<u16, &'static str> = parse_set_data_into_hashmap(); 
     // Set data from https://github.com/Baertram/LibSets/blob/LibSets-reworked/LibSets/Data/
-
-    static ref ITEM_TYPES: HashMap<u32, &'static str> = parse_item_types_into_hashmap();
-    // Item type from game using https://github.com/sheumais/ItemTypeDataExtractTool
 }
 
 pub fn parse_set_data_into_hashmap() -> HashMap<u16, &'static str> {
@@ -33,73 +31,7 @@ pub fn is_mythic_set(id: u16) -> bool {
     matches!(id, 501 | 503 | 505 | 519 | 520 | 521 | 575 | 576 | 593 | 594 | 596 | 597 | 625 | 626 | 627 | 654 | 655 | 656 | 657 | 658 | 674 | 675 | 676 | 691 | 692 | 693 | 694 | 760 | 761 | 762 | 811 | 812 | 813 | 845)
 }
 
-
-pub fn parse_item_types_into_hashmap() -> HashMap<u32, &'static str> {
-    let mut item_type_table = HashMap::new();
-    let data = include_str!("item_data.csv");
-
-    for line in data.lines() {
-        let parts: Vec<&str> = line.split(',').collect();
-        
-        if parts.len() > 1 {
-            let item_type = parts[0];
-            for &id_str in &parts[1..] {
-                if let Ok(id) = id_str.parse::<u32>() {
-                    item_type_table.insert(id, item_type);
-                }
-            }
-        }
-    }
-
-    item_type_table
-}
-
-#[derive(PartialEq, Debug)]
-pub enum ItemType {
-    Axe,
-    Dagger,
-    Mace,
-    Sword,
-    TwoHandedAxe,
-    TwoHandedMace,
-    TwoHandedSword,
-    FrostStaff,
-    FireStaff,
-    LightningStaff,
-    HealingStaff,
-    Shield,
-    Bow,
-    Light,
-    Medium,
-    Heavy,
-    Mara,
-    Unknown,
-}
-
-pub fn get_item_type_from_hashmap(id: u32) -> ItemType {
-    match ITEM_TYPES.get(&id).copied() {
-        Some("AXE") => ItemType::Axe,
-        Some("DAGGER") => ItemType::Dagger,
-        Some("MACE") => ItemType::Mace,
-        Some("SWORD") => ItemType::Sword,
-        Some("TWO_HANDED_AXE") => ItemType::TwoHandedAxe,
-        Some("TWO_HANDED_MACE") => ItemType::TwoHandedMace,
-        Some("TWO_HANDED_SWORD") => ItemType::TwoHandedSword,
-        Some("FROST_STAFF") => ItemType::FrostStaff,
-        Some("FIRE_STAFF") => ItemType::FireStaff,
-        Some("LIGHTNING_STAFF") => ItemType::LightningStaff,
-        Some("HEALING_STAFF") => ItemType::HealingStaff,
-        Some("SHIELD") => ItemType::Shield,
-        Some("BOW") => ItemType::Bow,
-        Some("LIGHT") => ItemType::Light,
-        Some("MEDIUM") => ItemType::Medium,
-        Some("HEAVY") => ItemType::Heavy,
-        Some("MARA") => ItemType::Mara,
-        _ => ItemType::Unknown,
-    }
-}
-
-pub fn get_item_type_name(item_type: ItemType) -> &'static str {
+pub fn get_item_type_name(item_type: &ItemType) -> &'static str {
     match item_type {
         ItemType::Axe => "Axe",
         ItemType::Dagger => "Dagger",

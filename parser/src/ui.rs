@@ -1,4 +1,6 @@
-use crate::{event::DamageType, player::{self, Class, EnchantType, GearEnchant, GearPiece, GearQuality, GearTrait, Loadout}};
+use esosim_data::item_type::ITEM_TYPES;
+
+use crate::{event::DamageType, player::{self, Class, EnchantType, GearEnchant, GearPiece, GearQuality, GearTrait, Loadout}, set::get_item_type_name};
 use std::fmt;
 use crate::set;
 
@@ -206,8 +208,8 @@ impl fmt::Display for GearPiece {
             display_text.push_str(&format!("{name} "));
         }
 
-        if set::get_item_type_from_hashmap(self.item_id) != crate::set::ItemType::Unknown {
-            display_text.push_str(&format!("{} ", set::get_item_type_name(set::get_item_type_from_hashmap(self.item_id))));
+        if let Some(item_type) = ITEM_TYPES.get(&self.item_id) {
+            display_text.push_str(&format!("{} ", get_item_type_name(item_type)));
         }
 
         if self.gear_trait != GearTrait::None {

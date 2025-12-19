@@ -349,7 +349,9 @@ fn process_nested_segment_bytes(segment: &str, result: &mut Vec<String>) {
 
 #[cfg(test)]
 mod tests {
-    use crate::{effect::{EffectType, StatusEffectType}, player::{veteran_level_to_cp, Class, EnchantType, GearEnchant, GearQuality, GearSlot, GearTrait, Race}, set::{get_item_type_from_hashmap, is_mythic_set, ItemType}};
+    use esosim_data::item_type::{ITEM_TYPES, ItemType};
+
+    use crate::{effect::{EffectType, StatusEffectType}, player::{veteran_level_to_cp, Class, EnchantType, GearEnchant, GearQuality, GearSlot, GearTrait, Race}, set::is_mythic_set};
 
     use super::*;
     use std::collections::HashMap;
@@ -561,7 +563,7 @@ mod tests {
             assert_eq!(gear.quality, GearQuality::Arcane);
             assert_eq!(gear.set_id, 640);
             assert!(gear.enchant.is_none());
-            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Medium);
+            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Medium);
         }
 
         {
@@ -595,7 +597,7 @@ mod tests {
                 enchant_level: 5,
                 enchant_quality: GearQuality::Legendary
             }));
-            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Heavy);
+            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Heavy);
         }
 
         {
@@ -607,7 +609,7 @@ mod tests {
             assert_eq!(gear.quality, GearQuality::Magic);
             assert_eq!(gear.set_id, 0);
             assert!(gear.enchant.is_none());
-            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Medium);
+            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Medium);
         }
 
         {
@@ -618,7 +620,7 @@ mod tests {
             assert_eq!(gear.gear_trait, GearTrait::Divines);
             assert_eq!(gear.quality, GearQuality::Arcane);
             assert_eq!(gear.set_id, 640);
-            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Shield);
+            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Shield);
         }
 
         {
@@ -629,7 +631,7 @@ mod tests {
             assert_eq!(gear.gear_trait, GearTrait::Divines);
             assert_eq!(gear.quality, GearQuality::Normal);
             assert_eq!(gear.set_id, 640);
-            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Light);
+            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Light);
         }
 
         {
@@ -645,7 +647,7 @@ mod tests {
                 enchant_level: 35,
                 enchant_quality: GearQuality::Magic
             }));
-            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Heavy);
+            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Heavy);
         }
 
         {
@@ -661,7 +663,7 @@ mod tests {
                 enchant_level: 35,
                 enchant_quality: GearQuality::Arcane
             }));
-            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Heavy);
+            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Heavy);
         }
 
         {
@@ -687,7 +689,7 @@ mod tests {
             assert_eq!(gear.item_id, 44904);
             assert_eq!(gear.gear_trait, GearTrait::None);
             assert_eq!(gear.quality, GearQuality::Legendary);
-            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Mara);
+            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Mara);
         }
 
         {
@@ -710,7 +712,7 @@ mod tests {
                 enchant_level: 30,
                 enchant_quality: GearQuality::Normal
             }));
-            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Light);
+            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Light);
         }
 
         {
@@ -726,7 +728,7 @@ mod tests {
                 enchant_level: 35,
                 enchant_quality: GearQuality::Artifact
             }));
-            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Dagger);
+            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Dagger);
         }
 
         {
@@ -742,7 +744,7 @@ mod tests {
                 enchant_level: 35,
                 enchant_quality: GearQuality::Arcane
             }));
-            assert_eq!(get_item_type_from_hashmap(gear.item_id), ItemType::Mace);
+            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Mace);
         }
     }
 }
