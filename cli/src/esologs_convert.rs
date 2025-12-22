@@ -1,6 +1,8 @@
 use std::{collections::{HashMap, HashSet}, error::Error, fs::File, io::{BufRead, BufReader, BufWriter}, path::Path, sync::{Arc, atomic::{AtomicBool, Ordering}}};
 use std::io::Write;
-use parser::{EventType, UnitAddedEventType, effect::{self, StatusEffectType}, event::{self, CastEndReason, DamageType, EventResult, is_damage_event, parse_cast_end_reason}, parse::{self}, player::{Class, Race}, unit::{self, Reaction, UnitState, blank_unit_state}};
+use esosim_engine::character::Character;
+use esosim_models::player::{ActiveBar, GearPiece, GearSlot};
+use parser::{EventType, UnitAddedEventType, effect::{self, StatusEffectType}, event::{self, CastEndReason, DamageType, EventResult, is_damage_event, parse_cast_end_reason}, parse::{self, gear_piece}, player::{Class, Race}, unit::{self, Reaction, UnitState, blank_unit_state}};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
 use std::fs;
 
@@ -26,6 +28,10 @@ pub fn event_timestamp(e: &ESOLogsEvent) -> Option<u64> {
         _ => None,
     }
 }
+
+const SWAP_WEAPONS: u32 = 28541;
+const SWAP_WEAPONS_FRONTBAR: u32 = 61874;
+const SWAP_WEAPONS_BACKBAR: u32 = 61875;
 
 pub struct ESOLogProcessor {
     pub eso_logs_log: ESOLogsLog,
@@ -57,6 +63,27 @@ impl ESOLogProcessor {
             10_000,
             20,
         );
+        let health_recovery = ESOLogsBuff {
+            name: "UseDatabaseName".into(),
+            damage_type: DamageType::Heal,
+            status_type: StatusEffectType::None,
+            id: Self::HEALTH_RECOVERY_BUFF_ID,
+            icon: "crafting_dom_beer_002".into(),
+            caused_by_id: 0,
+            interruptible_blockable: 0
+        };
+        let crit_damage = ESOLogsBuff {
+            name: "Critical Damage Done".into(),
+            damage_type: DamageType::None,
+            status_type: StatusEffectType::None,
+            id: 512,
+            icon: "achievement_glenmoral_misc_04".into(),
+            caused_by_id: 0,
+            interruptible_blockable: 0
+        };
+        log.add_buff(health_recovery);
+        log.add_buff(crit_damage);
+
         Self {
             eso_logs_log: log,
             megaserver: "Unknown".into(),
@@ -420,6 +447,8 @@ impl ESOLogProcessor {
                 self.eso_logs_log.players.insert(player.player_per_session_id, true);
                 let index = self.add_unit(unit);
                 self.eso_logs_log.unit_id_to_units_index.insert(player.unit_id, index);
+                self.eso_logs_log.esosim_characters.insert(player.unit_id, Character::new());
+                self.eso_logs_log.critical_damage_done.insert(player.unit_id, 50u16);
             }
             UnitAddedEventType::Monster => {
                 let monster = parse::monster(parts);
@@ -495,11 +524,27 @@ impl ESOLogProcessor {
 
         let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse player_info timestamp {e}"))?);
 
+        let gear_pieces: Vec<Option<(GearPiece, GearSlot)>> = parts[5..length-2].iter().map(|s| gear_piece(s)).collect();
+        let primary_skills: Vec<u32> = parts[length-2].split(',').map(|s| s.parse::<u32>().unwrap()).collect();
+        let backup_skills: Vec<u32> = parts[length-1].split(',').map(|s| s.parse::<u32>().unwrap()).collect();
+        let player_id = parts[2].parse().map_err(|e| format!("Failed to parse player parts[2]: {e}"))?;
+
+        if let Some(player) = self.eso_logs_log.esosim_characters.get_mut(&player_id) {
+            for gear in gear_pieces {
+                if let Some((real_gear, gear_slot)) = gear {
+                    player.set_gear_piece(&gear_slot, real_gear);
+                }
+            }
+            player.set_skills_on_bar(ActiveBar::Primary, primary_skills);
+            player.set_skills_on_bar(ActiveBar::Backup, backup_skills);
+            
+        }
+
         self.add_log_event(ESOLogsEvent::PlayerInfo(
             ESOLogsPlayerBuild {
                 timestamp,
                 line_type: ESOLogsLineType::PlayerInfo,
-                unit_index: self.unit_index(parts[2].parse().map_err(|e| format!("Failed to parse player parts[2]: {e}"))?).ok_or_else(|| "Failed to unwrap player unit_index".to_string())?,
+                unit_index: self.unit_index(player_id).ok_or_else(|| "Failed to unwrap player unit_index".to_string())?,
                 permanent_buffs: parts[3].to_string().into(),
                 buff_stacks: parts[4].to_string().into(),
                 gear: parts[5..length-2].iter().map(|s| s.to_string()).collect(),
@@ -951,6 +996,17 @@ impl ESOLogProcessor {
             parse::unit_state(parts, 16)
         };
         let ability_id = parts[5].parse().map_err(|e| format!("Failed to parse ability_id: {e}"))?;
+        if let Some(character) = self.eso_logs_log.esosim_characters.get_mut(&source.unit_id) {
+            match ability_id {
+                SWAP_WEAPONS => character.swap_bars(None),
+                SWAP_WEAPONS_FRONTBAR => character.swap_bars(Some(ActiveBar::Primary)),
+                SWAP_WEAPONS_BACKBAR => character.swap_bars(Some(ActiveBar::Backup)),
+                _ => match character.get_bar_of_skill_id(&ability_id) {
+                    Some(bar) => character.swap_bars(Some(bar)),
+                    _ => {},
+                }
+            }
+        }
         let cast_time = parts[2].parse::<u32>().map_err(|e| format!("Failed to parse cast_time: {e}"))?;
         let cast_track_id = parts[4].parse::<u32>().map_err(|e| format!("Failed to parse cast_track_id: {e}"))?;
         if cast_time > 0 {
@@ -1061,7 +1117,11 @@ impl ESOLogProcessor {
         let instance_ids = (self.index_in_session(source.unit_id).unwrap_or(0), self.index_in_session(target.unit_id).unwrap_or(0));
         let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {e}"))?);
         self.last_known_timestamp = timestamp;
+        let stacks = parts[3].parse::<u16>().unwrap_or(1);
         if parts[2] == "GAINED" {
+            if let Some(character) = self.eso_logs_log.esosim_characters.get_mut(&target.unit_id) {
+                character.add_buff(ability_id.clone(), stacks as u8);
+            }
             self.add_log_event(ESOLogsEvent::BuffLine (
                 ESOLogsBuffLine {
                     timestamp: self.last_known_timestamp,
@@ -1076,6 +1136,9 @@ impl ESOLogProcessor {
                 }
             ));
         } else if parts[2] == "FADED" {
+            if let Some(character) = self.eso_logs_log.esosim_characters.get_mut(&target.unit_id) {
+                character.remove_buff(ability_id.clone());
+            }
             self.add_log_event(ESOLogsEvent::BuffLine (
                 ESOLogsBuffLine {
                     timestamp: self.last_known_timestamp,
@@ -1090,7 +1153,9 @@ impl ESOLogProcessor {
                 }
             ));
         } else if parts[2] == "UPDATED" {
-            let stacks = parts[3].parse::<u16>().unwrap_or(1);
+            if let Some(character) = self.eso_logs_log.esosim_characters.get_mut(&target.unit_id) {
+                character.add_buff(ability_id.clone(), stacks as u8);
+            }
             if stacks > 1 {
                 if source_allegiance == 32 {source_allegiance = 16}
                 if target_allegiance == 32 {target_allegiance = 16}
@@ -1111,6 +1176,38 @@ impl ESOLogProcessor {
                     }
                 ));
             }
+        }
+        let buff_event_crit = if self.eso_logs_log.esosim_characters.contains_key(&target.unit_id) {
+            let mut event = ESOLogsBuffEvent {
+                unique_index: 0,
+                source_unit_index: self.unit_index(target.unit_id).ok_or_else(|| format!("source_unit_index {} is out of bounds", target.unit_id))?,
+                target_unit_index: self.unit_index(target.unit_id).ok_or_else(|| format!("target_unit_index {} is out of bounds", target.unit_id))?,
+                buff_index: self.buff_index(512).ok_or_else(|| format!("buff_index {ability_id} is out of bounds"))?,
+            };
+            event.unique_index = self.add_buff_event(event);
+            Some(event)
+        } else {
+            None
+        };
+
+        if let (Some(buff_event_crit), Some(character)) = (buff_event_crit, self.eso_logs_log.esosim_characters.get(&target.unit_id)) {
+            let stacks = character.get_critical_damage_done() as u16;
+            if let Some(value) = self.eso_logs_log.critical_damage_done.get(&target.unit_id) {
+                if value == &stacks {return Ok(())}
+                self.add_log_event(ESOLogsEvent::StackUpdate(
+                    ESOLogsBuffStacks {
+                        timestamp: self.last_known_timestamp,
+                        line_type: ESOLogsLineType::BuffStacksUpdatedAlly,
+                        buff_event: buff_event_crit,
+                        unit_instance_id: (instance_ids.0, instance_ids.0),
+                        source_allegiance: target_allegiance,
+                        target_allegiance,
+                        stacks: stacks,
+                    },
+                ));
+                self.eso_logs_log.critical_damage_done.insert(target.unit_id, stacks);
+            }
+            
         }
         Ok(())
     }
@@ -1176,16 +1273,6 @@ impl ESOLogProcessor {
 
     const HEALTH_RECOVERY_BUFF_ID: u32 = 61322;
     fn handle_health_recovery(&mut self, parts: &[String]) -> Result<(), String> {
-        let health_recovery = ESOLogsBuff {
-            name: "UseDatabaseName".into(),
-            damage_type: DamageType::Heal,
-            status_type: StatusEffectType::None,
-            id: Self::HEALTH_RECOVERY_BUFF_ID,
-            icon: "crafting_dom_beer_002".into(),
-            caused_by_id: 0,
-            interruptible_blockable: 0
-        };
-        self.add_buff(health_recovery);
         let source = parse::unit_state(parts, 3);
         let source_id = self.unit_index(source.unit_id).ok_or_else(|| format!("health_recovery source_index {} is out of bounds", source.unit_id))?;
         let buff_index = self.buff_index(Self::HEALTH_RECOVERY_BUFF_ID).expect("health_recovery_buff_index should always exist");

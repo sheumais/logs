@@ -1,6 +1,6 @@
 use std::collections::HashMap;
+use esosim_models::player::GearSlot;
 use lazy_static::lazy_static;
-use crate::player::GearSlot;
 use esosim_data::item_type::ItemType;
 
 lazy_static! {

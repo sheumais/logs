@@ -1104,24 +1104,24 @@ async fn download_and_install_update(app: tauri::AppHandle) -> Result<(), String
 }
 
 async fn update(app: tauri::AppHandle) -> tauri_plugin_updater::Result<()> {
-  if let Some(update) = app.updater()?.check().await? {
-    let mut downloaded = 0;
+    if let Some(update) = app.updater()?.check().await? {
+        let mut downloaded = 0;
 
     update
-      .download_and_install(
-        |chunk_length, content_length| {
-          downloaded += chunk_length;
-          log::debug!("downloaded {downloaded} from {content_length:?}");
+        .download_and_install(
+            |chunk_length, content_length| {
+            downloaded += chunk_length;
+            log::debug!("downloaded {downloaded} from {content_length:?}");
         },
         || {
-          log::info!("update downloaded and installing... {}", update.version);
+            log::info!("update downloaded and installing... {}", update.version);
         },
-      )
-      .await?;
+    )
+    .await?;
 
     log::info!("update installed");
     app.restart();
-  }
+}
 
   Ok(())
 }
@@ -1181,37 +1181,12 @@ pub fn run() {
 }
 
 async fn check_for_update(app: tauri::AppHandle) -> tauri_plugin_updater::Result<()> {
-  if let Some(update) = app.updater()?.check().await? {
-    let mut downloaded = 0;
-    update
-        .download(
-|chunk_length, content_length| {
-            downloaded += chunk_length;
-                log::debug!("downloaded {downloaded} from {content_length:?}");
-            },
-            || {
-                let update_information = UpdateInformation { version: update.version.clone() };
-                if let Some(state) = app.try_state::<AppState>() {
-                    match state.update.write().map_err(|e| e.to_string()) {
-                        Ok(mut l) => {
-                            *l = Some(update_information.clone());
-                        },
-                        Err(e) => {
-                            log::error!("Failed download: {e}");
-                        }
-                    }
-                };
-                let _ = app.emit("update-available", update_information);
-                log::info!("potential update exists: {}", update.version);
-            },
-        ).await?;
-  } 
-// FOR DEBUGGING PURPOSES
-//   else {
-//     std::thread::sleep(std::time::Duration::from_secs(1));
-//     log::info!("Emitting update-available to front-end");
-//     let _ = app.emit("update-available", UpdateInformation { version: "0.5.0-beta".to_string() });
-//   }
-
-  Ok(())
+    if let Some(update) = app.updater()?.check().await? {
+        let update_metadata = UpdateInformation {
+            version: update.version.clone(),
+            current_version: update.current_version.clone(),
+        };
+        let _ = app.emit("update-available", update_metadata);
+    }
+    Ok(())
 }

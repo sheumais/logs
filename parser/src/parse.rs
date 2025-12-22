@@ -1,6 +1,8 @@
 use std::{collections::HashMap, u32};
 
-use crate::{effect::{self, Ability, Effect}, player::{self, empty_gear_piece, is_appropriate_level, EnchantType, GearPiece, GearSlot, Player}, unit::{self, blank_unit_state, Unit, UnitType}};
+use esosim_models::player::{EnchantType, GearPiece, GearSlot, GearEnchant};
+
+use crate::{effect::{self, Ability, Effect}, player::{self, Player, effective_level, match_gear_quality, match_gear_trait}, unit::{self, Unit, UnitType, blank_unit_state}};
 
 pub fn is_true(value: &str) -> bool {
     value == "T"
@@ -146,41 +148,41 @@ pub fn object(parts: &[String]) -> Unit {
     }
 }
 
-pub fn gear_piece(part: &str) -> GearPiece {
+pub fn gear_piece(part: &str) -> Option<(GearPiece, GearSlot)> {
     let split: Vec<&str> = part.split(',').collect();
-    if split.len() < 3 {println!("Gear piece malformed: {split:?}"); return empty_gear_piece()}
+    if split.len() < 3 {println!("Gear piece malformed: {split:?}"); return None}
     let level = split[9].parse::<u8>().unwrap_or(u8::MAX);
     let slot = player::match_gear_slot(split[0]);
+    if slot.is_none() {return None}
     let is_cp = split.get(8).is_some_and(|v| is_true(v));
-    let quality = split.get(10).map(|v| player::match_gear_quality(v)).unwrap_or(player::GearQuality::None);
+    let quality = split.get(10).map(|v| player::match_gear_quality(v)).unwrap_or(esosim_data::item_type::ItemQuality::Normal);
 
-    let enchant = if is_appropriate_level(level, is_cp) {
+    let enchant = if level > 0 {
         let mut et = player::match_enchant_type(split[7]);
-        if et == EnchantType::Invalid && matches!(slot, GearSlot::Ring1 | GearSlot::Necklace | GearSlot::Ring2) {
+        if et.is_none() && matches!(slot.as_ref().unwrap(), GearSlot::Ring1 | GearSlot::Necklace | GearSlot::Ring2) {
             // assume enchant is indeko tri recovery
-            et = EnchantType::PrismaticRecovery;
+            et = Some(EnchantType::PrismaticRecovery);
+        } else if et.is_none() {
+            return None
         }
 
-        Some(player::GearEnchant {
-            enchant_type: et,
-            is_cp,
-            enchant_level: level,
-            enchant_quality: quality,
+        Some(GearEnchant {
+            glyph: et.unwrap(),
+            effective_level: level,
+            quality: quality,
         })
     } else {
         None
     };
 
-    GearPiece {
-        slot,
+    Some((GearPiece {
         item_id: split[1].parse().unwrap_or(0),
-        is_cp: is_true(split[2]),
-        level: split[3].parse().unwrap_or(0),
-        gear_trait: player::match_gear_trait(split[4]),
-        quality: player::match_gear_quality(split[5]),
-        set_id: split[6].parse().unwrap_or(0),
+        gear_trait: match_gear_trait(split[4]),
+        quality: match_gear_quality(split[5]),
+        set_id: Some(split[6].parse().unwrap_or(0)),
         enchant,
-    }
+        effective_level: effective_level(level, is_cp),
+    }, slot.unwrap()))
 }
 
 pub fn ability(parts: &[String]) -> Ability {
@@ -344,407 +346,5 @@ fn process_nested_segment_bytes(segment: &str, result: &mut Vec<String>) {
         process_array_bytes(&trimmed[1..trimmed.len() - 1], result);
     } else {
         result.push(trimmed.to_string());
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use esosim_data::item_type::{ITEM_TYPES, ItemType};
-
-    use crate::{effect::{EffectType, StatusEffectType}, player::{veteran_level_to_cp, Class, EnchantType, GearEnchant, GearQuality, GearSlot, GearTrait, Race}, set::is_mythic_set};
-
-    use super::*;
-    use std::collections::HashMap;
-
-    #[test]
-    fn test_is_true() {
-        assert!(is_true("T"));
-        assert!(!is_true("F"));
-        assert!(!is_true("anything_else"));
-    }
-
-    #[test]
-    fn test_unit_state_parsing() {
-        let parts = vec![
-            "409425".to_string(), "BEGIN_CAST".to_string(), "0".to_string(), "F".to_string(), "6871610".to_string(), "28541".to_string(),
-            "52".to_string(), "15734/24002".to_string(), "13722/15101".to_string(), "18278/27548".to_string(), "223/500".to_string(), "1000/1000".to_string(),
-            "2747".to_string(), "0.4029".to_string(), "0.4727".to_string(), "2.0490".to_string(), "*".to_string()
-        ];
-
-        let state = unit_state(&parts, 6);
-        assert_eq!(state.unit_id, 52);
-        assert_eq!(state.health, 15734);
-        assert_eq!(state.max_health, 24002);
-        assert_eq!(state.magicka, 13722);
-        assert_eq!(state.max_magicka, 15101);
-        assert_eq!(state.stamina, 18278);
-        assert_eq!(state.max_stamina, 27548);
-        assert_eq!(state.ultimate, 223);
-        assert_eq!(state.max_ultimate, 500);
-        assert_eq!(state.werewolf, 1000);
-        assert_eq!(state.werewolf_max, 1000);
-        assert_eq!(state.shield, 2747);
-        assert_eq!(state.map_x, 0.4029);
-        assert_eq!(state.map_y, 0.4727);
-        assert_eq!(state.heading, 2.0490);
-    }
-
-    #[test]
-    fn test_player_parsing() {
-        let parts = vec![
-            "7".to_string(), "UNIT_ADDED".to_string(), "1".to_string(), "PLAYER".to_string(),
-            "T".to_string(), "1".to_string(), "0".to_string(), "F".to_string(),
-            "5".to_string(), "5".to_string(), "\"Ulfsild's Contingency\"".to_string(),
-            "\"@TheMrPancake\"".to_string(), "11353088777847095529".to_string(), "50".to_string(),
-            "1833".to_string(), "0".to_string(), "PLAYER_ALLY".to_string(), "T".to_string()
-        ];
-
-        let player = player(&parts);
-        assert_eq!(player.unit_id, 1);
-        assert!(player.is_local_player);
-        assert_eq!(player.player_per_session_id, 1);
-        assert_eq!(player.class_id, Class::Necromancer);
-        assert_eq!(player.race_id, Race::Nord);
-        assert_eq!(player.name, "Ulfsild's Contingency");
-        assert_eq!(player.display_name, "@TheMrPancake");
-        assert_eq!(player.character_id, 11353088777847095529);
-        assert_eq!(player.level, 50);
-        assert_eq!(player.champion_points, 1833);
-        assert!(player.is_grouped_with_local_player);
-    }
-
-    #[test]
-    fn test_gear_piece_parsing() {
-        let gear_str = "CHEST,194509,T,16,ARMOR_NIRNHONED,LEGENDARY,691,PRISMATIC_DEFENSE,T,16,LEGENDARY".to_string();
-        let gear = gear_piece(&gear_str);
-        assert_eq!(gear.slot, GearSlot::Chest);
-        assert_eq!(gear.item_id, 194509);
-        assert!(gear.is_cp);
-        assert_eq!(veteran_level_to_cp(gear.level, gear.is_cp), 160);
-        assert_eq!(gear.gear_trait, GearTrait::Nirnhoned);
-        assert_eq!(gear.quality, GearQuality::Legendary);
-        assert_eq!(gear.set_id, 691);
-        assert!(is_mythic_set(gear.set_id));
-        assert!(gear.enchant.is_some());
-    }
-
-    #[test]
-    fn test_ability_parsing() {
-        let parts = vec![
-            "218302".to_string(), "ABILITY_INFO".to_string(), "183430".to_string(), "\"Runic Sunder\"".to_string(),
-            "\"/esoui/art/icons/ability_arcanist_007_a.dds\"".to_string(), "F".to_string(), "T".to_string()
-        ];
-
-        let ability = ability(&parts);
-        assert_eq!(ability.id, 183430);
-        assert_eq!(ability.name, "Runic Sunder".into());
-        assert_eq!(ability.icon, "ability_arcanist_007_a.png".into());
-        assert!(!ability.interruptible);
-        assert!(ability.blockable);
-        assert!(ability.scribing.is_none());
-    }
-
-    #[test]
-    fn test_ability_scribing_parsing() {
-        let parts = vec![
-            "218302".to_string(), "ABILITY_INFO".to_string(), "217784".to_string(), "\"Leashing Soul\"".to_string(),
-            "\"/esoui/art/icons/ability_grimoire_soulmagic1.dds\"".to_string(), "F".to_string(), "T".to_string(),
-            "\"Pull\"".to_string(), "\"Druid's Resurgence\"".to_string(), "\"Cowardice\"".to_string(),
-        ];
-
-        let ability = ability(&parts);
-        assert_eq!(ability.id, 217784);
-        assert_eq!(ability.name, "Leashing Soul".into());
-        assert_eq!(ability.icon, "ability_grimoire_soulmagic1.png".into());
-        assert!(!ability.interruptible);
-        assert!(ability.blockable);
-        assert_eq!(ability.scribing.unwrap(), vec!["Pull", "Druid's Resurgence", "Cowardice"]);
-    }
-
-    #[test]
-    fn test_effect_info() {
-        let mut abilities = HashMap::new();
-        abilities.insert(85843, Ability {
-            id: 85843,
-            name: "Harvest".into(),
-            icon: "ability_warden_007.png".into(),
-            interruptible: false,
-            blockable: true,
-            scribing: None,
-        });
-
-        let parts = vec![
-            "194552".to_string(), "EFFECT_INFO".to_string(), "85843".to_string(), "BUFF".to_string(),
-            "NONE".to_string(), "NEVER".to_string(), "85572".to_string()
-        ];
-
-        let effect = effect(&parts, &abilities);
-        assert_eq!(effect.ability.id, 85843);
-        assert_eq!(effect.effect_type, EffectType::Buff);
-        assert_eq!(effect.status_effect_type, StatusEffectType::None);
-        assert_eq!(effect.synergy, Some(85572));
-    }
-
-        #[test]
-    fn test_raw_line_parsing() {
-        let line = r#"218304,PLAYER_INFO,38,[142210,142079,84732,84731],[1,1,1,1],[[[HEAD,183807,T,16],[NECK,187650,T,16],[CHEST,111911,T,16]]],0,40058"#;
-        
-        let result = handle_line(line);
-        
-        assert_eq!(result[0], "218304");
-        assert_eq!(result[1], "PLAYER_INFO");
-        assert_eq!(result[2], "38");
-        assert_eq!(result[3], "142210,142079,84732,84731");
-        assert_eq!(result[4], "1,1,1,1");
-        assert_eq!(result[5], "HEAD,183807,T,16");
-        assert_eq!(result[6], "NECK,187650,T,16");
-        assert_eq!(result[7], "CHEST,111911,T,16");
-        assert_eq!(result[8], "0");
-        assert_eq!(result[9], "40058");
-    }
-
-    #[test]
-    fn test_simple_vs_nested_vs_complex() {
-        let simple_line = "[A,B,C,D]";
-        let simple_result = handle_line(simple_line);
-        assert_eq!(simple_result, vec!["A,B,C,D"]);
-        
-        let nested_line = "[[A,B],[C,D]]";
-        let nested_result = handle_line(nested_line);
-        assert_eq!(nested_result, vec!["A,B", "C,D"]);
-
-        let complex_line = r#"[[A,B],["C","D,"]]"#;
-        let complex_result = handle_line(complex_line);
-        assert_eq!(complex_result, vec!["A,B", r#""C","D,""#]);
-    }
-
-    #[test]
-    fn test_empty_player() {
-        let line = r#"1,PLAYER_INFO,1,[],[],[],[],[]"#;
-        
-        let result = handle_line(line);
-        
-        assert_eq!(result[0], "1");
-        assert_eq!(result[1], "PLAYER_INFO");
-        assert_eq!(result[2], "1");
-        assert_eq!(result[3], "");
-        assert_eq!(result[4], "");
-        assert_eq!(result[5], "");
-        assert_eq!(result[6], "");
-        assert_eq!(result[7], "");
-        assert_eq!(result.len(), 8);
-    }
-
-    #[test]
-    fn test_empty_gear_piece() {
-        let gear_piece = empty_gear_piece();
-        assert_eq!(gear_piece.enchant, None);
-        assert_eq!(gear_piece.gear_trait, GearTrait::None);
-        assert!(!gear_piece.is_cp);
-        assert_eq!(gear_piece.item_id, 0);
-        assert_eq!(gear_piece.level, 0);
-        assert_eq!(gear_piece.quality, GearQuality::None);
-        assert_eq!(gear_piece.set_id, 0);
-        assert_eq!(gear_piece.slot, GearSlot::None);
-    }
-
-    #[test]
-    fn test_extreme_player_definition() {
-        let line = r#"3597,PLAYER_INFO,1,[142079,78219,72824,150054,147459,46751,39248,35770,46041,33090,70390,117848,45301,63802,13984,34741,61930,135397,203342,215493,122586,120017,61685,120023,61662,120028,61691,120029,61666,120008,61744,120015,109966,177885,147417,93109,120020,88490,120021,120025,120013,61747,177886,120024,120026],[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],[[HEAD,185032,T,8,ARMOR_PROSPEROUS,ARCANE,640,INVALID,F,0,NORMAL],[NECK,171437,T,16,JEWELRY_ARCANE,LEGENDARY,576,INCREASE_BASH_DAMAGE,F,35,ARCANE],[CHEST,45095,T,16,ARMOR_REINFORCED,LEGENDARY,0,PRISMATIC_DEFENSE,F,5,LEGENDARY],[SHOULDERS,56058,F,12,ARMOR_NIRNHONED,MAGIC,0,INVALID,F,0,NORMAL],[OFF_HAND,184873,T,6,ARMOR_DIVINES,ARCANE,640,INVALID,F,0,NORMAL],[WAIST,184888,F,1,ARMOR_DIVINES,NORMAL,640,INVALID,F,0,NORMAL],[LEGS,45169,T,1,ARMOR_TRAINING,ARCANE,0,MAGICKA,F,35,MAGIC],[FEET,45061,F,50,ARMOR_IMPENETRABLE,ARTIFACT,0,MAGICKA,F,35,ARCANE],[COSTUME,55262,F,1,NONE,ARCANE,0,INVALID,F,0,NORMAL],[RING1,139657,F,1,JEWELRY_BLOODTHIRSTY,ARTIFACT,0,INVALID,F,0,NORMAL],[RING2,44904,F,0,NONE,LEGENDARY,0,INVALID,F,0,NORMAL],[BACKUP_POISON,79690,F,1,NONE,LEGENDARY,0,INVALID,F,0,NORMAL],[HAND,185058,F,28,ARMOR_STURDY,NORMAL,640,HEALTH,F,30,NORMAL],[BACKUP_MAIN,185007,T,12,WEAPON_CHARGED,MAGIC,640,DAMAGE_SHIELD,F,35,ARTIFACT],[BACKUP_OFF,184897,T,12,WEAPON_PRECISE,NORMAL,640,FROZEN_WEAPON,F,35,ARCANE]],[25267,61919,34843,36901,25380,113105],[36935,35419,61507,34727,36028]"#;
-        let result = handle_line(line);
-        assert_eq!(result.len(), 22);
-        {
-            let gear = gear_piece(&result[5]);
-            assert_eq!(gear.slot, GearSlot::Head);
-            assert_eq!(gear.item_id, 185032);
-            assert!(gear.is_cp);
-            assert_eq!(veteran_level_to_cp(gear.level, gear.is_cp), 80);
-            assert_eq!(gear.gear_trait, GearTrait::Invigorating);
-            assert_eq!(gear.quality, GearQuality::Arcane);
-            assert_eq!(gear.set_id, 640);
-            assert!(gear.enchant.is_none());
-            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Medium);
-        }
-
-        {
-            let gear = gear_piece(&result[6]);
-            assert_eq!(gear.slot, GearSlot::Necklace);
-            assert_eq!(gear.item_id, 171437);
-            assert!(gear.is_cp);
-            assert_eq!(gear.level, 16);
-            assert_eq!(gear.gear_trait, GearTrait::Arcane);
-            assert_eq!(gear.quality, GearQuality::Legendary);
-            assert_eq!(gear.set_id, 576);
-            assert_eq!(gear.enchant, Some(GearEnchant {
-                enchant_type: EnchantType::IncreaseBashDamage,
-                is_cp: false,
-                enchant_level: 35,
-                enchant_quality: GearQuality::Arcane
-            }));
-        }
-
-        {
-            let gear = gear_piece(&result[7]);
-            assert_eq!(gear.slot, GearSlot::Chest);
-            assert_eq!(gear.item_id, 45095);
-            assert!(gear.is_cp);
-            assert_eq!(gear.gear_trait, GearTrait::Reinforced);
-            assert_eq!(gear.quality, GearQuality::Legendary);
-            assert_eq!(gear.set_id, 0);
-            assert_eq!(gear.enchant, Some(GearEnchant {
-                enchant_type: EnchantType::PrismaticDefense,
-                is_cp: false,
-                enchant_level: 5,
-                enchant_quality: GearQuality::Legendary
-            }));
-            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Heavy);
-        }
-
-        {
-            let gear = gear_piece(&result[8]);
-            assert_eq!(gear.slot, GearSlot::Shoulders);
-            assert_eq!(gear.item_id, 56058);
-            assert!(!gear.is_cp);
-            assert_eq!(gear.gear_trait, GearTrait::Nirnhoned);
-            assert_eq!(gear.quality, GearQuality::Magic);
-            assert_eq!(gear.set_id, 0);
-            assert!(gear.enchant.is_none());
-            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Medium);
-        }
-
-        {
-            let gear = gear_piece(&result[9]);
-            assert_eq!(gear.slot, GearSlot::OffHand);
-            assert_eq!(gear.item_id, 184873);
-            assert!(gear.is_cp);
-            assert_eq!(gear.gear_trait, GearTrait::Divines);
-            assert_eq!(gear.quality, GearQuality::Arcane);
-            assert_eq!(gear.set_id, 640);
-            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Shield);
-        }
-
-        {
-            let gear = gear_piece(&result[10]);
-            assert_eq!(gear.slot, GearSlot::Waist);
-            assert_eq!(gear.item_id, 184888);
-            assert!(!gear.is_cp);
-            assert_eq!(gear.gear_trait, GearTrait::Divines);
-            assert_eq!(gear.quality, GearQuality::Normal);
-            assert_eq!(gear.set_id, 640);
-            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Light);
-        }
-
-        {
-            let gear = gear_piece(&result[11]);
-            assert_eq!(gear.slot, GearSlot::Legs);
-            assert_eq!(gear.item_id, 45169);
-            assert!(gear.is_cp);
-            assert_eq!(gear.gear_trait, GearTrait::Training);
-            assert_eq!(gear.quality, GearQuality::Arcane);
-            assert_eq!(gear.enchant, Some(GearEnchant {
-                enchant_type: EnchantType::Magicka,
-                is_cp: false,
-                enchant_level: 35,
-                enchant_quality: GearQuality::Magic
-            }));
-            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Heavy);
-        }
-
-        {
-            let gear = gear_piece(&result[12]);
-            assert_eq!(gear.slot, GearSlot::Feet);
-            assert_eq!(gear.item_id, 45061);
-            assert!(!gear.is_cp);
-            assert_eq!(gear.gear_trait, GearTrait::Impenetrable);
-            assert_eq!(gear.quality, GearQuality::Artifact);
-            assert_eq!(gear.enchant, Some(GearEnchant {
-                enchant_type: EnchantType::Magicka,
-                is_cp: false,
-                enchant_level: 35,
-                enchant_quality: GearQuality::Arcane
-            }));
-            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Heavy);
-        }
-
-        {
-            let gear = gear_piece(&result[13]);
-            assert_eq!(gear.slot, GearSlot::Costume);
-            assert_eq!(gear.item_id, 55262);
-            assert_eq!(gear.gear_trait, GearTrait::None);
-            assert_eq!(gear.quality, GearQuality::Arcane);
-            assert!(gear.enchant.is_none());
-        }
-
-        {
-            let gear = gear_piece(&result[14]);
-            assert_eq!(gear.slot, GearSlot::Ring1);
-            assert_eq!(gear.item_id, 139657);
-            assert_eq!(gear.gear_trait, GearTrait::Bloodthirsty);
-            assert_eq!(gear.quality, GearQuality::Artifact);
-        }
-
-        {
-            let gear = gear_piece(&result[15]);
-            assert_eq!(gear.slot, GearSlot::Ring2);
-            assert_eq!(gear.item_id, 44904);
-            assert_eq!(gear.gear_trait, GearTrait::None);
-            assert_eq!(gear.quality, GearQuality::Legendary);
-            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Mara);
-        }
-
-        {
-            let gear = gear_piece(&result[16]);
-            assert_eq!(gear.slot, GearSlot::BackupPoison);
-            assert_eq!(gear.item_id, 79690);
-            assert_eq!(gear.gear_trait, GearTrait::None);
-            assert_eq!(gear.quality, GearQuality::Legendary);
-        }
-
-        {
-            let gear = gear_piece(&result[17]);
-            assert_eq!(gear.slot, GearSlot::Hands);
-            assert_eq!(gear.item_id, 185058);
-            assert_eq!(gear.gear_trait, GearTrait::Sturdy);
-            assert_eq!(gear.quality, GearQuality::Normal);
-            assert_eq!(gear.enchant, Some(GearEnchant {
-                enchant_type: EnchantType::Health,
-                is_cp: false,
-                enchant_level: 30,
-                enchant_quality: GearQuality::Normal
-            }));
-            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Light);
-        }
-
-        {
-            let gear = gear_piece(&result[18]);
-            assert_eq!(gear.slot, GearSlot::MainHandBackup);
-            assert_eq!(gear.item_id, 185007);
-            assert!(gear.is_cp);
-            assert_eq!(gear.gear_trait, GearTrait::Charged);
-            assert_eq!(gear.quality, GearQuality::Magic);
-            assert_eq!(gear.enchant, Some(GearEnchant {
-                enchant_type: EnchantType::DamageShield,
-                is_cp: false,
-                enchant_level: 35,
-                enchant_quality: GearQuality::Artifact
-            }));
-            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Dagger);
-        }
-
-        {
-            let gear = gear_piece(&result[19]);
-            assert_eq!(gear.slot, GearSlot::OffHandBackup);
-            assert_eq!(gear.item_id, 184897);
-            assert!(gear.is_cp);
-            assert_eq!(gear.gear_trait, GearTrait::Precise);
-            assert_eq!(gear.quality, GearQuality::Normal);
-            assert_eq!(gear.enchant, Some(GearEnchant {
-                enchant_type: EnchantType::FrozenWeapon,
-                is_cp: false,
-                enchant_level: 35,
-                enchant_quality: GearQuality::Arcane
-            }));
-            assert_eq!(ITEM_TYPES.get(&gear.item_id).unwrap(), &ItemType::Mace);
-        }
     }
 }

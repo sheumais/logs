@@ -4,11 +4,11 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Write, BufRead};
 use std::path::Path;
 use std::sync::Arc;
+use esosim_data::item_type::{ITEM_TYPES, ItemType};
+use esosim_models::player::GearSlot;
 use parser::effect::{is_zen_dot, MOULDERING_TAINT_ID, MOULDERING_TAINT_TIME, ZEN_DEBUFF_ID};
 use parser::event::{self, parse_event_result, EventResult};
 use parser::parse::{self, gear_piece, unit_state_id_only};
-use parser::player::GearSlot;
-use parser::set::{get_item_type_from_hashmap, ItemType};
 use parser::subclassing::{Subclass, ability_id_to_subclassing, subclass_to_icon, subclass_to_name};
 use parser::unit::UnitState;
 use parser::{EffectChangedEventType, EventType, UnitAddedEventType};
@@ -415,22 +415,26 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
     let mut processed_gear: Vec<String> = Vec::new();
     let mut cryptcanon = false;
     for i in gear_parts {
-        let gear_piece = gear_piece(i);
-        if gear_piece.item_id == 194509 {cryptcanon = true}
-        // let is_mythic = is_mythic_set(gear_piece_obj.set_id);
-        let gear_str = i.to_string();
-        // if is_mythic { // save for the rainy day where esologs adds functionality for mythic items.. https://discord.com/channels/503331371159257089/714906580646232135/878731437807902760
-        //     if let Some(pos) = gear_str.find("LEGENDARY") {
-        //         gear_str.replace_range(pos..pos + "LEGENDARY".len(), "MYTHIC_OVERRIDE");
-        //     }
-        // }
-        processed_gear.push(format!("[{gear_str}]"));
-        let item_slot = gear_piece.slot;
-        let item_type = get_item_type_from_hashmap(gear_piece.item_id);
-        if item_slot == GearSlot::MainHand {
-            frontbar_type = item_type;
-        } else if item_slot == GearSlot::MainHandBackup {
-            backbar_type = item_type;
+        let gear = gear_piece(i);
+        if let Some((gear_piece, slot)) = gear {
+            if gear_piece.item_id == 194509 {cryptcanon = true}
+            // let is_mythic = is_mythic_set(gear_piece_obj.set_id);
+            let gear_str = i.to_string();
+            // if is_mythic { // save for the rainy day where esologs adds functionality for mythic items.. https://discord.com/channels/503331371159257089/714906580646232135/878731437807902760
+            //     if let Some(pos) = gear_str.find("LEGENDARY") {
+            //         gear_str.replace_range(pos..pos + "LEGENDARY".len(), "MYTHIC_OVERRIDE");
+            //     }
+            // }
+            processed_gear.push(format!("[{gear_str}]"));
+            let item_slot = slot;
+            let item_type = ITEM_TYPES.get(&gear_piece.item_id);
+            if let Some(item) = item_type {
+                if item_slot == GearSlot::MainHand {
+                    frontbar_type = *item;
+                } else if item_slot == GearSlot::MainHandBackup {
+                    backbar_type = *item;
+                }
+            }
         }
     }
 
@@ -519,6 +523,8 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
         long_term_buffs.push(subclass.clone() as u32);
         long_term_buff_stacks.push(1);
     }
+    long_term_buffs.push(512);
+    long_term_buff_stacks.push(50);
     custom_log_data.subclassing_map.insert(player_name.to_string(), Some(subclasses_to_append));
     
     let mut new_parts: Vec<String> = vec![

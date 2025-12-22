@@ -165,4 +165,5 @@ pub struct UploadSettings {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct UpdateInformation {
     pub version: String,
+    pub current_version: String,
 }

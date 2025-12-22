@@ -9,7 +9,6 @@ use cli::log_edit::modify_log_file;
 use cli::split_log::split_encounter_file_into_log_files;
 use ftail::Ftail;
 use log::LevelFilter;
-use parser::ui::*;
 
 fn main() {
     let result = Ftail::new()
@@ -24,9 +23,6 @@ fn main() {
     let (file_path, query) = parse_config(&args);
 
     match query {
-        "colours" => {
-            print_colour_test();
-        }
         "modify" => {
             if let Err(e) = modify_log_file(Path::new(file_path)) {
                 log::error!("Error modifying log file: {e}");
