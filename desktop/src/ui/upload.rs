@@ -102,13 +102,7 @@ pub fn upload() -> Html {
     let guild_tags: Option<&Vec<LabelValue>> = login_ctx
         .as_ref()
         .and_then(|login| {
-            if active_guild_id < 0 {
-                None
-            } else {
-                login
-                    .report_tag_select_items
-                    .get(&active_guild_id.to_string())
-            }
+            login.tags_for_guild(active_guild_id)
         });
 
     let tag_options = if let Some(tags) = guild_tags {

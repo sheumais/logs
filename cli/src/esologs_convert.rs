@@ -1,5 +1,6 @@
 use std::{collections::{HashMap, HashSet}, error::Error, fs::File, io::{BufRead, BufReader, BufWriter}, path::Path, sync::{Arc, atomic::{AtomicBool, Ordering}}};
 use std::io::Write;
+use esosim_data::critical_damage::LUCENT_ECHOES_ID;
 use esosim_engine::character::Character;
 use esosim_models::player::{ActiveBar, GearPiece, GearSlot};
 use parser::{EventType, UnitAddedEventType, effect::{self, StatusEffectType}, event::{self, CastEndReason, DamageType, EventResult, is_damage_event, parse_cast_end_reason}, parse::{self, gear_piece}, player::{Class, Race}, unit::{self, Reaction, UnitState, blank_unit_state}};
@@ -447,7 +448,7 @@ impl ESOLogProcessor {
                 self.eso_logs_log.players.insert(player.player_per_session_id, true);
                 let index = self.add_unit(unit);
                 self.eso_logs_log.unit_id_to_units_index.insert(player.unit_id, index);
-                self.eso_logs_log.esosim_characters.insert(player.unit_id, Character::new());
+                self.eso_logs_log.esosim_characters.insert(player.unit_id, Character::new(player.unit_id.clone()));
                 self.eso_logs_log.critical_damage_done.insert(player.unit_id, 50u16);
             }
             UnitAddedEventType::Monster => {
@@ -529,6 +530,8 @@ impl ESOLogProcessor {
         let backup_skills: Vec<u32> = parts[length-1].split(',').map(|s| s.parse::<u32>().unwrap()).collect();
         let player_id = parts[2].parse().map_err(|e| format!("Failed to parse player parts[2]: {e}"))?;
 
+        let mut long_term_buffs: Vec<u32> = parts[3].split(',').map(|x| x.parse::<u32>().unwrap_or_default()).collect();
+        let mut long_term_buff_stacks: Vec<u8> = parts[4].split(',').map(|x| x.parse::<u8>().unwrap_or_default()).collect();
         if let Some(player) = self.eso_logs_log.esosim_characters.get_mut(&player_id) {
             for gear in gear_pieces {
                 if let Some((real_gear, gear_slot)) = gear {
@@ -537,16 +540,21 @@ impl ESOLogProcessor {
             }
             player.set_skills_on_bar(ActiveBar::Primary, primary_skills);
             player.set_skills_on_bar(ActiveBar::Backup, backup_skills);
-            
+
+            for buff in &long_term_buffs {
+                player.add_buff(*buff, 1);
+            }
         }
+        long_term_buffs.push(512);
+        long_term_buff_stacks.push(50);
 
         self.add_log_event(ESOLogsEvent::PlayerInfo(
             ESOLogsPlayerBuild {
                 timestamp,
                 line_type: ESOLogsLineType::PlayerInfo,
                 unit_index: self.unit_index(player_id).ok_or_else(|| "Failed to unwrap player unit_index".to_string())?,
-                permanent_buffs: parts[3].to_string().into(),
-                buff_stacks: parts[4].to_string().into(),
+                permanent_buffs: long_term_buffs.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",").into(),
+                buff_stacks: long_term_buff_stacks.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",").into(),
                 gear: parts[5..length-2].iter().map(|s| s.to_string()).collect(),
                 primary_abilities: parts[length-2].to_string().into(),
                 backup_abilities: parts[length-1].to_string().into(),
@@ -1120,7 +1128,10 @@ impl ESOLogProcessor {
         let stacks = parts[3].parse::<u16>().unwrap_or(1);
         if parts[2] == "GAINED" {
             if let Some(character) = self.eso_logs_log.esosim_characters.get_mut(&target.unit_id) {
-                character.add_buff(ability_id.clone(), stacks as u8);
+                match ability_id {
+                    LUCENT_ECHOES_ID => if source.unit_id == target.unit_id {} else {character.add_buff(ability_id.clone(), stacks as u8)},
+                    _ => character.add_buff(ability_id.clone(), stacks as u8),
+                }
             }
             self.add_log_event(ESOLogsEvent::BuffLine (
                 ESOLogsBuffLine {
@@ -1190,7 +1201,7 @@ impl ESOLogProcessor {
             None
         };
 
-        if let (Some(buff_event_crit), Some(character)) = (buff_event_crit, self.eso_logs_log.esosim_characters.get(&target.unit_id)) {
+        if let (Some(buff_event_crit), Some(character)) = (buff_event_crit, self.eso_logs_log.esosim_characters.get_mut(&target.unit_id)) {
             let stacks = character.get_critical_damage_done() as u16;
             if let Some(value) = self.eso_logs_log.critical_damage_done.get(&target.unit_id) {
                 if value == &stacks {return Ok(())}

@@ -14,15 +14,17 @@ pub struct LoginResponse {
     #[serde(rename = "regionOrServerSelectItems")]
     pub region_or_server_select_items: Vec<ValueLabel>,
     #[serde(rename = "reportTagSelectItems", default)]
-    pub report_tag_select_items: HashMap<String, Vec<LabelValue>>,
+    pub report_tag_select_items: Option<HashMap<String, Vec<LabelValue>>>,
 }
 
 impl LoginResponse {
     pub fn tags_for_guild(&self, guild_id: i32) -> Option<&Vec<LabelValue>> {
-        if guild_id < 0 {
-            None
+        if let Some(report_tags) = &self.report_tag_select_items {
+            if guild_id < 0 {return None} else {
+                report_tags.get(&guild_id.to_string())
+            }
         } else {
-            self.report_tag_select_items.get(&guild_id.to_string())
+            None
         }
     }
 }

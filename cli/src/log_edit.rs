@@ -523,8 +523,6 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
         long_term_buffs.push(subclass.clone() as u32);
         long_term_buff_stacks.push(1);
     }
-    long_term_buffs.push(512);
-    long_term_buff_stacks.push(50);
     custom_log_data.subclassing_map.insert(player_name.to_string(), Some(subclasses_to_append));
     
     let mut new_parts: Vec<String> = vec![
