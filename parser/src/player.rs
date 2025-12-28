@@ -1,8 +1,8 @@
 use std::fmt;
 
 use crate::{effect::Ability, unit::UnitState};
-use esosim_data::item_type::ItemQuality;
-use esosim_models::player::{EnchantType, GearPiece, GearSlot, GearTrait, Loadout};
+use esosim_data::item_type::{EnchantType, GearSlot, GearTrait, ItemQuality};
+use esosim_models::player::{GearPiece, Loadout};
 
 #[derive(Debug, PartialEq)]
 pub struct Player {
@@ -160,42 +160,45 @@ pub fn match_gear_quality(string: &str) -> ItemQuality {
 
 pub fn match_gear_trait(string: &str) -> Option<GearTrait> {
     match string {
-        "JEWELRY_BLOODTHIRSTY" => Some(GearTrait::Bloodthirsty),
-        "JEWELRY_HARMONY" => Some(GearTrait::Harmony),
-        "JEWELRY_PROTECTIVE" => Some(GearTrait::Protective),
-        "JEWELRY_SWIFT" => Some(GearTrait::Swift),
-        "JEWELRY_TRIUNE" => Some(GearTrait::Triune),
-        "JEWELRY_INFUSED" => Some(GearTrait::Infused),
-        "JEWELRY_ARCANE" => Some(GearTrait::Arcane),
-        "JEWELRY_ROBUST" => Some(GearTrait::Robust),
-        "JEWELRY_HEALTHY" => Some(GearTrait::Healthy),
+        "JEWELRY_BLOODTHIRSTY" => Some(GearTrait::JewelryBloodthirsty),
+        "JEWELRY_HARMONY" => Some(GearTrait::JewelryHarmony),
+        "JEWELRY_PROTECTIVE" => Some(GearTrait::JewelryProtective),
+        "JEWELRY_SWIFT" => Some(GearTrait::JewelrySwift),
+        "JEWELRY_TRIUNE" => Some(GearTrait::JewelryTriune),
+        "JEWELRY_INFUSED" => Some(GearTrait::JewelryInfused),
+        "JEWELRY_ARCANE" => Some(GearTrait::JewelryArcane),
+        "JEWELRY_ROBUST" => Some(GearTrait::JewelryRobust),
+        "JEWELRY_HEALTHY" => Some(GearTrait::JewelryHealthy),
+        "JEWELRY_INTRICATE" => Some(GearTrait::JewelryIntricate),
+        "JEWELRY_ORNATE" => Some(GearTrait::JewelryOrnate),
 
-        "ARMOR_STURDY" => Some(GearTrait::Sturdy),
-        "ARMOR_IMPENETRABLE" => Some(GearTrait::Impenetrable),
-        "ARMOR_REINFORCED" => Some(GearTrait::Reinforced),
-        "ARMOR_WELL_FITTED" => Some(GearTrait::WellFitted),
-        "ARMOR_DIVINES" => Some(GearTrait::Divines),
-        "ARMOR_NIRNHONED" => Some(GearTrait::Nirnhoned),
-        "ARMOR_INFUSED" => Some(GearTrait::Infused),
-        "ARMOR_TRAINING" => Some(GearTrait::Training),
-        "ARMOR_PROSPEROUS" => Some(GearTrait::Invigorating),
+        "ARMOR_STURDY" => Some(GearTrait::ArmorSturdy),
+        "ARMOR_IMPENETRABLE" => Some(GearTrait::ArmorImpenetrable),
+        "ARMOR_REINFORCED" => Some(GearTrait::ArmorReinforced),
+        "ARMOR_WELL_FITTED" => Some(GearTrait::ArmorWellFitted),
+        "ARMOR_DIVINES" => Some(GearTrait::ArmorDivines),
+        "ARMOR_NIRNHONED" => Some(GearTrait::ArmorNirnhoned),
+        "ARMOR_INFUSED" => Some(GearTrait::ArmorInfused),
+        "ARMOR_TRAINING" => Some(GearTrait::ArmorTraining),
+        "ARMOR_PROSPEROUS" => Some(GearTrait::ArmorInvigorating),
+        "ARMOR_INTRICATE" => Some(GearTrait::ArmorIntricate),
+        "ARMOR_ORANTE" => Some(GearTrait::ArmorOrnate),
 
-        "WEAPON_INFUSED" => Some(GearTrait::Infused),
-        "WEAPON_NIRNHONED" => Some(GearTrait::Nirnhoned),
-        "WEAPON_CHARGED" => Some(GearTrait::Charged),
-        "WEAPON_DECISIVE" => Some(GearTrait::Decisive),
-        "WEAPON_DEFENDING" => Some(GearTrait::Defending),
-        "WEAPON_POWERED" => Some(GearTrait::Powered),
-        "WEAPON_PRECISE" => Some(GearTrait::Precise),
-        "WEAPON_SHARPENED" => Some(GearTrait::Sharpened),
-        "WEAPON_TRAINING" => Some(GearTrait::Training),
-
-        "ARMOR_INTRICATE" => Some(GearTrait::Intricate),
-        "WEAPON_INTRICATE" => Some(GearTrait::Intricate),
-        "JEWELRY_INTRICATE" => Some(GearTrait::Intricate),
+        "WEAPON_INFUSED" => Some(GearTrait::WeaponInfused),
+        "WEAPON_NIRNHONED" => Some(GearTrait::WeaponNirnhoned),
+        "WEAPON_CHARGED" => Some(GearTrait::WeaponCharged),
+        "WEAPON_DECISIVE" => Some(GearTrait::WeaponDecisive),
+        "WEAPON_DEFENDING" => Some(GearTrait::WeaponDefending),
+        "WEAPON_POWERED" => Some(GearTrait::WeaponPowered),
+        "WEAPON_PRECISE" => Some(GearTrait::WeaponPrecise),
+        "WEAPON_SHARPENED" => Some(GearTrait::WeaponSharpened),
+        "WEAPON_TRAINING" => Some(GearTrait::WeaponTraining),
+        "WEAPON_INTRICATE" => Some(GearTrait::WeaponIntricate),
+        "WEAPON_ORNATE" => Some(GearTrait::WeaponOrnate),
         _ => None,
     }
 }
+
 
 pub fn match_enchant_type(string: &str) -> Option<EnchantType> {
     match string {

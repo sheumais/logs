@@ -1,6 +1,7 @@
 use std::{collections::HashMap, u32};
 
-use esosim_models::player::{EnchantType, GearPiece, GearSlot, GearEnchant};
+use esosim_data::item_type::{EnchantType, GearSlot};
+use esosim_models::player::{GearPiece, GearEnchant};
 
 use crate::{effect::{self, Ability, Effect}, player::{self, Player, effective_level, match_gear_quality, match_gear_trait}, unit::{self, Unit, UnitType, blank_unit_state}};
 

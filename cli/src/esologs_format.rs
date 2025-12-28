@@ -35,6 +35,9 @@ pub struct ESOLogsLog {
     // Custom additions not required for parsing
     pub esosim_characters: HashMap<u32, esosim_engine::character::Character>,
     pub critical_damage_done: HashMap<u32, u16>,
+    pub power: HashMap<u32, u32>,
+    pub armour_physical: HashMap<u32, u32>,
+    pub armour_spell: HashMap<u32, u32>,
 }
 
 impl ESOLogsLog {
