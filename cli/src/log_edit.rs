@@ -4,7 +4,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufReader, BufWriter, Write, BufRead};
 use std::path::Path;
 use std::sync::Arc;
-use esosim_data::item_type::{GearSlot, ITEM_TYPES, ItemType};
+use esosim::data::item_type::{GearSlot, ITEM_TYPES, ItemType};
 use parser::effect::{is_zen_dot, MOULDERING_TAINT_ID, MOULDERING_TAINT_TIME, ZEN_DEBUFF_ID};
 use parser::event::{self, parse_event_result, EventResult};
 use parser::parse::{self, gear_piece, unit_state_id_only};

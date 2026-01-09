@@ -86,7 +86,7 @@ pub fn homepage() -> Html {
                     if login_ctx.is_some() {
                         <IconButton
                             icon_id={IconId::LucideUpload}
-                            description={"Upload to esologs.com (BETA)"}
+                            description={"Upload to esologs.com"}
                             onclick={Some(upload.clone())}
                             class={icon_style()}
                         />

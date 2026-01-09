@@ -1,8 +1,8 @@
 use std::fmt;
 
+use esosim::{data::item_type::{EnchantType, GearSlot, GearTrait, ItemQuality}, models::player::{GearPiece, Loadout}};
+
 use crate::{effect::Ability, unit::UnitState};
-use esosim_data::item_type::{EnchantType, GearSlot, GearTrait, ItemQuality};
-use esosim_models::player::{GearPiece, Loadout};
 
 #[derive(Debug, PartialEq)]
 pub struct Player {

@@ -1,7 +1,9 @@
 use std::{collections::HashMap, u32};
 
-use esosim_data::item_type::{EnchantType, GearSlot};
-use esosim_models::player::{GearPiece, GearEnchant};
+use esosim::data::item_type::EnchantType;
+use esosim::data::item_type::GearSlot;
+use esosim::models::player::GearPiece;
+use esosim::models::player::GearEnchant;
 
 use crate::{effect::{self, Ability, Effect}, player::{self, Player, effective_level, match_gear_quality, match_gear_trait}, unit::{self, Unit, UnitType, blank_unit_state}};
 
@@ -156,7 +158,7 @@ pub fn gear_piece(part: &str) -> Option<(GearPiece, GearSlot)> {
     let slot = player::match_gear_slot(split[0]);
     if slot.is_none() {return None}
     let is_cp = split.get(8).is_some_and(|v| is_true(v));
-    let quality = split.get(10).map(|v| player::match_gear_quality(v)).unwrap_or(esosim_data::item_type::ItemQuality::Normal);
+    let quality = split.get(10).map(|v| player::match_gear_quality(v)).unwrap_or(esosim::data::item_type::ItemQuality::Normal);
 
     let enchant = if level > 0 {
         let mut et = player::match_enchant_type(split[7]);

@@ -11,6 +11,4 @@ log = "0.4.27"
 parser = { path = "../parser" }
 rayon = "1.11.0"
 zip = { version = "4.2.0", default-features = false, features = ["deflate"] }
-esosim-data = { git = "https://github.com/sheumais/esosim/" }
-esosim-models = { git = "https://github.com/sheumais/esosim/" }
-esosim-engine = { git = "https://github.com/sheumais/esosim/" }
+esosim = { git = "https://github.com/sheumais/esosim/" }

@@ -1,8 +1,6 @@
 use std::{collections::{HashMap, HashSet}, error::Error, fs::File, io::{BufRead, BufReader, BufWriter}, path::Path, sync::{Arc, atomic::{AtomicBool, Ordering}}, u16};
 use std::io::Write;
-use esosim_data::{critical_damage::LUCENT_ECHOES_ID, item_type::GearSlot};
-use esosim_engine::character::Character;
-use esosim_models::player::{ActiveBar, GearPiece};
+use esosim::{data::{critical_damage::LUCENT_ECHOES_ID, item_type::GearSlot, major_minor::SAVAGERY_MINOR_ID}, engine::character::Character, models::player::{ActiveBar, GearPiece}};
 use parser::{EventType, UnitAddedEventType, effect::{self, StatusEffectType}, event::{self, CastEndReason, DamageType, EventResult, is_damage_event, parse_cast_end_reason}, parse::{self, gear_piece}, player::{Class, Race}, unit::{self, Reaction, UnitState, blank_unit_state}};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
 use std::fs;
@@ -74,7 +72,7 @@ impl ESOLogProcessor {
             interruptible_blockable: 0
         };
         let crit_damage = ESOLogsBuff {
-            name: "Critical Damage Done".into(),
+            name: "Critical Damage".into(),
             damage_type: DamageType::None,
             status_type: StatusEffectType::None,
             id: 512,
@@ -109,12 +107,31 @@ impl ESOLogProcessor {
             caused_by_id: 0,
             interruptible_blockable: 0
         };
+        let critical_chance = ESOLogsBuff {
+            name: "Critical Chance".into(),
+            damage_type: DamageType::None,
+            status_type: StatusEffectType::None,
+            id: 516,
+            icon: "internal/ability_internal_cyan".into(),
+            caused_by_id: 0,
+            interruptible_blockable: 0
+        };
+        let penetration = ESOLogsBuff {
+            name: "Penetration".into(),
+            damage_type: DamageType::None,
+            status_type: StatusEffectType::None,
+            id: 517,
+            icon: "internal/ability_internal_cyan".into(),
+            caused_by_id: 0,
+            interruptible_blockable: 0
+        };
         log.add_buff(health_recovery);
         log.add_buff(crit_damage);
         log.add_buff(power);
         log.add_buff(physical_resistance);
         log.add_buff(spell_resistance);
-
+        log.add_buff(critical_chance);
+        log.add_buff(penetration);
         Self {
             eso_logs_log: log,
             megaserver: "Unknown".into(),
@@ -248,6 +265,154 @@ impl ESOLogProcessor {
             }
         }
     }
+
+    fn maybe_create_buff_event(&mut self, target_unit_id: u32, buff_index_id: u32) -> Result<Option<ESOLogsBuffEvent>, String> {
+        if !self.eso_logs_log.esosim_characters.contains_key(&target_unit_id) {
+            return Ok(None);
+        }
+
+        let source_unit_index = self.unit_index(target_unit_id).ok_or_else(|| format!("source_unit_index {} is out of bounds", target_unit_id))?;
+        let target_unit_index = self.unit_index(target_unit_id).ok_or_else(|| format!("target_unit_index {} is out of bounds", target_unit_id))?;
+        let buff_index = self.buff_index(buff_index_id).ok_or_else(|| format!("buff_index {} is out of bounds", buff_index_id))?;
+
+
+        let mut event = ESOLogsBuffEvent {
+            unique_index: 0,
+            source_unit_index,
+            target_unit_index,
+            buff_index,
+        };
+        event.unique_index = self.add_buff_event(event);
+        Ok(Some(event))
+    }
+
+    pub fn process_target_stats(&mut self, target: u32, target_allegiance: u8) -> Result<(), String> {
+        let buff_event_crit = self.maybe_create_buff_event(target, 512)?;
+        let buff_event_power = self.maybe_create_buff_event(target, 513)?;
+        let buff_event_physical_resistance = self.maybe_create_buff_event(target, 514)?;
+        let buff_event_spell_resistance = self.maybe_create_buff_event(target, 515)?;
+        let buff_event_crit_chance = self.maybe_create_buff_event(target, 516)?;
+        let buff_event_penetration = self.maybe_create_buff_event(target, 517)?;
+
+        let stats_opt = {
+            match self.eso_logs_log.esosim_characters.get_mut(&target) {
+                Some(character) => {
+                    let crit_damage = character.get_critical_damage_uncapped() as u32;
+                    let power = character.get_power();
+                    let armour_physical = character.get_armour(&esosim::models::damage::DamageType::PHYSICAL);
+                    let armour_magic = character.get_armour(&esosim::models::damage::DamageType::MAGIC);
+                    let crit_chance = character.get_critical_chance_raw();
+                    let penetration = character.get_penetration();
+                    Some((crit_damage, power, armour_physical, armour_magic, crit_chance, penetration))
+                }
+                None => None,
+            }
+        };
+
+        let (crit_damage, power, armour_physical, armour_magic, crit_chance, penetration) =
+            match stats_opt {
+                Some(tuple) => tuple,
+                None => return Ok(()),
+            };
+
+        macro_rules! maybe_update {
+            ($buff_event:expr, $stacks:expr, $map:expr) => {
+                if let Some(buff_event) = $buff_event {
+                    let current = $map.get(&target).copied().unwrap_or(0u32);
+                    let new_stacks_u32: u32 = $stacks;
+                    if current != new_stacks_u32 {
+                        self.add_log_event(ESOLogsEvent::StackUpdate(
+                            ESOLogsBuffStacks {
+                                timestamp: self.last_known_timestamp,
+                                line_type: ESOLogsLineType::BuffStacksUpdatedAlly,
+                                buff_event,
+                                unit_instance_id: (0, 0),
+                                source_allegiance: target_allegiance,
+                                target_allegiance,
+                                stacks: new_stacks_u32.try_into().unwrap_or(u16::MAX),
+                            },
+                        ));
+                        $map.insert(target, new_stacks_u32);
+                    }
+                }
+            };
+        }
+
+        maybe_update!(buff_event_crit, crit_damage, &mut self.eso_logs_log.critical_damage_done);
+        maybe_update!(buff_event_power, power, &mut self.eso_logs_log.power);
+        maybe_update!(buff_event_physical_resistance, armour_physical, &mut self.eso_logs_log.armour_physical);
+        maybe_update!(buff_event_spell_resistance, armour_magic, &mut self.eso_logs_log.armour_spell);
+        maybe_update!(buff_event_crit_chance, crit_chance, &mut self.eso_logs_log.crit_chance);
+        maybe_update!(buff_event_penetration, penetration, &mut self.eso_logs_log.penetration);
+
+        Ok(())
+    }
+
+    pub fn emit_all_target_stat_events(&mut self, target: u32, target_allegiance: u8) -> Result<(), String> {
+        let buff_event_crit = self.maybe_create_buff_event(target, 512)?;
+        let buff_event_power = self.maybe_create_buff_event(target, 513)?;
+        let buff_event_physical_resistance = self.maybe_create_buff_event(target, 514)?;
+        let buff_event_spell_resistance = self.maybe_create_buff_event(target, 515)?;
+        let buff_event_crit_chance = self.maybe_create_buff_event(target, 516)?;
+        let buff_event_penetration = self.maybe_create_buff_event(target, 517)?;
+
+        let stats = {
+            let character = match self
+                .eso_logs_log
+                .esosim_characters
+                .get_mut(&target)
+            {
+                Some(c) => c,
+                None => return Ok(()),
+            };
+
+            (
+                character.get_critical_damage_uncapped() as u32,
+                character.get_power(),
+                character.get_armour(&esosim::models::damage::DamageType::PHYSICAL),
+                character.get_armour(&esosim::models::damage::DamageType::MAGIC),
+                character.get_critical_chance_raw(),
+                character.get_penetration(),
+            )
+        };
+
+        let (
+            crit_damage,
+            power,
+            armour_physical,
+            armour_magic,
+            crit_chance,
+            penetration,
+        ) = stats;
+
+        macro_rules! emit {
+            ($buff_event:expr, $stacks:expr) => {
+                if let Some(buff_event) = $buff_event {
+                    self.add_log_event(ESOLogsEvent::StackUpdate(
+                        ESOLogsBuffStacks {
+                            timestamp: self.last_known_timestamp,
+                            line_type: ESOLogsLineType::BuffStacksUpdatedAlly,
+                            buff_event,
+                            unit_instance_id: (0, 0),
+                            source_allegiance: target_allegiance,
+                            target_allegiance,
+                            stacks: $stacks.try_into().unwrap_or(u16::MAX),
+                        },
+                    ));
+                }
+            };
+        }
+
+        emit!(buff_event_crit, crit_damage);
+        emit!(buff_event_power, power);
+        emit!(buff_event_physical_resistance, armour_physical);
+        emit!(buff_event_spell_resistance, armour_magic);
+        emit!(buff_event_crit_chance, crit_chance);
+        emit!(buff_event_penetration, penetration);
+
+        Ok(())
+    }
+
 
     pub fn get_cp_for_unit(&self, unit_id: u32) -> u16 {
         self.eso_logs_log.get_cp_for_unit(unit_id)
@@ -403,6 +568,15 @@ impl ESOLogProcessor {
         Ok(())
     }
 
+    fn reset_custom_stats(&mut self) {
+        self.eso_logs_log.critical_damage_done.clear();
+        self.eso_logs_log.power.clear();
+        self.eso_logs_log.armour_physical.clear();
+        self.eso_logs_log.armour_spell.clear();
+        self.eso_logs_log.crit_chance.clear();
+        self.eso_logs_log.penetration.clear();
+    }
+
     fn handle_begin_combat(&mut self, parts: &[String]) -> Result<(), String> {
         let rel_ticks = parts[0]
             .parse::<u64>()
@@ -418,6 +592,7 @@ impl ESOLogProcessor {
         ));
 
         self.in_combat = true;
+        self.reset_custom_stats();
 
         Ok(())
     }
@@ -479,7 +654,6 @@ impl ESOLogProcessor {
                 let index = self.add_unit(unit);
                 self.eso_logs_log.unit_id_to_units_index.insert(player.unit_id, index);
                 self.eso_logs_log.esosim_characters.insert(player.unit_id, Character::new(player.unit_id.clone()));
-                self.eso_logs_log.critical_damage_done.insert(player.unit_id, 50u16);
             }
             UnitAddedEventType::Monster => {
                 let monster = parse::monster(parts);
@@ -568,8 +742,8 @@ impl ESOLogProcessor {
                     player.set_gear_piece(&gear_slot, real_gear);
                 }
             }
-            player.set_skills_on_bar(ActiveBar::Primary, primary_skills);
-            player.set_skills_on_bar(ActiveBar::Backup, backup_skills);
+            player.set_skills_on_bar(&ActiveBar::Primary, primary_skills);
+            player.set_skills_on_bar(&ActiveBar::Backup, backup_skills);
 
             for buff in &long_term_buffs {
                 player.add_buff(*buff, 1);
@@ -671,7 +845,17 @@ impl ESOLogProcessor {
         let index_option = self.eso_logs_log.buffs_hashmap.get(&cast_id).copied();
         let mut source_allegiance = Self::allegiance_from_reaction(self.allegiance_from_unit_state(source));
         let target_allegiance = Self::allegiance_from_reaction(self.allegiance_from_unit_state(target));
-        let should_add_death_event = matches!(ev.result, EventResult::Damage | EventResult::DotTick | EventResult::CriticalDamage | EventResult::DotTickCritical | EventResult::BlockedDamage) && target.health == 0;
+        let dont_skip_enemy_id = if let Some(t) = self.eso_logs_log.units.get(buff_event.target_unit_index) {
+            match t.unit_id {
+                113566 => false, // archwizard twelvane
+                121166 => false, // count ryelaz
+                121469 => false, // zilyesset
+                _ => true,
+            }
+        } else {
+            true
+        };
+        let should_add_death_event = matches!(ev.result, EventResult::Damage | EventResult::DotTick | EventResult::CriticalDamage | EventResult::DotTickCritical | EventResult::BlockedDamage) && target.health == 0 && dont_skip_enemy_id;
 
         match ev.result {
             EventResult::DamageShielded => {
@@ -1035,11 +1219,12 @@ impl ESOLogProcessor {
         if let Some(character) = self.eso_logs_log.esosim_characters.get_mut(&source.unit_id) {
             match ability_id {
                 SWAP_WEAPONS => character.swap_bars(None),
-                SWAP_WEAPONS_FRONTBAR => character.swap_bars(Some(ActiveBar::Primary)),
-                SWAP_WEAPONS_BACKBAR => character.swap_bars(Some(ActiveBar::Backup)),
-                _ => match character.get_bar_of_skill_id(&ability_id) {
-                    Some(bar) => character.swap_bars(Some(bar)),
-                    _ => {},
+                SWAP_WEAPONS_FRONTBAR => character.swap_bars(Some(&ActiveBar::Primary)),
+                SWAP_WEAPONS_BACKBAR => character.swap_bars(Some(&ActiveBar::Backup)),
+                _ => {
+                    if let Some(bar) = character.get_bar_of_skill_id(&ability_id).cloned() {
+                        character.swap_bars(Some(&bar));
+                    }
                 }
             }
         }
@@ -1176,7 +1361,10 @@ impl ESOLogProcessor {
             ));
         } else if parts[2] == "FADED" {
             if let Some(character) = self.eso_logs_log.esosim_characters.get_mut(&target.unit_id) {
-                character.remove_buff(ability_id.clone());
+                match ability_id {
+                    SAVAGERY_MINOR_ID => {},
+                    _ => character.remove_buff(ability_id.clone()),
+                }
             }
             self.add_log_event(ESOLogsEvent::BuffLine (
                 ESOLogsBuffLine {
@@ -1216,130 +1404,59 @@ impl ESOLogProcessor {
                 ));
             }
         }
-        let buff_event_crit = if self.eso_logs_log.esosim_characters.contains_key(&target.unit_id) {
-            let mut event = ESOLogsBuffEvent {
-                unique_index: 0,
-                source_unit_index: self.unit_index(target.unit_id).ok_or_else(|| format!("source_unit_index {} is out of bounds", target.unit_id))?,
-                target_unit_index: self.unit_index(target.unit_id).ok_or_else(|| format!("target_unit_index {} is out of bounds", target.unit_id))?,
-                buff_index: self.buff_index(512).ok_or_else(|| format!("buff_index {ability_id} is out of bounds"))?,
-            };
-            event.unique_index = self.add_buff_event(event);
-            Some(event)
-        } else {
-            None
-        };
-        let buff_event_power = if self.eso_logs_log.esosim_characters.contains_key(&target.unit_id) {
-            let mut event = ESOLogsBuffEvent {
-                unique_index: 0,
-                source_unit_index: self.unit_index(target.unit_id).ok_or_else(|| format!("source_unit_index {} is out of bounds", target.unit_id))?,
-                target_unit_index: self.unit_index(target.unit_id).ok_or_else(|| format!("target_unit_index {} is out of bounds", target.unit_id))?,
-                buff_index: self.buff_index(513).ok_or_else(|| format!("buff_index {ability_id} is out of bounds"))?,
-            };
-            event.unique_index = self.add_buff_event(event);
-            Some(event)
-        } else {
-            None
-        };
-        let buff_event_physical_resistance = if self.eso_logs_log.esosim_characters.contains_key(&target.unit_id) {
-            let mut event = ESOLogsBuffEvent {
-                unique_index: 0,
-                source_unit_index: self.unit_index(target.unit_id).ok_or_else(|| format!("source_unit_index {} is out of bounds", target.unit_id))?,
-                target_unit_index: self.unit_index(target.unit_id).ok_or_else(|| format!("target_unit_index {} is out of bounds", target.unit_id))?,
-                buff_index: self.buff_index(514).ok_or_else(|| format!("buff_index {ability_id} is out of bounds"))?,
-            };
-            event.unique_index = self.add_buff_event(event);
-            Some(event)
-        } else {
-            None
-        };
-        let buff_event_spell_resistance = if self.eso_logs_log.esosim_characters.contains_key(&target.unit_id) {
-            let mut event = ESOLogsBuffEvent {
-                unique_index: 0,
-                source_unit_index: self.unit_index(target.unit_id).ok_or_else(|| format!("source_unit_index {} is out of bounds", target.unit_id))?,
-                target_unit_index: self.unit_index(target.unit_id).ok_or_else(|| format!("target_unit_index {} is out of bounds", target.unit_id))?,
-                buff_index: self.buff_index(515).ok_or_else(|| format!("buff_index {ability_id} is out of bounds"))?,
-            };
-            event.unique_index = self.add_buff_event(event);
-            Some(event)
-        } else {
-            None
-        };
+        self.process_target_stats(target.unit_id, target_allegiance)?;
+        // let target_unit_index = self.unit_index(target.unit_id).ok_or_else(|| format!("target_unit_index {} is out of bounds", target.unit_id))?;
+        // let target_name = &self.eso_logs_log.units[target_unit_index].name;
+        // if let Some(character) = self.eso_logs_log.esosim_characters.get_mut(&target.unit_id) {
+        //     let max_health = target.max_health;
+        //     let max_magicka = target.max_magicka;
+        //     let max_stamina = target.max_stamina;
 
-        if let (Some(buff_event_crit), Some(character)) = (buff_event_crit, self.eso_logs_log.esosim_characters.get_mut(&target.unit_id)) {
-            let stacks = character.get_critical_damage_done() as u16;
-            if let Some(value) = self.eso_logs_log.critical_damage_done.get(&target.unit_id) {
-                if value != &stacks {
-                    self.add_log_event(ESOLogsEvent::StackUpdate(
-                        ESOLogsBuffStacks {
-                            timestamp: self.last_known_timestamp,
-                            line_type: ESOLogsLineType::BuffStacksUpdatedAlly,
-                            buff_event: buff_event_crit,
-                            unit_instance_id: (0, 0),
-                            source_allegiance: target_allegiance,
-                            target_allegiance,
-                            stacks: stacks,
-                        },
-                    ));
-                    self.eso_logs_log.critical_damage_done.insert(target.unit_id, stacks);
-                }
-            }
-        }
-        if let (Some(buff_event_power), Some(character)) = (buff_event_power, self.eso_logs_log.esosim_characters.get_mut(&target.unit_id)) {
-            let stacks = character.get_power();
-            let value = self.eso_logs_log.power.get(&target.unit_id).get_or_insert_with(|| &0u32).clone();
-            if value != stacks {
-                self.add_log_event(ESOLogsEvent::StackUpdate(
-                    ESOLogsBuffStacks {
-                        timestamp: self.last_known_timestamp,
-                        line_type: ESOLogsLineType::BuffStacksUpdatedAlly,
-                        buff_event: buff_event_power,
-                        unit_instance_id: (0, 0),
-                        source_allegiance: target_allegiance,
-                        target_allegiance,
-                        stacks: stacks.try_into().unwrap_or(u16::MAX),
-                    },
-                ));
-                self.eso_logs_log.power.insert(target.unit_id, stacks.try_into().unwrap_or(0u32));
-            }
-        }
-        if let (Some(buff_event_physical_resistance), Some(character)) = (buff_event_physical_resistance, self.eso_logs_log.esosim_characters.get_mut(&target.unit_id)) {
-            let stacks = character.get_armour(&esosim_models::damage::DamageType::PHYSICAL);
-            let value = self.eso_logs_log.armour_physical.get(&target.unit_id).get_or_insert_with(|| &0u32).clone();
-            if value != stacks {
-                self.add_log_event(ESOLogsEvent::StackUpdate(
-                    ESOLogsBuffStacks {
-                        timestamp: self.last_known_timestamp,
-                        line_type: ESOLogsLineType::BuffStacksUpdatedAlly,
-                        buff_event: buff_event_physical_resistance,
-                        unit_instance_id: (0, 0),
-                        source_allegiance: target_allegiance,
-                        target_allegiance,
-                        stacks: stacks.try_into().unwrap_or(u16::MAX),
-                    },
-                ));
-                self.eso_logs_log.armour_physical.insert(target.unit_id, stacks.try_into().unwrap_or(0u32));
-            }
-        }
-        if let (Some(buff_event_spell_resistance), Some(character)) = (buff_event_spell_resistance, self.eso_logs_log.esosim_characters.get_mut(&target.unit_id)) {
-            let stacks = character.get_armour(&esosim_models::damage::DamageType::MAGIC);
-            let value = self.eso_logs_log.armour_spell.get(&target.unit_id).get_or_insert_with(|| &0u32).clone();
-            if value != stacks {
-                self.add_log_event(ESOLogsEvent::StackUpdate(
-                    ESOLogsBuffStacks {
-                        timestamp: self.last_known_timestamp,
-                        line_type: ESOLogsLineType::BuffStacksUpdatedAlly,
-                        buff_event: buff_event_spell_resistance,
-                        unit_instance_id: (0, 0),
-                        source_allegiance: target_allegiance,
-                        target_allegiance,
-                        stacks: stacks.try_into().unwrap_or(u16::MAX),
-                    },
-                ));
-                self.eso_logs_log.armour_spell.insert(target.unit_id, stacks.try_into().unwrap_or(0u32));
-            }
-        }
+        //     if max_health > 0 && max_magicka > 0 && max_stamina > 0 {
+        //         // character.handle_event(esosim::engine::ExternalResourceSource {health: target.max_health, magicka: target.max_magicka, stamina: target.max_stamina});
+        //         let calc_max_health = character.get_max_health();
+        //         let calc_max_magicka = character.get_max_magicka();
+        //         let calc_max_stamina = character.get_max_stamina();
+
+        //         log::debug!("Stat diff for unit {}:", target_name);
+        //         Self::fmt_stat("Health",   max_health,   calc_max_health);
+        //         Self::fmt_stat("Magicka",  max_magicka,  calc_max_magicka);
+        //         Self::fmt_stat("Stamina",  max_stamina,  calc_max_stamina);
+        //     }
+        // }
         Ok(())
     }
+
+    // fn diff_to_ansi_color(diff: i32) -> String {
+    //     const GREEN_ZONE: i32 = 50;
+    //     const MAX_DIFF: i32 = 4000;
+
+    //     let abs = diff.abs();
+
+    //     let abs = abs.min(MAX_DIFF);
+
+    //     if abs <= GREEN_ZONE {
+    //         return "\x1b[38;2;0;255;0m".to_string();
+    //     }
+
+    //     let t = (abs - GREEN_ZONE) as f32 / (MAX_DIFF - GREEN_ZONE) as f32;
+
+    //     let r = (255.0 * t) as u8;
+    //     let g = (255.0 * (1.0 - t)) as u8;
+
+    //     format!("\x1b[38;2;{};{};0m", r, g)
+    // }
+
+    // fn fmt_stat(name: &str, target: u32, calc: u32) {
+    //     let diff = target as i32 - calc as i32;
+    //     // if diff != 0 {return}
+    //     let colour = Self::diff_to_ansi_color(diff);
+    //     log::debug!(
+    //         "{:>8}: target={:<6} calc={:<6} diff={}{}\x1b[0m",
+    //         name, target, calc, colour, diff
+    //     );
+    //     // debug_assert!(diff >= 0 || target < 12000);
+    // }
 
     fn handle_map_changed(&mut self, parts: &[String]) -> Result<(), String> {
         let zone_id = parts[2].parse().unwrap_or(0);

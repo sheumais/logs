@@ -33,11 +33,16 @@ pub struct ESOLogsLog {
     pub current_health: HashMap<u32, u32>,
 
     // Custom additions not required for parsing
-    pub esosim_characters: HashMap<u32, esosim_engine::character::Character>,
-    pub critical_damage_done: HashMap<u32, u16>,
+    pub esosim_characters: HashMap<u32, esosim::engine::character::Character>,
+    pub critical_damage_done: HashMap<u32, u32>,
     pub power: HashMap<u32, u32>,
     pub armour_physical: HashMap<u32, u32>,
     pub armour_spell: HashMap<u32, u32>,
+    // pub max_health: HashMap<u32, u32>,
+    // pub max_magicka: HashMap<u32, u32>,
+    // pub max_stamina: HashMap<u32, u32>,
+    pub crit_chance: HashMap<u32, u32>,
+    pub penetration: HashMap<u32, u32>,
 }
 
 impl ESOLogsLog {

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
+use esosim::data::item_type::{GearSlot, ItemType};
 use lazy_static::lazy_static;
-use esosim_data::item_type::{GearSlot, ItemType};
 
 lazy_static! {
     static ref SETS: HashMap<u16, &'static str> = parse_set_data_into_hashmap(); 
