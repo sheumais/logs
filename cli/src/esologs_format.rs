@@ -1,7 +1,7 @@
-use std::{collections::{HashMap, HashSet}, fmt::{self, Display}, hash::Hash, sync::Arc};
+use std::{collections::{HashMap, HashSet}, fmt::{self, Display}, hash::Hash, sync::Arc, usize};
 use parser::{effect::StatusEffectType, event::DamageType, player::Race, unit::{blank_unit_state, Reaction, UnitState}};
 
-pub const ESO_LOGS_COM_VERSION: &str = "8.17.115";
+pub const ESO_LOGS_COM_VERSION: &str = "8.19.39";
 pub const ESO_LOGS_PARSER_VERSION: &u8 = &11;
 pub const LINE_COUNT_FOR_PROGRESS: usize = 25000usize;
 
@@ -121,7 +121,7 @@ impl ESOLogsLog {
                     if existing_unit.owner_id != unit.owner_id {
                         existing_unit.owner_id = unit.owner_id;
                         existing_unit.unit_type = unit.unit_type;
-                        // log::debug!("Setting {existing_unit} to owner id {}", unit.owner_id);
+                        log::debug!("Setting {existing_unit} to owner id {}", unit.owner_id);
                     }
                 }
                 return existing_index;
@@ -199,13 +199,11 @@ impl ESOLogsLog {
 
     pub fn unit_index(&self, unit_id: &u32) -> Option<usize> {
         // log::trace!("{:?}", self.unit_id_to_session_id);
-        
         self.unit_id_to_units_index.get(unit_id).copied()
     }
 
     pub fn object_index(&self, object_id: Arc<str>) -> Option<usize> {
         if let Some(session_id) = self.objects.get(&object_id) {
-            
             self.session_id_to_units_index.get(session_id).copied()
         } else {
             None
@@ -213,7 +211,6 @@ impl ESOLogsLog {
     }
 
     pub fn buff_index(&self, buff_id: u32) -> Option<usize> {
-        
         self.buffs_hashmap.get(&buff_id).copied()
     }
 
@@ -383,13 +380,14 @@ impl Display for ESOLogsBuff {
     }
 }
 
-#[derive(Eq, Hash, PartialEq, Debug, Clone)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone, Copy)]
 pub struct ESOLogsBuffEventKey2 {
     pub source_unit_index: usize,
     pub source_unit_id: u32,
     pub target_unit_index: usize,
     pub target_unit_id: u32,
     pub buff_index: usize,
+    pub source_cast_id: Option<u32>,
 }
 
 #[derive(Eq, Hash, PartialEq, Debug)]
@@ -470,7 +468,11 @@ impl Display for ESOLogsBuffLine {
         if self.source_cast_index.is_some() {
             if (self.source_shield != 0 || self.target_shield != 0) && self.target_shield != self.source_shield  {
                 if self.source_shield != 0 {
-                    return write!(f, "{}|{}|{}|{}|{}|A{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.source_cast_index.unwrap().wrapping_add(1), self.source_shield, self.target_shield);
+                    if self.target_shield != 0 {
+                        return write!(f, "{}|{}|{}|{}|{}|A{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.source_cast_index.unwrap().wrapping_add(1), self.source_shield, self.target_shield);
+                    } else {
+                        return write!(f, "{}|{}|{}|{}|{}|A{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.source_cast_index.unwrap().wrapping_add(1), self.source_shield);
+                    }
                 }
                 return write!(f, "{}|{}|{}|{}|{}|A{}|{}", self.timestamp, self.line_type, unit_instance_str, self.source_allegiance, self.target_allegiance, self.source_cast_index.unwrap().wrapping_add(1), self.target_shield);
             }
@@ -483,7 +485,6 @@ impl Display for ESOLogsBuffLine {
 
 impl ESOLogsBuffEvent {
     fn instance_str(&self, id0: usize, id1: usize) -> String {
-        
         if id0 == 0 && id1 == 0 {
             format!("{}", self.unique_index.wrapping_add(1))
         } else if id1 == 0 {
@@ -550,26 +551,16 @@ pub struct ESOLogsCastData {
     pub hit_value: u32,
     pub overflow: u32,
     pub blocked: bool,
-    pub override_magic_number: Option<u8>,
-    pub replace_hitvalue_overflow: bool, 
+    pub is_heal: bool,
 }
 
 impl Display for ESOLogsCastData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(n) = self.override_magic_number {
-            write!(f, "{n}")
-        } else if self.hit_value == 0 && self.overflow > 0 {
-            write!(f, "{}|{}|{}", self.critical, if self.replace_hitvalue_overflow { self.hit_value } else { self.overflow }, self.overflow)
-        } else if self.hit_value > 0 && self.overflow == 0 {
-            if !self.blocked {
-                write!(f, "{}|{}", self.critical, self.hit_value)
-            } else {
-                write!(f, "{}|{}|{}|{}", 4, self.hit_value, 0, 1)
-            }
+        if self.is_heal {
+            write!(f, "{}|{}|{}|{}", self.critical, self.hit_value + self.overflow, self.overflow, self.blocked as u8)
         } else {
-            write!(f, "{}|{}|{}", self.critical, self.hit_value + self.overflow, self.overflow)
+            write!(f, "{}|{}|{}|{}", self.critical, self.hit_value, self.overflow, self.blocked as u8)
         }
-
     }
 }
 
@@ -787,14 +778,15 @@ pub struct ESOLogsDamageShielded { // purely for healing purposes. we copy the o
     pub unit_instance_id: (usize, usize),
     pub orig_shield_instance_ids: (usize, usize),
     pub hit_value: u32,
-    pub source_ability_cast_index: usize,
+    pub source_ability_cast_index: Option<usize>,
+    pub damage_source_caster_index: Option<usize>,
 }
 
 impl Display for ESOLogsDamageShielded {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (id0, id1) = self.orig_shield_instance_ids;
         let unit_instance_str = self.buff_event.instance_str(id0, id1);
-        write!(f, "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.shield_source_allegiance, self.shield_recipient_allegiance, self.buff_event.source_unit_index.wrapping_add(1), self.unit_instance_id.0, self.damage_source_allegiance, 0, self.hit_value, self.source_ability_cast_index.wrapping_add(1))
+        write!(f, "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}", self.timestamp, self.line_type, unit_instance_str, self.shield_source_allegiance, self.shield_recipient_allegiance, self.damage_source_caster_index.unwrap_or(self.buff_event.source_unit_index).wrapping_add(1), self.unit_instance_id.0, self.damage_source_allegiance, 0, self.hit_value, self.source_ability_cast_index.unwrap_or(usize::MAX).wrapping_add(1))
     }
 }
 

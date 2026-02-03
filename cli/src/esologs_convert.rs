@@ -36,7 +36,7 @@ pub struct ESOLogProcessor {
     pub eso_logs_log: ESOLogsLog,
     pub megaserver: Arc<str>,
     pub timestamp_offset: u64,
-    temporary_damage_buffer: u32,
+    temporary_damage_buffer: HashMap<u32, u32>,
     last_known_timestamp: u64,
     last_death_events: HashMap<usize, u64>,
     last_interrupt: Option<u32>, // unit_id of last interrupted unit
@@ -136,7 +136,7 @@ impl ESOLogProcessor {
             eso_logs_log: log,
             megaserver: "Unknown".into(),
             timestamp_offset: 0,
-            temporary_damage_buffer: 0,
+            temporary_damage_buffer: HashMap::new(),
             last_known_timestamp: 0,
             last_death_events: HashMap::new(),
             last_interrupt: None,
@@ -148,7 +148,7 @@ impl ESOLogProcessor {
     }
 
     pub fn reset(&mut self) {
-        self.temporary_damage_buffer = 0;
+        self.temporary_damage_buffer.clear();
         self.last_known_timestamp = 0;
         self.last_interrupt = None;
         self.last_death_events.clear();
@@ -782,10 +782,9 @@ impl ESOLogProcessor {
         Ok(())
     }
 
-    fn update_shield_history(esolog: &mut ESOLogsLog, unit_id: u32, shield: u32, buff_event: &ESOLogsBuffEventKey2) {
+    fn update_shield_history(esolog: &mut ESOLogsLog, unit_id: u32, shield: u32, buff_event: &ESOLogsBuffEventKey2, ability_id: u32) -> bool {
         let units_stored_shield = *esolog.shield_values.get(&unit_id).unwrap_or(&0);
-        let buff = &esolog.buffs[buff_event.buff_index];
-        if shield != units_stored_shield || buff.id == 146311 /* frost safeguard */ {
+        if shield != units_stored_shield || ability_id == 146311 /* frost safeguard */ {
             // log::trace!("Comparing shields for unit {}: {} new vs stored {}", unit_id, shield, units_stored_shield);
             if let Some(shield_buffs_for_unit) = esolog.shields.get_mut(&unit_id) {
                 shield_buffs_for_unit.insert(buff_event.buff_index, buff_event.clone());
@@ -797,7 +796,9 @@ impl ESOLogProcessor {
                 // log::trace!("Adding buff index: {}", buff_event.buff_index);
             }
             esolog.shield_values.insert(unit_id, shield);
+            return true
         }
+        return false
     }
 
     fn handle_combat_event(&mut self, parts: &[String]) -> Result<(), String> {
@@ -834,15 +835,16 @@ impl ESOLogProcessor {
         };
         self.last_known_timestamp = ev.time;
         let critical = match ev.result {
-                EventResult::Damage | EventResult::BlockedDamage | EventResult::DotTick | EventResult::Immune => 1,
-                EventResult::CriticalDamage | EventResult::DotTickCritical => 2,
-                EventResult::HotTick | EventResult::Heal => 1,
-                EventResult::HotTickCritical | EventResult::CriticalHeal => 2,
+                EventResult::Damage | EventResult::DotTick | EventResult::HotTick | EventResult::Heal => 1,
+                EventResult::CriticalDamage | EventResult::DotTickCritical | EventResult::HotTickCritical | EventResult::CriticalHeal => 2,
+                EventResult::BlockedDamage => 4,
+                EventResult::Dodged => 7,
+                EventResult::Immune => 10,
                 _ => 0,
             };
         let icon = self.eso_logs_log.get_buff_icon(ability_id);
         let cast_id = ev.cast_track_id;
-        let index_option = self.eso_logs_log.buffs_hashmap.get(&cast_id).copied();
+        let index_option = self.eso_logs_log.cast_id_hashmap.get(&cast_id).cloned();
         let mut source_allegiance = Self::allegiance_from_reaction(self.allegiance_from_unit_state(source));
         let target_allegiance = Self::allegiance_from_reaction(self.allegiance_from_unit_state(target));
         let dont_skip_enemy_id = if let Some(t) = self.eso_logs_log.units.get(buff_event.target_unit_index) {
@@ -850,6 +852,8 @@ impl ESOLogProcessor {
                 113566 => false, // archwizard twelvane
                 121166 => false, // count ryelaz
                 121469 => false, // zilyesset
+                107011 => false, // lylanar
+                107180 => false, // turlassil
                 _ => true,
             }
         } else {
@@ -860,7 +864,18 @@ impl ESOLogProcessor {
         match ev.result {
             EventResult::DamageShielded => {
                 if ev.hit_value == 0 {return Ok(())};
-                self.temporary_damage_buffer = ev.hit_value;
+                if let Some(damage_value) = self.temporary_damage_buffer.get_mut(&target.unit_id) {
+                    *damage_value += ev.hit_value;
+                } else {
+                    self.temporary_damage_buffer.insert(target.unit_id, ev.hit_value.clone());
+                }
+                /*
+                1748846,COMBAT_EVENT,DAMAGE_SHIELDED,GENERIC,0,9326,0,6974928,186208,7169,6497534/7438642,0/0,0/0,0/0,0/0,0,0.4912,0.7112,3.5851,1,41444/42851,15393/15393,10048/21910,260/500,1000/1000,9326,0.4947,0.7170,0.7700
+                1748846,COMBAT_EVENT,DAMAGE_SHIELDED,GENERIC,0,1740,0,6974928,186208,7169,6497534/7438642,0/0,0/0,0/0,0/0,0,0.4912,0.7112,3.5851,39,23695/24710,3984/15007,7622/31697,246/500,1000/1000,2780,0.4847,0.7077,3.7293
+                1748846,COMBAT_EVENT,DOT_TICK,FIRE,1,3480,0,6974928,153177,7169,6497534/7438642,0/0,0/0,0/0,0/0,0,0.4912,0.7112,3.5851,1,37964/42851,15393/15393,10048/21910,260/500,1000/1000,9326,0.4947,0.7170,0.7700
+                1748846,COMBAT_EVENT,DOT_TICK,FIRE,1,580,0,6974928,153177,7169,6497534/7438642,0/0,0/0,0/0,0/0,0,0.4912,0.7112,3.5851,7272,27238/30000,0/0,0/0,0/0,0/0,0,0.4942,0.7172,5.8606
+                1748846,COMBAT_EVENT,DOT_TICK,FIRE,1,0,0,6974928,153177,7169,6497534/7438642,0/0,0/0,0/0,0/0,0,0.4912,0.7112,3.5851,39,23695/24710,3984/15007,7622/31697,246/500,1000/1000,2780,0.4847,0.7077,3.7293
+                */
                 let instance_ids = (
                     self.index_in_session(source.unit_id).unwrap_or(0),
                     self.index_in_session(target.unit_id).unwrap_or(0),
@@ -879,57 +894,71 @@ impl ESOLogProcessor {
                     self.index_in_session(original_tgt_id).unwrap_or(0),
                 );
 
-                if cast_id != 0 {
-                    if let Some(shield_buff_event) = self
-                            .eso_logs_log
-                            .shields
-                            .get(&target.unit_id)
-                            .and_then(|shields| shields.get(&buff_event.buff_index))
-                            .cloned()
-                        {
-                            if let Some(original_shield_event) = self
-                                .eso_logs_log
-                                .shields
-                                .get(&target.unit_id)
-                                .and_then(|shields| shields.get(&buff_event.buff_index))
-                            {
-                                let new_key = ESOLogsBuffEventKey {
-                                    source_unit_index: original_shield_event.source_unit_index,
-                                    target_unit_index: original_shield_event.target_unit_index,
-                                    buff_index: original_shield_event.buff_index,
-                                };
+                let buff = &self.eso_logs_log.buffs[buff_event.buff_index];
 
-                                if let Some(shield_event) = self.eso_logs_log.effects_hashmap.get(&new_key) {
-                                    if let Some(buff_event_shield) = self.eso_logs_log.effects.get(*shield_event) {
-                                        self.add_log_event(ESOLogsEvent::DamageShielded(ESOLogsDamageShielded {
-                                            timestamp: ev.time,
-                                            line_type: ESOLogsLineType::DamageShielded,
-                                            buff_event: *buff_event_shield,
-                                            shield_source_allegiance: Self::allegiance_from_reaction(
-                                                self.eso_logs_log.units[buff_event_shield.source_unit_index].unit_type,
-                                            ),
-                                            shield_recipient_allegiance: target_allegiance,
-                                            damage_source_allegiance: source_allegiance,
-                                            unit_instance_id: instance_ids,
-                                            orig_shield_instance_ids: shield_instance_ids,
-                                            hit_value: ev.hit_value,
-                                            source_ability_cast_index: index_option.unwrap_or(0),
-                                        }));
-                                    } else {
-                                        // log::trace!("shield error: {:?}", shield_buff_event);
-                                        // log::trace!("shield parts: {:?}", parts);
-                                    }
+                let resolved_shield_event = self
+                    .eso_logs_log
+                    .shields
+                    .get(&target.unit_id)
+                    .and_then(|shields| shields.get(&buff_event.buff_index))
+                    .cloned();
+
+                let original_shield_event = match resolved_shield_event {
+                    Some(event) => Some(event),
+                    None if buff.id == 146_311 => {
+                        let unit_index = self.index_in_session(target.unit_id).unwrap_or(0);
+                        Some(ESOLogsBuffEventKey2 {
+                            source_unit_id: target.unit_id,
+                            target_unit_id: target.unit_id,
+                            source_unit_index: unit_index,
+                            target_unit_index: unit_index,
+                            buff_index: buff_event.buff_index,
+                            source_cast_id: None,
+                        })
+                    }
+                    None => None,
+                };
+
+                if cast_id != 0 {
+                    if let Some(shield_buff_event) = resolved_shield_event
+                        {
+                        if let Some(original_shield_event) = original_shield_event {
+                            let new_key = ESOLogsBuffEventKey {
+                                source_unit_index: original_shield_event.source_unit_index,
+                                target_unit_index: original_shield_event.target_unit_index,
+                                buff_index: original_shield_event.buff_index,
+                            };
+
+                            if let Some(shield_event) = self.eso_logs_log.effects_hashmap.get(&new_key) {
+                                if let Some(buff_event_shield) = self.eso_logs_log.effects.get(*shield_event) {
+                                    self.add_log_event(ESOLogsEvent::DamageShielded(ESOLogsDamageShielded {
+                                        timestamp: ev.time,
+                                        line_type: ESOLogsLineType::DamageShielded,
+                                        buff_event: *buff_event_shield,
+                                        shield_source_allegiance: Self::allegiance_from_reaction(
+                                            self.eso_logs_log.units[buff_event_shield.source_unit_index].unit_type,
+                                        ),
+                                        shield_recipient_allegiance: target_allegiance,
+                                        damage_source_allegiance: source_allegiance,
+                                        unit_instance_id: instance_ids,
+                                        orig_shield_instance_ids: shield_instance_ids,
+                                        hit_value: ev.hit_value,
+                                        source_ability_cast_index: None,
+                                        damage_source_caster_index: None,
+                                    }));
                                 }
                             }
-
-                            Self::update_shield_history(
-                                &mut self.eso_logs_log,
-                                target.unit_id,
-                                target.shield,
-                                &shield_buff_event,
-                            );
                         }
+
+                        Self::update_shield_history(
+                            &mut self.eso_logs_log,
+                            target.unit_id,
+                            target.shield,
+                            &shield_buff_event,
+                            ability_id,
+                        );
                     }
+                }
             }
             EventResult::Dodged => {
                 if let Some(buff) = self.eso_logs_log.buffs.get_mut(buff_event.buff_index) {
@@ -960,17 +989,17 @@ impl ESOLogProcessor {
                         cast_information: Some(ESOLogsCastData {
                             critical,
                             hit_value: ev.hit_value,
-                            overflow: ev.overflow + self.temporary_damage_buffer,
-                            override_magic_number: Some(7),
-                            replace_hitvalue_overflow: self.temporary_damage_buffer != 0,
+                            overflow: ev.overflow,
+                            is_heal: false,
                             blocked: false,
                         })
                     }
                 ));
             }
-            EventResult::Damage | EventResult::DotTick | EventResult::CriticalDamage | EventResult::DotTickCritical => {
-                // if self.in_combat == false {return Ok(())}
-                if ev.hit_value == 0 && ev.overflow == 0 {return Ok(())}
+            EventResult::Damage | EventResult::DotTick | EventResult::CriticalDamage | EventResult::DotTickCritical | EventResult::BlockedDamage => {
+                let temporary_damage = *self.temporary_damage_buffer.get(&target.unit_id).unwrap_or(&0);
+                if ev.hit_value == 0 && ev.overflow == 0 && temporary_damage == 0 {return Ok(())}
+                if ev.damage_type == DamageType::Heal {return Ok(())}
                 if !self.eso_logs_log.bosses.contains_key(&source.unit_id)  && buff_event.source_unit_index < self.eso_logs_log.units.len() {
                     let unit = &mut self.eso_logs_log.units[buff_event.source_unit_index];
                     if icon != "nil".into() && icon != "death_recap_melee_basic".into() {
@@ -1019,14 +1048,26 @@ impl ESOLogProcessor {
                         },
                         cast_information: Some(ESOLogsCastData {
                             critical,
-                            hit_value: ev.hit_value.saturating_sub(self.temporary_damage_buffer),
-                            overflow: ev.overflow + self.temporary_damage_buffer,
-                            override_magic_number: None,
-                            replace_hitvalue_overflow: self.temporary_damage_buffer != 0,
-                            blocked: ev.result == EventResult::Blocked,
+                            hit_value: ev.hit_value,
+                            overflow: ev.overflow + temporary_damage,
+                            blocked: ev.result == EventResult::BlockedDamage,
+                            is_heal: false,
                         })
                     }
                 ));
+                if temporary_damage > 0 {
+                    for event in self.eso_logs_log.events.iter_mut().rev().skip(1) {
+                        match event {
+                            ESOLogsEvent::DamageShielded(e) => {
+                                e.source_ability_cast_index = Some(buff_event.buff_index);
+                                e.damage_source_caster_index = Some(buff_event.source_unit_index);
+                                log::trace!("changed shield event to index {}", buff_event.buff_index);
+                            }
+                            _ => {break}
+                        }
+                    }
+                }
+                self.temporary_damage_buffer.insert(target.unit_id, 0);
                 if should_add_death_event {
                     if timestamp - self.last_death_events.get(&buff_event.target_unit_index).unwrap_or(&0) < 3000 {return Ok(())}
                     self.last_death_events.insert(buff_event.target_unit_index, timestamp);
@@ -1087,9 +1128,8 @@ impl ESOLogProcessor {
                             critical,
                             hit_value: ev.hit_value,
                             overflow: ev.overflow,
-                            override_magic_number: None,
-                            replace_hitvalue_overflow: false,
                             blocked: false,
+                            is_heal: true,
                         })
                     }
                 ));
@@ -1148,10 +1188,9 @@ impl ESOLogProcessor {
                         },
                         cast_information: Some(ESOLogsCastData {
                             critical,
-                            hit_value: ev.hit_value,
-                            overflow: ev.overflow,
-                            override_magic_number: Some(10), // magic number that just works based on observed log uploads. todo: figure out 1-9, 11-??
-                            replace_hitvalue_overflow: false,
+                            hit_value: 0,
+                            overflow: 0,
+                            is_heal: false,
                             blocked: false,
                         })
                     }
@@ -1185,10 +1224,40 @@ impl ESOLogProcessor {
                     }
                 ));
             }
+            EventResult::Died | EventResult::DiedXP => {
+                if !dont_skip_enemy_id {
+                    let instance_ids = (self.index_in_session(source.unit_id).unwrap_or(0), self.index_in_session(target.unit_id).unwrap_or(0));
+                    if timestamp - self.last_death_events.get(&buff_event.target_unit_index).unwrap_or(&0) < 3000 {return Ok(())}
+                    self.last_death_events.insert(buff_event.target_unit_index, timestamp);
+                    if source_allegiance == 32 {source_allegiance = 64} // if it's not an enemy then it is a friend (edge case)
+                    self.add_log_event(ESOLogsEvent::CastLine(
+                        ESOLogsCastLine {
+                            timestamp,
+                            line_type: ESOLogsLineType::Death,
+                            buff_event,
+                            unit_instance_id: instance_ids,
+                            cast: ESOLogsCastBase {
+                                source_allegiance,
+                                target_allegiance,
+                                cast_id_origin: ev.cast_track_id,
+                                source_unit_state: ESOLogsUnitState {
+                                    unit_state: source,
+                                    champion_points: self.get_cp_for_unit(source.unit_id),
+                                },
+                                target_unit_state: ESOLogsUnitState {
+                                    unit_state: target,
+                                    champion_points: self.get_cp_for_unit(target.unit_id),
+                                },
+                            },
+                            cast_information: None,
+                        }
+                    ));
+                }
+            },
             _ => {}
         };
-        if ev.result != EventResult::DamageShielded {
-            self.temporary_damage_buffer = 0;
+        if !matches!(ev.result, EventResult::DamageShielded | EventResult::Damage | EventResult::DotTick | EventResult::CriticalDamage | EventResult::DotTickCritical | EventResult::BlockedDamage) {
+            self.temporary_damage_buffer.clear();
         }
         if ev.result != EventResult::Interrupt {
             self.last_interrupt = None;
@@ -1330,11 +1399,19 @@ impl ESOLogProcessor {
             target_unit_index: buff_event.target_unit_index,
             target_unit_id: target.unit_id,
             buff_index: buff_event.buff_index,
+            source_cast_id: Some(cast_id),
         };
-        if source.unit_id != 0 {
-            Self::update_shield_history(&mut self.eso_logs_log, source.unit_id, source.shield, &shield_buff_event);
-            Self::update_shield_history(&mut self.eso_logs_log, target.unit_id, target.shield, &shield_buff_event);
-        }
+
+        let update_source = if source.unit_id != 0 {
+            Self::update_shield_history(&mut self.eso_logs_log, source.unit_id, source.shield, &shield_buff_event, ability_id)
+        } else {
+            false
+        };
+        let update_target = if source.unit_id != 0 { 
+            Self::update_shield_history(&mut self.eso_logs_log, target.unit_id, target.shield, &shield_buff_event, ability_id)
+        } else {
+            false
+        };
         let instance_ids = (self.index_in_session(source.unit_id).unwrap_or(0), self.index_in_session(target.unit_id).unwrap_or(0));
         let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse timestamp: {e}"))?);
         self.last_known_timestamp = timestamp;
@@ -1355,8 +1432,8 @@ impl ESOLogProcessor {
                     source_allegiance,
                     target_allegiance,
                     source_cast_index: index,
-                    source_shield: source.shield,
-                    target_shield: target.shield,
+                    source_shield: if update_source {source.shield} else {0},
+                    target_shield: if update_target {target.shield} else {0},
                 }
             ));
         } else if parts[2] == "FADED" {
@@ -1375,8 +1452,8 @@ impl ESOLogProcessor {
                     source_allegiance,
                     target_allegiance,
                     source_cast_index: None,
-                    source_shield: source.shield,
-                    target_shield: target.shield,
+                    source_shield: if update_source {source.shield} else {0},
+                    target_shield: if update_target {target.shield} else {0},
                 }
             ));
         } else if parts[2] == "UPDATED" {
@@ -1555,11 +1632,32 @@ impl ESOLogProcessor {
     }
 
     fn handle_unit_changed(&mut self, parts: &[String]) -> Result<(), String> {
-        let unit_id = parts[2].parse().map_err(|e| format!("Failed to parse unit_id: {e}"))?;
-        let unit_index = self.unit_index(unit_id);
-        if unit_index.is_some() {
-            let unit = &mut self.eso_logs_log.units[unit_index.ok_or_else(|| "Failed to unwrap unit_index".to_string())?];
+        let unit_id = parts[2]
+            .parse()
+            .map_err(|e| format!("Failed to parse unit_id: {e}"))?;
+
+        if let Some(idx) = self.unit_index(unit_id) {
+            let unit = &mut self.eso_logs_log.units[idx];
             unit.unit_type = unit::match_reaction(&parts[11]);
+        }
+        if parts.len() > 6 {
+            let id = parts[7].trim_matches('"');
+            if id.is_empty() {return Ok(());}
+            let char_id = id.parse::<u64>().map_err(|e| format!("Failed to parse character_id: {e}"))?;
+            if char_id > 0 {
+                if let Some(unit_index) = self.eso_logs_log.unit_id_to_units_index.get(&parts[2].parse::<u32>().map_err(|e| format!("Failed to parse unit_id: {e}"))?) {
+                    if let Some(unit) = self.eso_logs_log.units.get_mut(*unit_index) {
+                        unit.name = parts[5].clone().trim_matches('"').into();
+                        let logging = if let Some(data) = unit.player_data.as_ref() {
+                            data.is_logging_player
+                        } else {
+                            false
+                        };
+                        unit.player_data = Some(ESOLogsPlayerSpecificData { username: parts[6].clone().trim_matches('"').into(), character_id: char_id, is_logging_player: logging });
+                        // println!("{char_id}");
+                    }
+                }
+            }
         }
         Ok(())
     }
