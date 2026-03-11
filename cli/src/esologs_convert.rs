@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}, error::Error, fs::File, io::{BufRead, BufReader, BufWriter}, path::Path, sync::{Arc, atomic::{AtomicBool, Ordering}}, u16};
 use std::io::Write;
-use esosim::{data::{critical_damage::LUCENT_ECHOES_ID, item_type::GearSlot, major_minor::SAVAGERY_MINOR_ID}, engine::character::Character, models::player::{ActiveBar, GearPiece}};
+use esosim::{data::{critical_damage::LUCENT_ECHOES_ID, item_type::GearSlot, major_minor::SAVAGERY_MINOR_ID}, engine::player::character::Character, models::player::{ActiveBar, GearPiece}};
 use parser::{EventType, UnitAddedEventType, effect::{self, StatusEffectType}, event::{self, CastEndReason, DamageType, EventResult, is_damage_event, parse_cast_end_reason}, parse::{self, gear_piece}, player::{Class, Race}, unit::{self, Reaction, UnitState, blank_unit_state}};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
 use std::fs;

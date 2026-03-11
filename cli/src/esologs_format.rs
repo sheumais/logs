@@ -1,7 +1,8 @@
 use std::{collections::{HashMap, HashSet}, fmt::{self, Display}, hash::Hash, sync::Arc, usize};
+use esosim::engine::player::character::Character;
 use parser::{effect::StatusEffectType, event::DamageType, player::Race, unit::{blank_unit_state, Reaction, UnitState}};
 
-pub const ESO_LOGS_COM_VERSION: &str = "8.19.39";
+pub const ESO_LOGS_COM_VERSION: &str = "8.20.113";
 pub const ESO_LOGS_PARSER_VERSION: &u8 = &11;
 pub const LINE_COUNT_FOR_PROGRESS: usize = 25000usize;
 
@@ -33,7 +34,7 @@ pub struct ESOLogsLog {
     pub current_health: HashMap<u32, u32>,
 
     // Custom additions not required for parsing
-    pub esosim_characters: HashMap<u32, esosim::engine::character::Character>,
+    pub esosim_characters: HashMap<u32, Character>,
     pub critical_damage_done: HashMap<u32, u32>,
     pub power: HashMap<u32, u32>,
     pub armour_physical: HashMap<u32, u32>,

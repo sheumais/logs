@@ -1,3 +1,4 @@
+use std::clone;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
@@ -5,10 +6,11 @@ use std::io::{BufReader, BufWriter, Write, BufRead};
 use std::path::Path;
 use std::sync::Arc;
 use esosim::data::item_type::{GearSlot, ITEM_TYPES, ItemType};
+use esosim::data::skill::{SkillLine, ability_id_to_subclass};
 use parser::effect::{is_zen_dot, MOULDERING_TAINT_ID, MOULDERING_TAINT_TIME, ZEN_DEBUFF_ID};
 use parser::event::{self, parse_event_result, EventResult};
 use parser::parse::{self, gear_piece, unit_state_id_only};
-use parser::subclassing::{Subclass, ability_id_to_subclassing, subclass_to_icon, subclass_to_name};
+use parser::subclassing::{subclass_to_icon, subclass_to_name};
 use parser::unit::UnitState;
 use parser::{EffectChangedEventType, EventType, UnitAddedEventType};
 
@@ -20,7 +22,7 @@ pub struct CustomLogData {
     pub taint_stacks: HashMap<u32, MoulderingTaintState>,
     pub units: HashMap<u32, Arc<str>>,
     pub last_combat_event_timestamp: u64,
-    pub subclassing_map: HashMap<String, Option<Vec<Subclass>>>,
+    pub subclassing_map: HashMap<String, Option<Vec<SkillLine>>>,
     pub known_ids: HashMap<u32, bool>,
 }
 
@@ -495,7 +497,7 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
     let mut long_term_buff_stacks: Vec<u8> = parts[4].split(',').map(|x| x.parse::<u8>().unwrap_or_default()).collect();
     let mut subclasses_to_append = Vec::new();
     for ability_id in long_term_buffs.iter().chain(primary_ability_id_list.iter()).chain(backup_ability_id_list.iter()) {
-        if let Some(subclass) = ability_id_to_subclassing(*ability_id) {
+        if let Some(subclass) = ability_id_to_subclass(ability_id) {
             if !custom_log_data.known_ids.contains_key(&(subclass as u32)) {
                 let subclass_definition = format!(
                     "{},ABILITY_INFO,{},\"Subclass: {}\",\"{}\",F,T",
@@ -516,10 +518,10 @@ fn modify_player_data(parts: &[String], custom_log_data: &mut CustomLogData) -> 
             subclasses_to_append.push(subclass);
         }
     }
-    subclasses_to_append.sort_unstable();
+    subclasses_to_append.sort_by(|a, b| (*a as u32).cmp(&(*b as u32)));
     subclasses_to_append.dedup();
     for subclass in &subclasses_to_append {
-        long_term_buffs.push(subclass.clone() as u32);
+        long_term_buffs.push((*subclass as u32).clone());
         long_term_buff_stacks.push(1);
     }
     custom_log_data.subclassing_map.insert(player_name.to_string(), Some(subclasses_to_append));
