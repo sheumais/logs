@@ -297,6 +297,7 @@ impl ESOLogProcessor {
         let stats_opt = {
             match self.eso_logs_log.esosim_characters.get_mut(&target) {
                 Some(character) => {
+                    character.recompute_buff_supplemental_state();
                     let crit_damage = character.get_critical_damage_uncapped() as u32;
                     let power = character.get_power();
                     let armour_physical = character.get_armour(&esosim::models::damage::DamageType::PHYSICAL);
@@ -748,6 +749,7 @@ impl ESOLogProcessor {
             for buff in &long_term_buffs {
                 player.add_buff(*buff, 1);
             }
+            player.recompute_all_supplemental_state();
         }
 
         self.add_log_event(ESOLogsEvent::PlayerInfo(
