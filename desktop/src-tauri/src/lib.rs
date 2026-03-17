@@ -435,15 +435,45 @@ fn get_saved_upload_settings() -> Option<UploadSettings> {
     load_upload_settings()
 }
 
+#[derive(serde::Deserialize)]
+struct GitHubTag {
+    name: String,
+}
+
+async fn fetch_latest_version(client: &reqwest::Client) -> Result<String, String> {
+    let tags: Vec<GitHubTag> = client
+        .get("https://api.github.com/repos/RPGLogs/Uploaders-esologs/tags")
+        .header("User-Agent", "eso-log-tool")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch version: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse version response: {e}"))?;
+
+    tags.into_iter()
+        .next()
+        .map(|t| t.name.trim_start_matches('v').to_string())
+        .ok_or_else(|| "No tags found".to_string())
+}
+
 #[tauri::command]
 async fn login(state: tauri::State<'_, AppState>, username: String, password: String) -> Result<LoginResponse, String> {
     log::info!("Attempting to log in");
-    let payload = serde_json::json!({ "email": username, "password": password, "version": ESO_LOGS_COM_VERSION });
 
     let client = {
         let client_guard = state.http.read().map_err(|e| e.to_string())?;
         client_guard.client.clone()
     };
+
+    let version = fetch_latest_version(&client).await.unwrap_or_else(|e| {
+        log::warn!("Could not fetch latest version, falling back to constant: {e}");
+        ESO_LOGS_COM_VERSION.to_string()
+    });
+    log::info!("Logging in with version: {version}");
+
+    let payload = serde_json::json!({ "email": username, "password": password, "version": version });
+
     let resp = client
         .post("https://www.esologs.com/desktop-client/log-in")
         .json(&payload)
