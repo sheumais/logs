@@ -5,6 +5,8 @@ use lazy_static::lazy_static;
 lazy_static! {
     static ref SETS: HashMap<u16, &'static str> = parse_set_data_into_hashmap(); 
     // Set data from https://github.com/Baertram/LibSets/blob/LibSets-reworked/LibSets/Data/
+
+    static ref CAUSED_BY_HASHMAP: HashMap<u32, u32> = parse_caused_by_into_hashmap();
 }
 
 pub fn parse_set_data_into_hashmap() -> HashMap<u16, &'static str> {
@@ -15,6 +17,24 @@ pub fn parse_set_data_into_hashmap() -> HashMap<u16, &'static str> {
         if parts.len() == 2 {
             if let Ok(key) = parts[0].parse::<u16>() {
                 lookup_table.insert(key, parts[1]);
+            }
+        }
+    }
+
+    lookup_table
+}
+
+pub fn parse_caused_by_into_hashmap() -> HashMap<u32, u32> {
+    let mut lookup_table = HashMap::new();
+    let data = include_str!("caused_by_hashmap.csv");
+    for line in data.lines() {
+        let parts: Vec<&str> = line.split(',').collect();
+        if parts.len() == 2 {
+            if let Ok(key) = parts[0].parse::<u32>() {
+                if let Ok(value) = parts[1].parse::<u32>() {
+                    lookup_table.insert(key, value);
+                }
+                
             }
         }
     }
@@ -63,4 +83,8 @@ pub fn is_armour_slot(slot: &GearSlot) -> bool {
 
 pub fn is_jewellery_slot(slot: &GearSlot) -> bool {
     matches!(slot, GearSlot::Necklace | GearSlot::Ring1 | GearSlot::Ring2)
+}
+
+pub fn get_caused_by_id(id: u32) -> &'static u32 {
+    CAUSED_BY_HASHMAP.get(&id).unwrap_or(&0)
 }
