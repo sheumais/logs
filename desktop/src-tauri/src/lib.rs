@@ -581,6 +581,9 @@ async fn create_report(
     log::trace!("Raw response body: {raw_body}");
 
     if !status.is_success() {
+        if status == 401 {
+            return Err("Authentication failed. Please log out and log back in to reset your account authentication.".to_string());
+        }
         return Err(format!("Server returned error status: {status} with body: {raw_body}"));
     }
 
