@@ -1186,9 +1186,9 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 check_for_update(handle).await.unwrap();
             });
-            thread::spawn(move || {
-                cli::rich_presence::rich_presence_thread();
-            });
+            // thread::spawn(move || {
+            //     cli::rich_presence::rich_presence_thread();
+            // });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -30,8 +30,8 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev \
-            libwebkit2gtk-4.1-dev
+            libjavascriptcoregtk-4.1-dev=2.50.6-1 \
+            libwebkit2gtk-4.1-dev=2.50.6-1
             
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -50,7 +50,10 @@ jobs:
           tauriScript: ""
           tagName: v__VERSION__
           releaseName: 'v__VERSION__'
-          releaseBody: 'See the assets to download this version and install.'
+          releaseBody: |
+            See the assets to download this version and install.
+
+            Windows users are recommended to download the x64_en-US.msi installer.
           releaseDraft: true
           prerelease: false
         env:
