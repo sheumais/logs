@@ -44,7 +44,7 @@ Install the [Tauri CLI](https://v2.tauri.app/reference/cli/) using Cargo
 cargo install tauri-cli --version "^2.0.0" --locked
 ```
 
-Install [trunk](https://trunkrs.dev/)
+Install [trunk](https://trunk-rs.github.io/trunk/)
 ```sh
 cargo install --locked trunk
 ```
