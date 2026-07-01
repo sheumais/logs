@@ -77,6 +77,14 @@ pub struct ScribingAbility {
     pub scribing: Option<Vec<String>>,
 }
 
+fn torf_from_bool(b: bool) -> String {
+    if b {
+        "T".to_string()
+    } else {
+        "F".to_string()
+    }
+}
+
 pub fn modify_log_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
     let file: File = File::open(file_path)?;
     let reader = BufReader::new(file);
@@ -343,6 +351,20 @@ fn check_ability_info(parts: &[String], custom_log_data: &mut CustomLogData) -> 
         add_blockade_versions(parts, custom_log_data)
     } else {
         custom_log_data.known_ids.insert(ability.id, true);
+        let icon = if ability.id == 263672 {Some("/esoui/art/icons/achievement_u25_dun2_meta.dds")} else {None};
+        if matches!(ability.id,
+            266179 | // templar
+            263411 | 263416 | 263419 | 263369 | 268372 | // arcanist
+            238232 | 263208 | // dragonknight
+            263604 | 263605 | // nightblade
+            263873 | 263878 | 263874 | // sorc
+            263462 | 263549 | // necro
+            263522 // warden
+        ) {
+            let name = format!("Class Mastery: {}", ability.name.clone());
+            return Some(vec!(format!("{},{},{},\"{}\",\"{}\",{},{}",
+                parts[0], "ABILITY_INFO", ability.id, name, icon.unwrap_or(&ability.icon), torf_from_bool(ability.blockable), torf_from_bool(ability.interruptible))));
+        }
         return None
     }
 }

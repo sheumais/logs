@@ -442,7 +442,7 @@ struct GitHubTag {
 
 async fn fetch_latest_version(client: &reqwest::Client) -> Result<String, String> {
     let tags: Vec<GitHubTag> = client
-        .get("https://api.github.com/repos/RPGLogs/Uploaders-esologs/tags")
+        .get("https://api.github.com/repos/RPGLogs/Uploaders-archon-lite/tags")
         .header("User-Agent", "eso-log-tool")
         .send()
         .await
@@ -455,6 +455,10 @@ async fn fetch_latest_version(client: &reqwest::Client) -> Result<String, String
         .next()
         .map(|t| t.name.trim_start_matches('v').to_string())
         .ok_or_else(|| "No tags found".to_string())
+}
+
+fn current_timestamp() -> String {
+    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
 }
 
 #[tauri::command]
@@ -472,7 +476,7 @@ async fn login(state: tauri::State<'_, AppState>, username: String, password: St
     });
     log::info!("Logging in with version: {version}");
 
-    let payload = serde_json::json!({ "email": username, "password": password, "version": version });
+    let payload = serde_json::json!({ "email": username, "password": password, "version": version, "clientTime": current_timestamp() });
 
     let resp = client
         .post("https://www.esologs.com/desktop-client/log-in")

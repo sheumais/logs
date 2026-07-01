@@ -1063,7 +1063,7 @@ impl ESOLogProcessor {
                             ESOLogsEvent::DamageShielded(e) => {
                                 e.source_ability_cast_index = Some(buff_event.buff_index);
                                 e.damage_source_caster_index = Some(buff_event.source_unit_index);
-                                log::trace!("changed shield event to index {}", buff_event.buff_index);
+                                // log::trace!("changed shield event to index {}", buff_event.buff_index);
                             }
                             _ => {break}
                         }
@@ -1159,6 +1159,7 @@ impl ESOLogProcessor {
                         overflow: ev.overflow,
                         resource_type: match ev.power_type {
                             1 => ESOLogsResourceType::Magicka,
+                            2 => ESOLogsResourceType::Health,
                             4 => ESOLogsResourceType::Stamina,
                             8 => ESOLogsResourceType::Ultimate,
                             _ => {log::warn!("Unknown power type: {}", ev.power_type); ESOLogsResourceType::Health},
