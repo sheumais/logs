@@ -1,7 +1,7 @@
 use std::{collections::{HashMap, HashSet}, error::Error, fs::File, io::{BufRead, BufReader, BufWriter}, path::Path, sync::{Arc, atomic::{AtomicBool, Ordering}}, u16};
 use std::io::Write;
-use esosim::{data::{critical_damage::LUCENT_ECHOES_ID, item_type::GearSlot, major_minor::SAVAGERY_MINOR_ID}, engine::player::character::Character, models::player::{ActiveBar, GearPiece}};
-use parser::{EventType, UnitAddedEventType, effect::{self, StatusEffectType}, event::{self, CastEndReason, DamageType, EventResult, is_damage_event, parse_cast_end_reason}, parse::{self, gear_piece}, player::{Class, Race}, set::get_caused_by_id, unit::{self, Reaction, UnitState, blank_unit_state}};
+// use esosim::{data::{critical_damage::LUCENT_ECHOES_ID, item_type::GearSlot, major_minor::SAVAGERY_MINOR_ID}, engine::player::character::Character, models::player::{ActiveBar, GearPiece}};
+use parser::{EventType, UnitAddedEventType, effect::{self, StatusEffectType}, event::{self, CastEndReason, DamageType, EventResult, is_damage_event, parse_cast_end_reason}, parse::{self}, player::{Class, Race}, set::get_caused_by_id, unit::{self, Reaction, UnitState, blank_unit_state}};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
 use std::fs;
 
@@ -28,9 +28,9 @@ pub fn event_timestamp(e: &ESOLogsEvent) -> Option<u64> {
     }
 }
 
-const SWAP_WEAPONS: u32 = 28541;
-const SWAP_WEAPONS_FRONTBAR: u32 = 61874;
-const SWAP_WEAPONS_BACKBAR: u32 = 61875;
+// const SWAP_WEAPONS: u32 = 28541;
+// const SWAP_WEAPONS_FRONTBAR: u32 = 61874;
+// const SWAP_WEAPONS_BACKBAR: u32 = 61875;
 
 pub struct ESOLogProcessor {
     pub eso_logs_log: ESOLogsLog,
@@ -71,67 +71,7 @@ impl ESOLogProcessor {
             caused_by_id: 0,
             interruptible_blockable: 0
         };
-        let crit_damage = ESOLogsBuff {
-            name: "Critical Damage".into(),
-            damage_type: DamageType::None,
-            status_type: StatusEffectType::None,
-            id: 512,
-            icon: "internal/ability_internal_cyan".into(),
-            caused_by_id: 0,
-            interruptible_blockable: 0
-        };
-        let power = ESOLogsBuff {
-            name: "Weapon & Spell Damage".into(),
-            damage_type: DamageType::None,
-            status_type: StatusEffectType::None,
-            id: 513,
-            icon: "internal/ability_internal_cyan".into(),
-            caused_by_id: 0,
-            interruptible_blockable: 0
-        };
-        let physical_resistance = ESOLogsBuff {
-            name: "Physical Resistance".into(),
-            damage_type: DamageType::None,
-            status_type: StatusEffectType::None,
-            id: 514,
-            icon: "internal/ability_internal_cyan".into(),
-            caused_by_id: 0,
-            interruptible_blockable: 0
-        };
-        let spell_resistance = ESOLogsBuff {
-            name: "Spell Resistance".into(),
-            damage_type: DamageType::None,
-            status_type: StatusEffectType::None,
-            id: 515,
-            icon: "internal/ability_internal_cyan".into(),
-            caused_by_id: 0,
-            interruptible_blockable: 0
-        };
-        let critical_chance = ESOLogsBuff {
-            name: "Critical Chance".into(),
-            damage_type: DamageType::None,
-            status_type: StatusEffectType::None,
-            id: 516,
-            icon: "internal/ability_internal_cyan".into(),
-            caused_by_id: 0,
-            interruptible_blockable: 0
-        };
-        let penetration = ESOLogsBuff {
-            name: "Penetration".into(),
-            damage_type: DamageType::None,
-            status_type: StatusEffectType::None,
-            id: 517,
-            icon: "internal/ability_internal_cyan".into(),
-            caused_by_id: 0,
-            interruptible_blockable: 0
-        };
         log.add_buff(health_recovery);
-        log.add_buff(crit_damage);
-        log.add_buff(power);
-        log.add_buff(physical_resistance);
-        log.add_buff(spell_resistance);
-        log.add_buff(critical_chance);
-        log.add_buff(penetration);
         Self {
             eso_logs_log: log,
             megaserver: "Unknown".into(),
@@ -145,6 +85,66 @@ impl ESOLogProcessor {
             zone: None,
             in_combat: false,
         }
+        // let crit_damage = ESOLogsBuff {
+        //     name: "Critical Damage".into(),
+        //     damage_type: DamageType::None,
+        //     status_type: StatusEffectType::None,
+        //     id: 512,
+        //     icon: "internal/ability_internal_cyan".into(),
+        //     caused_by_id: 0,
+        //     interruptible_blockable: 0
+        // };
+        // let power = ESOLogsBuff {
+        //     name: "Weapon & Spell Damage".into(),
+        //     damage_type: DamageType::None,
+        //     status_type: StatusEffectType::None,
+        //     id: 513,
+        //     icon: "internal/ability_internal_cyan".into(),
+        //     caused_by_id: 0,
+        //     interruptible_blockable: 0
+        // };
+        // let physical_resistance = ESOLogsBuff {
+        //     name: "Physical Resistance".into(),
+        //     damage_type: DamageType::None,
+        //     status_type: StatusEffectType::None,
+        //     id: 514,
+        //     icon: "internal/ability_internal_cyan".into(),
+        //     caused_by_id: 0,
+        //     interruptible_blockable: 0
+        // };
+        // let spell_resistance = ESOLogsBuff {
+        //     name: "Spell Resistance".into(),
+        //     damage_type: DamageType::None,
+        //     status_type: StatusEffectType::None,
+        //     id: 515,
+        //     icon: "internal/ability_internal_cyan".into(),
+        //     caused_by_id: 0,
+        //     interruptible_blockable: 0
+        // };
+        // let critical_chance = ESOLogsBuff {
+        //     name: "Critical Chance".into(),
+        //     damage_type: DamageType::None,
+        //     status_type: StatusEffectType::None,
+        //     id: 516,
+        //     icon: "internal/ability_internal_cyan".into(),
+        //     caused_by_id: 0,
+        //     interruptible_blockable: 0
+        // };
+        // let penetration = ESOLogsBuff {
+        //     name: "Penetration".into(),
+        //     damage_type: DamageType::None,
+        //     status_type: StatusEffectType::None,
+        //     id: 517,
+        //     icon: "internal/ability_internal_cyan".into(),
+        //     caused_by_id: 0,
+        //     interruptible_blockable: 0
+        // };
+        // log.add_buff(crit_damage);
+        // log.add_buff(power);
+        // log.add_buff(physical_resistance);
+        // log.add_buff(spell_resistance);
+        // log.add_buff(critical_chance);
+        // log.add_buff(penetration);
     }
 
     pub fn reset(&mut self) {
@@ -266,153 +266,153 @@ impl ESOLogProcessor {
         }
     }
 
-    fn maybe_create_buff_event(&mut self, target_unit_id: u32, buff_index_id: u32) -> Result<Option<ESOLogsBuffEvent>, String> {
-        if !self.eso_logs_log.esosim_characters.contains_key(&target_unit_id) {
-            return Ok(None);
-        }
+    // fn maybe_create_buff_event(&mut self, target_unit_id: u32, buff_index_id: u32) -> Result<Option<ESOLogsBuffEvent>, String> {
+    //     if !self.eso_logs_log.esosim_characters.contains_key(&target_unit_id) {
+    //         return Ok(None);
+    //     }
 
-        let source_unit_index = self.unit_index(target_unit_id).ok_or_else(|| format!("source_unit_index {} is out of bounds", target_unit_id))?;
-        let target_unit_index = self.unit_index(target_unit_id).ok_or_else(|| format!("target_unit_index {} is out of bounds", target_unit_id))?;
-        let buff_index = self.buff_index(buff_index_id).ok_or_else(|| format!("buff_index {} is out of bounds", buff_index_id))?;
+    //     let source_unit_index = self.unit_index(target_unit_id).ok_or_else(|| format!("source_unit_index {} is out of bounds", target_unit_id))?;
+    //     let target_unit_index = self.unit_index(target_unit_id).ok_or_else(|| format!("target_unit_index {} is out of bounds", target_unit_id))?;
+    //     let buff_index = self.buff_index(buff_index_id).ok_or_else(|| format!("buff_index {} is out of bounds", buff_index_id))?;
 
 
-        let mut event = ESOLogsBuffEvent {
-            unique_index: 0,
-            source_unit_index,
-            target_unit_index,
-            buff_index,
-        };
-        event.unique_index = self.add_buff_event(event);
-        Ok(Some(event))
-    }
+    //     let mut event = ESOLogsBuffEvent {
+    //         unique_index: 0,
+    //         source_unit_index,
+    //         target_unit_index,
+    //         buff_index,
+    //     };
+    //     event.unique_index = self.add_buff_event(event);
+    //     Ok(Some(event))
+    // }
 
-    pub fn process_target_stats(&mut self, target: u32, target_allegiance: u8) -> Result<(), String> {
-        let buff_event_crit = self.maybe_create_buff_event(target, 512)?;
-        let buff_event_power = self.maybe_create_buff_event(target, 513)?;
-        let buff_event_physical_resistance = self.maybe_create_buff_event(target, 514)?;
-        let buff_event_spell_resistance = self.maybe_create_buff_event(target, 515)?;
-        let buff_event_crit_chance = self.maybe_create_buff_event(target, 516)?;
-        let buff_event_penetration = self.maybe_create_buff_event(target, 517)?;
+    // pub fn process_target_stats(&mut self, target: u32, target_allegiance: u8) -> Result<(), String> {
+    //     let buff_event_crit = self.maybe_create_buff_event(target, 512)?;
+    //     let buff_event_power = self.maybe_create_buff_event(target, 513)?;
+    //     let buff_event_physical_resistance = self.maybe_create_buff_event(target, 514)?;
+    //     let buff_event_spell_resistance = self.maybe_create_buff_event(target, 515)?;
+    //     let buff_event_crit_chance = self.maybe_create_buff_event(target, 516)?;
+    //     let buff_event_penetration = self.maybe_create_buff_event(target, 517)?;
 
-        let stats_opt = {
-            match self.eso_logs_log.esosim_characters.get_mut(&target) {
-                Some(character) => {
-                    character.recompute_buff_supplemental_state();
-                    let crit_damage = character.get_critical_damage_uncapped() as u32;
-                    let power = character.get_power();
-                    let armour_physical = character.get_armour(&esosim::models::damage::DamageType::PHYSICAL);
-                    let armour_magic = character.get_armour(&esosim::models::damage::DamageType::MAGIC);
-                    let crit_chance = character.get_critical_chance_raw();
-                    let penetration = character.get_penetration();
-                    Some((crit_damage, power, armour_physical, armour_magic, crit_chance, penetration))
-                }
-                None => None,
-            }
-        };
+    //     let stats_opt = {
+    //         match self.eso_logs_log.esosim_characters.get_mut(&target) {
+    //             Some(character) => {
+    //                 character.recompute_buff_supplemental_state();
+    //                 let crit_damage = character.get_critical_damage_uncapped() as u32;
+    //                 let power = character.get_power();
+    //                 let armour_physical = character.get_armour(&esosim::models::damage::DamageType::PHYSICAL);
+    //                 let armour_magic = character.get_armour(&esosim::models::damage::DamageType::MAGIC);
+    //                 let crit_chance = character.get_critical_chance_raw();
+    //                 let penetration = character.get_penetration();
+    //                 Some((crit_damage, power, armour_physical, armour_magic, crit_chance, penetration))
+    //             }
+    //             None => None,
+    //         }
+    //     };
 
-        let (crit_damage, power, armour_physical, armour_magic, crit_chance, penetration) =
-            match stats_opt {
-                Some(tuple) => tuple,
-                None => return Ok(()),
-            };
+    //     let (crit_damage, power, armour_physical, armour_magic, crit_chance, penetration) =
+    //         match stats_opt {
+    //             Some(tuple) => tuple,
+    //             None => return Ok(()),
+    //         };
 
-        macro_rules! maybe_update {
-            ($buff_event:expr, $stacks:expr, $map:expr) => {
-                if let Some(buff_event) = $buff_event {
-                    let current = $map.get(&target).copied().unwrap_or(0u32);
-                    let new_stacks_u32: u32 = $stacks;
-                    if current != new_stacks_u32 {
-                        self.add_log_event(ESOLogsEvent::StackUpdate(
-                            ESOLogsBuffStacks {
-                                timestamp: self.last_known_timestamp,
-                                line_type: ESOLogsLineType::BuffStacksUpdatedAlly,
-                                buff_event,
-                                unit_instance_id: (0, 0),
-                                source_allegiance: target_allegiance,
-                                target_allegiance,
-                                stacks: new_stacks_u32.try_into().unwrap_or(u16::MAX),
-                            },
-                        ));
-                        $map.insert(target, new_stacks_u32);
-                    }
-                }
-            };
-        }
+    //     macro_rules! maybe_update {
+    //         ($buff_event:expr, $stacks:expr, $map:expr) => {
+    //             if let Some(buff_event) = $buff_event {
+    //                 let current = $map.get(&target).copied().unwrap_or(0u32);
+    //                 let new_stacks_u32: u32 = $stacks;
+    //                 if current != new_stacks_u32 {
+    //                     self.add_log_event(ESOLogsEvent::StackUpdate(
+    //                         ESOLogsBuffStacks {
+    //                             timestamp: self.last_known_timestamp,
+    //                             line_type: ESOLogsLineType::BuffStacksUpdatedAlly,
+    //                             buff_event,
+    //                             unit_instance_id: (0, 0),
+    //                             source_allegiance: target_allegiance,
+    //                             target_allegiance,
+    //                             stacks: new_stacks_u32.try_into().unwrap_or(u16::MAX),
+    //                         },
+    //                     ));
+    //                     $map.insert(target, new_stacks_u32);
+    //                 }
+    //             }
+    //         };
+    //     }
 
-        maybe_update!(buff_event_crit, crit_damage, &mut self.eso_logs_log.critical_damage_done);
-        maybe_update!(buff_event_power, power, &mut self.eso_logs_log.power);
-        maybe_update!(buff_event_physical_resistance, armour_physical, &mut self.eso_logs_log.armour_physical);
-        maybe_update!(buff_event_spell_resistance, armour_magic, &mut self.eso_logs_log.armour_spell);
-        maybe_update!(buff_event_crit_chance, crit_chance, &mut self.eso_logs_log.crit_chance);
-        maybe_update!(buff_event_penetration, penetration, &mut self.eso_logs_log.penetration);
+    //     maybe_update!(buff_event_crit, crit_damage, &mut self.eso_logs_log.critical_damage_done);
+    //     maybe_update!(buff_event_power, power, &mut self.eso_logs_log.power);
+    //     maybe_update!(buff_event_physical_resistance, armour_physical, &mut self.eso_logs_log.armour_physical);
+    //     maybe_update!(buff_event_spell_resistance, armour_magic, &mut self.eso_logs_log.armour_spell);
+    //     maybe_update!(buff_event_crit_chance, crit_chance, &mut self.eso_logs_log.crit_chance);
+    //     maybe_update!(buff_event_penetration, penetration, &mut self.eso_logs_log.penetration);
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
-    pub fn emit_all_target_stat_events(&mut self, target: u32, target_allegiance: u8) -> Result<(), String> {
-        let buff_event_crit = self.maybe_create_buff_event(target, 512)?;
-        let buff_event_power = self.maybe_create_buff_event(target, 513)?;
-        let buff_event_physical_resistance = self.maybe_create_buff_event(target, 514)?;
-        let buff_event_spell_resistance = self.maybe_create_buff_event(target, 515)?;
-        let buff_event_crit_chance = self.maybe_create_buff_event(target, 516)?;
-        let buff_event_penetration = self.maybe_create_buff_event(target, 517)?;
+    // pub fn emit_all_target_stat_events(&mut self, target: u32, target_allegiance: u8) -> Result<(), String> {
+    //     let buff_event_crit = self.maybe_create_buff_event(target, 512)?;
+    //     let buff_event_power = self.maybe_create_buff_event(target, 513)?;
+    //     let buff_event_physical_resistance = self.maybe_create_buff_event(target, 514)?;
+    //     let buff_event_spell_resistance = self.maybe_create_buff_event(target, 515)?;
+    //     let buff_event_crit_chance = self.maybe_create_buff_event(target, 516)?;
+    //     let buff_event_penetration = self.maybe_create_buff_event(target, 517)?;
 
-        let stats = {
-            let character = match self
-                .eso_logs_log
-                .esosim_characters
-                .get_mut(&target)
-            {
-                Some(c) => c,
-                None => return Ok(()),
-            };
+    //     let stats = {
+    //         let character = match self
+    //             .eso_logs_log
+    //             .esosim_characters
+    //             .get_mut(&target)
+    //         {
+    //             Some(c) => c,
+    //             None => return Ok(()),
+    //         };
 
-            (
-                character.get_critical_damage_uncapped() as u32,
-                character.get_power(),
-                character.get_armour(&esosim::models::damage::DamageType::PHYSICAL),
-                character.get_armour(&esosim::models::damage::DamageType::MAGIC),
-                character.get_critical_chance_raw(),
-                character.get_penetration(),
-            )
-        };
+    //         (
+    //             character.get_critical_damage_uncapped() as u32,
+    //             character.get_power(),
+    //             character.get_armour(&esosim::models::damage::DamageType::PHYSICAL),
+    //             character.get_armour(&esosim::models::damage::DamageType::MAGIC),
+    //             character.get_critical_chance_raw(),
+    //             character.get_penetration(),
+    //         )
+    //     };
 
-        let (
-            crit_damage,
-            power,
-            armour_physical,
-            armour_magic,
-            crit_chance,
-            penetration,
-        ) = stats;
+    //     let (
+    //         crit_damage,
+    //         power,
+    //         armour_physical,
+    //         armour_magic,
+    //         crit_chance,
+    //         penetration,
+    //     ) = stats;
 
-        macro_rules! emit {
-            ($buff_event:expr, $stacks:expr) => {
-                if let Some(buff_event) = $buff_event {
-                    self.add_log_event(ESOLogsEvent::StackUpdate(
-                        ESOLogsBuffStacks {
-                            timestamp: self.last_known_timestamp,
-                            line_type: ESOLogsLineType::BuffStacksUpdatedAlly,
-                            buff_event,
-                            unit_instance_id: (0, 0),
-                            source_allegiance: target_allegiance,
-                            target_allegiance,
-                            stacks: $stacks.try_into().unwrap_or(u16::MAX),
-                        },
-                    ));
-                }
-            };
-        }
+    //     macro_rules! emit {
+    //         ($buff_event:expr, $stacks:expr) => {
+    //             if let Some(buff_event) = $buff_event {
+    //                 self.add_log_event(ESOLogsEvent::StackUpdate(
+    //                     ESOLogsBuffStacks {
+    //                         timestamp: self.last_known_timestamp,
+    //                         line_type: ESOLogsLineType::BuffStacksUpdatedAlly,
+    //                         buff_event,
+    //                         unit_instance_id: (0, 0),
+    //                         source_allegiance: target_allegiance,
+    //                         target_allegiance,
+    //                         stacks: $stacks.try_into().unwrap_or(u16::MAX),
+    //                     },
+    //                 ));
+    //             }
+    //         };
+    //     }
 
-        emit!(buff_event_crit, crit_damage);
-        emit!(buff_event_power, power);
-        emit!(buff_event_physical_resistance, armour_physical);
-        emit!(buff_event_spell_resistance, armour_magic);
-        emit!(buff_event_crit_chance, crit_chance);
-        emit!(buff_event_penetration, penetration);
+    //     emit!(buff_event_crit, crit_damage);
+    //     emit!(buff_event_power, power);
+    //     emit!(buff_event_physical_resistance, armour_physical);
+    //     emit!(buff_event_spell_resistance, armour_magic);
+    //     emit!(buff_event_crit_chance, crit_chance);
+    //     emit!(buff_event_penetration, penetration);
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
 
     pub fn get_cp_for_unit(&self, unit_id: u32) -> u16 {
@@ -569,14 +569,14 @@ impl ESOLogProcessor {
         Ok(())
     }
 
-    fn reset_custom_stats(&mut self) {
-        self.eso_logs_log.critical_damage_done.clear();
-        self.eso_logs_log.power.clear();
-        self.eso_logs_log.armour_physical.clear();
-        self.eso_logs_log.armour_spell.clear();
-        self.eso_logs_log.crit_chance.clear();
-        self.eso_logs_log.penetration.clear();
-    }
+    // fn reset_custom_stats(&mut self) {
+    //     self.eso_logs_log.critical_damage_done.clear();
+    //     self.eso_logs_log.power.clear();
+    //     self.eso_logs_log.armour_physical.clear();
+    //     self.eso_logs_log.armour_spell.clear();
+    //     self.eso_logs_log.crit_chance.clear();
+    //     self.eso_logs_log.penetration.clear();
+    // }
 
     fn handle_begin_combat(&mut self, parts: &[String]) -> Result<(), String> {
         let rel_ticks = parts[0]
@@ -593,7 +593,7 @@ impl ESOLogProcessor {
         ));
 
         self.in_combat = true;
-        self.reset_custom_stats();
+        // self.reset_custom_stats();
 
         Ok(())
     }
@@ -654,7 +654,7 @@ impl ESOLogProcessor {
                 self.eso_logs_log.players.insert(player.player_per_session_id, true);
                 let index = self.add_unit(unit);
                 self.eso_logs_log.unit_id_to_units_index.insert(player.unit_id, index);
-                self.eso_logs_log.esosim_characters.insert(player.unit_id, Character::new(player.unit_id.clone()));
+                // self.eso_logs_log.esosim_characters.insert(player.unit_id, Character::new(player.unit_id.clone()));
             }
             UnitAddedEventType::Monster => {
                 let monster = parse::monster(parts);
@@ -730,27 +730,27 @@ impl ESOLogProcessor {
 
         let timestamp = self.calculate_timestamp(parts[0].parse::<u64>().map_err(|e| format!("Failed to parse player_info timestamp {e}"))?);
 
-        let gear_pieces: Vec<Option<(GearPiece, GearSlot)>> = parts[5..length-2].iter().map(|s| gear_piece(s)).collect();
-        let primary_skills: Vec<u32> = parts[length-2].split(',').map(|s| s.parse::<u32>().unwrap()).collect();
-        let backup_skills: Vec<u32> = parts[length-1].split(',').map(|s| s.parse::<u32>().unwrap()).collect();
+        // let gear_pieces: Vec<Option<(GearPiece, GearSlot)>> = parts[5..length-2].iter().map(|s| gear_piece(s)).collect();
+        // let primary_skills: Vec<u32> = parts[length-2].split(',').map(|s| s.parse::<u32>().unwrap()).collect();
+        // let backup_skills: Vec<u32> = parts[length-1].split(',').map(|s| s.parse::<u32>().unwrap()).collect();
         let player_id = parts[2].parse().map_err(|e| format!("Failed to parse player parts[2]: {e}"))?;
 
         let long_term_buffs: Vec<u32> = parts[3].split(',').map(|x| x.parse::<u32>().unwrap_or_default()).collect();
         let long_term_buff_stacks: Vec<u8> = parts[4].split(',').map(|x| x.parse::<u8>().unwrap_or_default()).collect();
-        if let Some(player) = self.eso_logs_log.esosim_characters.get_mut(&player_id) {
-            for gear in gear_pieces {
-                if let Some((real_gear, gear_slot)) = gear {
-                    player.set_gear_piece(&gear_slot, real_gear);
-                }
-            }
-            player.set_skills_on_bar(&ActiveBar::Primary, primary_skills);
-            player.set_skills_on_bar(&ActiveBar::Backup, backup_skills);
+        // if let Some(player) = self.eso_logs_log.esosim_characters.get_mut(&player_id) {
+        //     for gear in gear_pieces {
+        //         if let Some((real_gear, gear_slot)) = gear {
+        //             player.set_gear_piece(&gear_slot, real_gear);
+        //         }
+        //     }
+        //     player.set_skills_on_bar(&ActiveBar::Primary, primary_skills);
+        //     player.set_skills_on_bar(&ActiveBar::Backup, backup_skills);
 
-            for buff in &long_term_buffs {
-                player.add_buff(*buff, 1);
-            }
-            player.recompute_all_supplemental_state();
-        }
+        //     for buff in &long_term_buffs {
+        //         player.add_buff(*buff, 1);
+        //     }
+        //     player.recompute_all_supplemental_state();
+        // }
 
         self.add_log_event(ESOLogsEvent::PlayerInfo(
             ESOLogsPlayerBuild {
@@ -1288,18 +1288,18 @@ impl ESOLogProcessor {
             parse::unit_state(parts, 16)
         };
         let ability_id = parts[5].parse().map_err(|e| format!("Failed to parse ability_id: {e}"))?;
-        if let Some(character) = self.eso_logs_log.esosim_characters.get_mut(&source.unit_id) {
-            match ability_id {
-                SWAP_WEAPONS => character.swap_bars(None),
-                SWAP_WEAPONS_FRONTBAR => character.swap_bars(Some(&ActiveBar::Primary)),
-                SWAP_WEAPONS_BACKBAR => character.swap_bars(Some(&ActiveBar::Backup)),
-                _ => {
-                    if let Some(bar) = character.get_bar_of_skill_id(&ability_id).cloned() {
-                        character.swap_bars(Some(&bar));
-                    }
-                }
-            }
-        }
+        // if let Some(character) = self.eso_logs_log.esosim_characters.get_mut(&source.unit_id) {
+        //     match ability_id {
+        //         SWAP_WEAPONS => character.swap_bars(None),
+        //         SWAP_WEAPONS_FRONTBAR => character.swap_bars(Some(&ActiveBar::Primary)),
+        //         SWAP_WEAPONS_BACKBAR => character.swap_bars(Some(&ActiveBar::Backup)),
+        //         _ => {
+        //             if let Some(bar) = character.get_bar_of_skill_id(&ability_id).cloned() {
+        //                 character.swap_bars(Some(&bar));
+        //             }
+        //         }
+        //     }
+        // }
         let cast_time = parts[2].parse::<u32>().map_err(|e| format!("Failed to parse cast_time: {e}"))?;
         let cast_track_id = parts[4].parse::<u32>().map_err(|e| format!("Failed to parse cast_track_id: {e}"))?;
         if cast_time > 0 {
@@ -1420,12 +1420,12 @@ impl ESOLogProcessor {
         self.last_known_timestamp = timestamp;
         let stacks = parts[3].parse::<u16>().unwrap_or(1);
         if parts[2] == "GAINED" {
-            if let Some(character) = self.eso_logs_log.esosim_characters.get_mut(&target.unit_id) {
-                match ability_id {
-                    LUCENT_ECHOES_ID => if source.unit_id == target.unit_id {} else {character.add_buff(ability_id.clone(), stacks as u8)},
-                    _ => character.add_buff(ability_id.clone(), stacks as u8),
-                }
-            }
+            // if let Some(character) = self.eso_logs_log.esosim_characters.get_mut(&target.unit_id) {
+            //     match ability_id {
+            //         LUCENT_ECHOES_ID => if source.unit_id == target.unit_id {} else {character.add_buff(ability_id.clone(), stacks as u8)},
+            //         _ => character.add_buff(ability_id.clone(), stacks as u8),
+            //     }
+            // }
             self.add_log_event(ESOLogsEvent::BuffLine (
                 ESOLogsBuffLine {
                     timestamp: self.last_known_timestamp,
@@ -1440,12 +1440,12 @@ impl ESOLogProcessor {
                 }
             ));
         } else if parts[2] == "FADED" {
-            if let Some(character) = self.eso_logs_log.esosim_characters.get_mut(&target.unit_id) {
-                match ability_id {
-                    SAVAGERY_MINOR_ID => {},
-                    _ => character.remove_buff(ability_id.clone()),
-                }
-            }
+            // if let Some(character) = self.eso_logs_log.esosim_characters.get_mut(&target.unit_id) {
+            //     match ability_id {
+            //         SAVAGERY_MINOR_ID => {},
+            //         _ => character.remove_buff(ability_id.clone()),
+            //     }
+            // }
             self.add_log_event(ESOLogsEvent::BuffLine (
                 ESOLogsBuffLine {
                     timestamp: self.last_known_timestamp,
@@ -1460,9 +1460,9 @@ impl ESOLogProcessor {
                 }
             ));
         } else if parts[2] == "UPDATED" {
-            if let Some(character) = self.eso_logs_log.esosim_characters.get_mut(&target.unit_id) {
-                character.add_buff(ability_id.clone(), stacks as u8);
-            }
+            // if let Some(character) = self.eso_logs_log.esosim_characters.get_mut(&target.unit_id) {
+            //     character.add_buff(ability_id.clone(), stacks as u8);
+            // }
             if stacks > 1 {
                 if source_allegiance == 32 {source_allegiance = 16}
                 if target_allegiance == 32 {target_allegiance = 16}
@@ -1484,7 +1484,7 @@ impl ESOLogProcessor {
                 ));
             }
         }
-        self.process_target_stats(target.unit_id, target_allegiance)?;
+        // self.process_target_stats(target.unit_id, target_allegiance)?;
         // let target_unit_index = self.unit_index(target.unit_id).ok_or_else(|| format!("target_unit_index {} is out of bounds", target.unit_id))?;
         // let target_name = &self.eso_logs_log.units[target_unit_index].name;
         // if let Some(character) = self.eso_logs_log.esosim_characters.get_mut(&target.unit_id) {
