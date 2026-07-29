@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -32,15 +32,32 @@ jobs:
             libsoup-3.0-dev \
             libjavascriptcoregtk-4.1-dev \
             libwebkit2gtk-4.1-dev
-            
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
       - name: Add wasm target for Yew
         run: rustup target add wasm32-unknown-unknown
 
-      - name: Install Trunk
-        run: cargo install trunk
+      - name: Install Trunk (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl -L https://github.com/trunk-rs/trunk/releases/latest/download/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf -
+          sudo mv trunk /usr/local/bin/
+
+      - name: Install Trunk (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          curl -L https://github.com/trunk-rs/trunk/releases/latest/download/trunk-aarch64-apple-darwin.tar.gz | tar -xzf -
+          sudo mv trunk /usr/local/bin/
+
+      - name: Install Trunk (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri https://github.com/trunk-rs/trunk/releases/latest/download/trunk-x86_64-pc-windows-msvc.zip -OutFile trunk.zip
+          Expand-Archive -Path trunk.zip -DestinationPath .
+          echo "$PWD" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Tauri Build
         uses: tauri-apps/tauri-action@v0
