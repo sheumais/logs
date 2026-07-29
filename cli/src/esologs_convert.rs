@@ -1930,7 +1930,10 @@ pub fn write_zip_with_logtxt<P: AsRef<Path>>(zip_path: P, data: &[u8]) -> Result
 
 pub fn build_report_segment(elp: &ESOLogProcessor) -> String {
     let mut out = String::with_capacity(elp.eso_logs_log.events.len() * 64);
-    let server_id = if elp.megaserver == "NA Megaserver".into() { 1 } else { 2 };
+    let server_id = match elp.megaserver.as_ref() {
+        "NA Megaserver" | "XB1live-na" => {1}
+        _ => {2}
+    };
 
     out.push_str(&format!("15|{server_id}\n"));
     out.push_str(&format!("{}\n", elp.eso_logs_log.events.len()));

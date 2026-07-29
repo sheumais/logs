@@ -133,6 +133,8 @@ pub fn is_zen_dot(effect_id: u32) -> bool {
         126897 => true, // consuming trap
         // soul assault
         // shatter soul
+        137164 => true, // feral carnage
+        58880 => true, // bloodclaws dot
 
 
             // gear sets
