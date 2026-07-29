@@ -2,7 +2,7 @@ use stylist::yew::styled_component;
 use tauri_sys::core::invoke;
 use yew::prelude::*;
 use yew_router::hooks::use_navigator;
-use yew_icons::IconId;
+use yew_icons::IconData;
 use crate::{app::{LoginContext, UpdateContext}, routes::Route, ui::{icon_button::IconButton, login::LoginBox, logo::logo, style::*}};
 
 #[derive(Properties, PartialEq)]
@@ -85,27 +85,27 @@ pub fn homepage() -> Html {
                 <div class={icon_wrapper_style()}>
                     if login_ctx.is_some() {
                         <IconButton
-                            icon_id={IconId::LucideUpload}
+                            data={IconData::LUCIDE_UPLOAD}
                             description={"Upload to esologs.com"}
                             onclick={Some(upload.clone())}
                             class={icon_style()}
                         />
                     } else {
                         <IconButton
-                            icon_id={IconId::BootstrapFileEarmarkBreak}
+                            data={IconData::BOOTSTRAP_FILE_EARMARK_BREAK}
                             description={"Scan encounter log"}
                             onclick={Some(modify_log.clone())}
                             class={icon_style()}
                         />
                         <IconButton
-                            icon_id={IconId::BootstrapFolderSymlink}
+                            data={IconData::BOOTSTRAP_FOLDER_SYMLINK}
                             description={"Live log with scan"}
                             onclick={Some(live_log.clone())}
                             class={icon_style()}
                         />
                     }
                     <IconButton
-                        icon_id={IconId::BootstrapFiles}
+                        data={IconData::BOOTSTRAP_FILES}
                         description={"Split/Combine logs"}
                         onclick={Some(split_log.clone())}
                         class={icon_style()}

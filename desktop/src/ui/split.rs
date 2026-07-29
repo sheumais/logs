@@ -2,7 +2,7 @@ use futures::StreamExt;
 use stylist::css;
 use tauri_sys::{core::invoke, event};
 use yew::prelude::*;
-use yew_icons::IconId;
+use yew_icons::IconData;
 
 use crate::ui::{icon_button::{BackArrow, IconButton}, style::*};
 
@@ -95,13 +95,13 @@ pub fn split_combine_screen() -> Html {
                 </div>
                 <div class={icon_wrapper_style().clone()}>
                     <IconButton
-                        icon_id={IconId::BootstrapFileEarmarkArrowUp}
+                        data={IconData::BOOTSTRAP_FILE_EARMARK_ARROW_UP}
                         description={"Split log"}
                         onclick={Some(split_log.clone())}
                         class={icon_style()}
                     />
                     <IconButton
-                        icon_id={IconId::BootstrapFolder}
+                        data={IconData::BOOTSTRAP_FOLDER}
                         description={"Combine logs"}
                         onclick={Some(combine_log.clone())}
                         class={icon_style()}

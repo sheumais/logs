@@ -8,7 +8,7 @@ use tauri_sys::event;
 use web_sys::HtmlInputElement;
 use yew::{function_component, html, use_context, Html, use_state, Callback, events::Event, TargetCast};
 use yew::prelude::*;
-use yew_icons::IconId;
+use yew_icons::IconData;
 use yew_router::hooks::use_navigator;
 use crate::app::{ESOLogUploadSettings, LoginContext};
 use crate::routes::Route;
@@ -378,7 +378,7 @@ pub fn upload() -> Html {
                         </div>
                     }
                     <IconButton
-                        icon_id={IconId::BootstrapXLg}
+                        data={IconData::BOOTSTRAP_X_LG}
                         description={"Cancel upload"}
                         onclick={Some(cancel_upload.clone())}
                         class={icon_border_style().clone()}
@@ -398,7 +398,7 @@ pub fn upload() -> Html {
                         </div>
                     } 
                     <IconButton
-                        icon_id={IconId::BootstrapXLg}
+                        data={IconData::BOOTSTRAP_X_LG}
                         description={"Stop live log"}
                         onclick={Some(cancel_upload.clone())}
                         class={icon_border_style().clone()}
@@ -419,7 +419,7 @@ pub fn upload() -> Html {
                             </a>
                         }
                         <IconButton
-                            icon_id={IconId::BootstrapTrash3}
+                            data={IconData::BOOTSTRAP_TRASH_3}
                             description={"Delete uploaded file permanently"}
                             onclick={Some(delete_log_file.clone())}
                             class={icon_border_style().clone()}
@@ -483,13 +483,13 @@ pub fn upload() -> Html {
                     </div>
                     <div class={icon_wrapper_style().clone()}>
                         <IconButton
-                            icon_id={IconId::LucideUpload}
+                            data={IconData::LUCIDE_UPLOAD}
                             description={"Upload log"}
                             onclick={Some(upload_log.clone())}
                             class={icon_style().clone()}
                         />
                         <IconButton
-                            icon_id={IconId::BootstrapFileEarmarkPlay}
+                            data={IconData::BOOTSTRAP_FILE_EARMARK_PLAY}
                             description={"Start live logging"}
                             onclick={Some(live_log.clone())}
                             class={icon_style().clone()}

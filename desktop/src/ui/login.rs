@@ -5,7 +5,7 @@ use tauri_sys::core::{invoke, invoke_result};
 use web_sys::HtmlInputElement;
 use yew::prelude::*;
 use yew_router::hooks::use_navigator;
-use yew_icons::{Icon, IconId};
+use yew_icons::{Icon, IconData};
 use crate::{app::LoginContext, routes::Route, ui::{icon_button::{BackArrow, IconButton}, style::*}};
 
 #[function_component(LoginBox)]
@@ -42,7 +42,7 @@ pub fn login_component() -> Html {
             } else {
                 <span class="login-name">{ "Login" }</span>
             }
-            <Icon class={icon_style_small().clone()} icon_id={IconId::BootstrapPersonCircle} />
+            <Icon class={icon_style_small().clone()} data={IconData::BOOTSTRAP_PERSON_CIRCLE} />
         </div>
     }
 }
@@ -187,7 +187,7 @@ pub fn login_screen() -> Html {
                         { format!("Welcome, {}! You have successfully logged in.", login.user.username) }
                     </div>
                     <IconButton
-                        icon_id={IconId::LucideLogOut}
+                        data={IconData::LUCIDE_LOG_OUT}
                         description={"Logout"}
                         onclick={Some(logout.clone())}
                         class={icon_style()}

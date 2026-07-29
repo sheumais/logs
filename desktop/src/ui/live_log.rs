@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use tauri_sys::{core::invoke, event};
 use yew::{classes, function_component, html, use_effect, use_state, Callback, Html, UseStateHandle};
-use yew_icons::IconId;
+use yew_icons::IconData;
 use crate::ui::icon_button::{BackArrow, IconButton};
 use crate::ui::style::*;
 
@@ -57,7 +57,7 @@ pub fn live_log() -> Html {
                 </div>
                 <div class={icon_wrapper_style().clone()}>
                     <IconButton
-                        icon_id={IconId::BootstrapFolderSymlink}
+                        data={IconData::BOOTSTRAP_FOLDER_SYMLINK}
                         description={"Live log"}
                         onclick={Some(live_log.clone())}
                         class={icon_border_style().clone()}

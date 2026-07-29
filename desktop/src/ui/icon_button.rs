@@ -1,12 +1,12 @@
 use yew::prelude::*;
-use yew_icons::{Icon, IconId};
+use yew_icons::{Icon, IconData};
 use yew_router::hooks::use_navigator;
 
 use crate::{routes::Route, ui::style::{back_arrow_style, icon_description, icon_description_visible}};
 
 #[derive(Properties, PartialEq)]
 pub struct IconButtonProps {
-    pub icon_id: IconId,
+    pub data: IconData,
     pub description: String,
     #[prop_or_default]
     pub onclick: Option<Callback<MouseEvent>>,
@@ -41,7 +41,7 @@ pub fn icon_button(props: &IconButtonProps) -> Html {
                 width={props.width.clone()}
                 height={props.height.clone()}
                 class={props.class.clone()}
-                icon_id={props.icon_id}
+                data={props.data}
                 onclick={props.onclick.clone()}
             />
             <div class={if *hovered {
@@ -64,7 +64,7 @@ pub fn back_arrow() -> Html {
     };
     html! {
         <IconButton
-            icon_id={IconId::LucideArrowLeftCircle}
+            data={IconData::LUCIDE_ARROW_LEFT_CIRCLE}
             description={"Back"}
             onclick={Some(go_home.clone())}
             class={back_arrow_style().clone()}

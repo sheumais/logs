@@ -1,7 +1,7 @@
 use tauri_sys::{core::invoke, event};
 use yew::prelude::*;
 use yew_router::hooks::use_navigator;
-use yew_icons::IconId;
+use yew_icons::IconData;
 use futures::StreamExt;
 use crate::{routes::Route, ui::{icon_button::{BackArrow, IconButton}, style::*}};
 
@@ -57,7 +57,7 @@ pub fn modify_screen() -> Html {
             <div class={container_style().clone()}>
                 if !*has_chosen_file {
                     <IconButton
-                        icon_id={IconId::LucideUpload}
+                        data={IconData::LUCIDE_UPLOAD}
                         description={"Select an encounter log"}
                         onclick={Some(select_log.clone())}
                         class={icon_border_style()}
