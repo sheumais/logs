@@ -555,8 +555,13 @@ async fn create_report(
         None
     };
 
+    let archon_version = match fetch_latest_version(client).await {
+        Ok(v) => v,
+        Err(_) => ESO_LOGS_COM_VERSION.to_string(),
+    };
+
     let payload = json!({
-        "clientVersion": ESO_LOGS_COM_VERSION,
+        "clientVersion": archon_version,
         "parserVersion": ESO_LOGS_PARSER_VERSION,
         "startTime": now,
         "endTime": now,
