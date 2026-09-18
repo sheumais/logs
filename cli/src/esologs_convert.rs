@@ -266,6 +266,61 @@ impl ESOLogProcessor {
         }
     }
 
+    pub fn remove_false_deaths(&mut self) {
+        const FALSE_DEATH_WINDOW_MS: u64 = 250;
+
+        let mut pending_death: HashMap<usize, (usize, u64)> = HashMap::new();
+        let mut remove: HashSet<usize> = HashSet::new();
+
+        for (idx, event) in self.eso_logs_log.events.iter().enumerate() {
+            match event {
+                ESOLogsEvent::CastLine(line) => {
+                    let target_unit_index = line.buff_event.target_unit_index;
+
+                    match line.line_type {
+                        ESOLogsLineType::Death => {
+                            pending_death.insert(target_unit_index, (idx, line.timestamp));
+                        }
+                        _ => {
+                            let health = line.cast.target_unit_state.unit_state.health;
+                            if health > 0 {
+                                if let Some(&(death_idx, death_ts)) = pending_death.get(&target_unit_index) {
+                                    if line.timestamp >= death_ts
+                                        && line.timestamp - death_ts <= FALSE_DEATH_WINDOW_MS
+                                    {
+                                        remove.insert(death_idx);
+                                        pending_death.remove(&target_unit_index);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                ESOLogsEvent::HealthRecovery(hr) => {
+                    let target_unit_index = hr.buff_event.target_unit_index;
+                    if hr.unit_state.unit_state.health > 0 {
+                        if let Some(&(death_idx, death_ts)) = pending_death.get(&target_unit_index) {
+                            if hr.timestamp >= death_ts && hr.timestamp - death_ts <= FALSE_DEATH_WINDOW_MS {
+                                remove.insert(death_idx);
+                                pending_death.remove(&target_unit_index);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if !remove.is_empty() {
+            let mut i = 0;
+            self.eso_logs_log.events.retain(|_| {
+                let keep = !remove.contains(&i);
+                i += 1;
+                keep
+            });
+        }
+    }
+
     // fn maybe_create_buff_event(&mut self, target_unit_id: u32, buff_index_id: u32) -> Result<Option<ESOLogsBuffEvent>, String> {
     //     if !self.eso_logs_log.esosim_characters.contains_key(&target_unit_id) {
     //         return Ok(None);
@@ -1865,6 +1920,7 @@ pub fn split_and_zip_log_by_fight<InputPath, OutputDir, F>(input_path: InputPath
 
         if is_end_combat {
             elp.remove_overabundant_events();
+            elp.remove_false_deaths();
             let seg_zip = output_dir
                 .as_ref()
                 .join(format!("report_segment_{fight_index}.zip"));

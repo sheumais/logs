@@ -4,7 +4,6 @@ pub mod player;
 pub mod set;
 pub mod unit;
 pub mod parse;
-pub mod zone;
 pub mod subclassing;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
