@@ -1,7 +1,8 @@
 use dirs::data_local_dir;
 use esologtool_common::UpdateInformation;
 use reqwest::Client;
-use std::{env::temp_dir, fs::{self, create_dir_all, File}, io::Read, path::PathBuf, sync::{atomic::AtomicBool, Arc, RwLock}, time::Duration};
+use tauri::menu::MenuItem;
+use std::{env::temp_dir, fs::{self, File, create_dir_all}, io::Read, path::PathBuf, sync::{Arc, RwLock, atomic::{AtomicBool, Ordering::SeqCst}}, time::Duration};
 use tauri_plugin_dialog::FilePath;
 use cookie_store::CookieStore;
 use reqwest_cookie_store::CookieStoreMutex;
@@ -85,13 +86,33 @@ impl HttpState {
     }
 }
 
+pub struct BusyGuard {
+    flag: Arc<AtomicBool>,
+}
+
+impl BusyGuard {
+    pub fn new(flag: Arc<AtomicBool>) -> Self {
+        flag.store(true, SeqCst);
+        Self { flag }
+    }
+}
+
+impl Drop for BusyGuard {
+    fn drop(&mut self) {
+        self.flag.store(false, SeqCst);
+    }
+}
+
 pub struct AppState {
     pub log_files: RwLock<Option<Vec<FilePath>>>,
     pub live_log_folder: RwLock<Option<FilePath>>,
     pub http: RwLock<HttpState>,
     pub esolog_code: RwLock<Option<String>>,
     pub upload_cancel_flag: Arc<AtomicBool>,
+    pub live_log_folder_cancel_flag: Arc<AtomicBool>,
     pub update: RwLock<Option<UpdateInformation>>,
+    pub is_busy: Arc<AtomicBool>,
+    pub update_menu_item: RwLock<Option<MenuItem<tauri::Wry>>>,
 }
 
 impl AppState {
@@ -102,7 +123,10 @@ impl AppState {
             http: RwLock::new(HttpState::new()),
             esolog_code: RwLock::new(None),
             upload_cancel_flag: Arc::new(AtomicBool::new(false)),
+            live_log_folder_cancel_flag: Arc::new(AtomicBool::new(false)),
             update: RwLock::new(None),
+            is_busy: Arc::new(AtomicBool::new(false)),
+            update_menu_item: RwLock::new(None),
         }
     }
 }

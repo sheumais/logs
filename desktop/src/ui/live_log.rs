@@ -31,6 +31,19 @@ pub fn live_log() -> Html {
         })
     };
 
+    let cancel_live_log = {
+        let live_logging = state.live_logging.clone();
+        let progress = state.progress.clone();
+        Callback::from(move |_| {
+            let live_logging = live_logging.clone();
+            let progress = progress.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                invoke::<()>("cancel_live_log_from_folder", &()).await;
+                live_logging.set(false);
+                progress.set(0);
+            });
+        })
+    };
 
     {
         let progress = state.progress.clone();
@@ -56,12 +69,21 @@ pub fn live_log() -> Html {
                     {format!("{} new lines written", *state.progress)}
                 </div>
                 <div class={icon_wrapper_style().clone()}>
-                    <IconButton
-                        data={IconData::BOOTSTRAP_FOLDER_SYMLINK}
-                        description={"Live log"}
-                        onclick={Some(live_log.clone())}
-                        class={icon_border_style().clone()}
-                    />
+                    if *state.live_logging {
+                        <IconButton
+                            data={IconData::BOOTSTRAP_X_LG}
+                            description={"Stop live log"}
+                            onclick={Some(cancel_live_log.clone())}
+                            class={icon_border_style().clone()}
+                        />
+                    } else {
+                        <IconButton
+                            data={IconData::BOOTSTRAP_FOLDER_SYMLINK}
+                            description={"Live log"}
+                            onclick={Some(live_log.clone())}
+                            class={icon_border_style().clone()}
+                        />
+                    }
                 </div>
                 <div class={paragraph_style().clone()}>
                     <div class={paragraph_style().clone()}>{"This will create the logs/LogToolLive subfolder in the selected destination. After creation, the contents of Encounter.log will be copied into it with modifications periodically."}</div>

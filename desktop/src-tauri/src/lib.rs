@@ -7,7 +7,7 @@ use tauri_plugin_updater::UpdaterExt;
 use std::{
     env::temp_dir, fs::{self, create_dir_all, File, OpenOptions}, io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write}, path::{Path, PathBuf}, sync::atomic::Ordering::SeqCst, thread, time::{Duration, SystemTime, UNIX_EPOCH}
 };
-use tauri::{async_runtime::spawn_blocking, path::BaseDirectory, Emitter, Manager, State, Window};
+use tauri::{Emitter, Manager, State, Window, WindowEvent, async_runtime::spawn_blocking, menu::{Menu, MenuItem}, path::BaseDirectory, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 use ftail::Ftail;
 use log::LevelFilter;
@@ -17,6 +17,7 @@ mod state;
 
 #[tauri::command]
 fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), String> {
+    let _busy = state::BusyGuard::new(state.is_busy.clone());
     let paths_guard = state.log_files.read().unwrap();
     let file_paths = paths_guard.as_ref().ok_or("No file paths set")?;
     let file_path = file_paths.first().ok_or("No file path in vector")?;
@@ -69,6 +70,7 @@ fn modify_log_file(window: Window, state: State<'_, AppState>) -> Result<(), Str
 
 #[tauri::command]
 fn split_encounter_file_into_log_files(window: Window, state: State<'_, AppState>) -> Result<(), String> {
+    let _busy = state::BusyGuard::new(state.is_busy.clone());
     let paths_guard = state.log_files.read().map_err(|e| e.to_string())?;
     let file_paths = paths_guard.as_ref().ok_or("No file paths set")?;
     let file_path = file_paths.first().ok_or("No file path in vector")?;
@@ -131,6 +133,7 @@ fn split_encounter_file_into_log_files(window: Window, state: State<'_, AppState
 
 #[tauri::command]
 fn combine_encounter_log_files(window: Window, state: State<'_, AppState>) -> Result<(), String> {
+    let _busy = state::BusyGuard::new(state.is_busy.clone());
     let paths_guard = state.log_files.read().map_err(|e| e.to_string())?;
     let file_paths = paths_guard.as_ref().ok_or("No file paths set")?;
     if file_paths.is_empty() {
@@ -221,9 +224,18 @@ fn live_log_from_folder(window: Window, app_state: State<'_, AppState>) -> Resul
         .map_err(|e| format!("Failed to create output folder: {e}"))?;
     let output_path = output_folder_pathbuf.join("Encounter.log");
 
+    app_state.live_log_folder_cancel_flag.store(false, SeqCst);
+    let cancel_flag = app_state.live_log_folder_cancel_flag.clone();
+    let busy_flag = app_state.is_busy.clone();
     let window = window.clone();
     thread::spawn(move || {
+        let _busy = state::BusyGuard::new(busy_flag);
+
         let mut input_file = loop {
+            if cancel_flag.load(SeqCst) {
+                log::info!("live_log_from_folder cancelled before file was found");
+                return;
+            }
             match OpenOptions::new().read(true).open(&input_path) {
                 Ok(f) => break f,
                 Err(_) => {
@@ -242,6 +254,11 @@ fn live_log_from_folder(window: Window, app_state: State<'_, AppState>) -> Resul
         let mut buffer = Vec::new();
 
         loop {
+            if cancel_flag.load(SeqCst) {
+                log::info!("live_log_from_folder cancelled");
+                break;
+            }
+
             input_file
                 .seek(SeekFrom::Start(pos))
                 .expect("Failed to seek input file");
@@ -279,6 +296,12 @@ fn live_log_from_folder(window: Window, app_state: State<'_, AppState>) -> Resul
         }
     });
 
+    Ok(())
+}
+
+#[tauri::command]
+fn cancel_live_log_from_folder(state: State<'_, AppState>) -> Result<(), String> {
+    state.live_log_folder_cancel_flag.store(true, SeqCst);
     Ok(())
 }
 
@@ -611,6 +634,7 @@ async fn create_report(
 #[tauri::command]
 async fn upload_log(window: Window, state: State<'_, AppState>, upload_settings: UploadSettings) -> Result<EncounterReportCode, String> {
     log::info!("Beginning direct log upload process");
+    let _busy = state::BusyGuard::new(state.is_busy.clone());
     state.upload_cancel_flag.store(false, SeqCst);
     let log_path_opt = {
         let lock = state.log_files.read().map_err(|e| e.to_string())?;
@@ -886,6 +910,7 @@ fn read_timestamps(path: &Path) -> Result<Vec<(u64, u64)>, String> {
 #[tauri::command]
 async fn live_log_upload(window: Window, app_state: State<'_, AppState>, upload_settings: UploadSettings) -> Result<EncounterReportCode, String> {
     log::info!("Beginning direct live log upload ...");
+    let _busy = crate::state::BusyGuard::new(app_state.is_busy.clone());
     let input_path: PathBuf = {
         let guard = app_state.live_log_folder.read().map_err(|e| e.to_string())?;
         let folder = guard.as_ref().ok_or("No folder selected")?.clone();
@@ -1191,13 +1216,84 @@ pub fn run() {
         .manage(AppState::new())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let handle = app.handle().clone();
+            let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let update_i = MenuItem::with_id(app, "update", "No update available", false, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&update_i, &quit_i])?;
+
+            {
+                let state = app.state::<AppState>();
+                *state.update_menu_item.write().unwrap() = Some(update_i.clone());
+            }
+
+            let update_check_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                check_for_update(handle).await.unwrap();
+                if let Err(e) = check_for_update(update_check_handle).await {
+                    log::warn!("check_for_update failed: {e}");
+                }
             });
-            // thread::spawn(move || {
-            //     cli::rich_presence::rich_presence_thread();
-            // });
+
+            let _tray = TrayIconBuilder::new()
+                .menu(&menu)
+                .show_menu_on_left_click(true)
+                .icon(app.default_window_icon().unwrap().clone())
+                .on_tray_icon_event(|tray, event| match event {
+                    TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } => {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.unminimize();
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    _ => {}
+                })
+                .on_menu_event(|app, event| match event.id().as_ref() {
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    "update" => {
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = update(app).await;
+                        });
+                    }
+                    _ => {}
+                })
+                .build(app)?;
+
+            if let Some(window) = app.get_webview_window("main") {
+                let app_handle = app.handle().clone();
+                window.on_window_event(move |event| {
+                    let state = app_handle.state::<AppState>();
+                    match event {
+                        WindowEvent::CloseRequested { api, .. } => {
+                            api.prevent_close();
+                            if let Some(window) = app_handle.get_webview_window("main") {
+                                if state.is_busy.load(SeqCst) {
+                                    let _ = window.hide();
+                                } else {
+                                    app_handle.exit(0);
+                                }
+                            }
+                        }
+                        WindowEvent::Resized(_) => {
+                            if state.is_busy.load(SeqCst) {
+                                if let Some(window) = app_handle.get_webview_window("main") {
+                                    if window.is_minimized().unwrap_or(false) {
+                                        let _ = window.hide();
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                });
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1208,6 +1304,7 @@ pub fn run() {
             split_encounter_file_into_log_files,
             combine_encounter_log_files,
             live_log_from_folder,
+            cancel_live_log_from_folder,
             login,
             logout,
             upload_log,
@@ -1228,6 +1325,15 @@ async fn check_for_update(app: tauri::AppHandle) -> tauri_plugin_updater::Result
             version: update.version.clone(),
             current_version: update.current_version.clone(),
         };
+
+        let state = app.state::<AppState>();
+        *state.update.write().unwrap() = Some(update_metadata.clone());
+
+        if let Some(item) = state.update_menu_item.read().unwrap().as_ref() {
+            let _ = item.set_text(format!("Update available: v{}", update_metadata.version));
+            let _ = item.set_enabled(true);
+        }
+
         let _ = app.emit("update-available", update_metadata);
     }
     Ok(())
