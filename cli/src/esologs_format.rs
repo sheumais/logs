@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, fmt::{self, Display}, hash::Hash, sync::Arc, usize};
+use std::{collections::{HashMap, HashSet}, fmt::{self, Display}, hash::Hash, sync::Arc};
 // use esosim::engine::player::character::Character;
 use parser::{effect::StatusEffectType, event::DamageType, player::Race, unit::{blank_unit_state, Reaction, UnitState}};
 

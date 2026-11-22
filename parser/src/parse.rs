@@ -1,4 +1,4 @@
-use std::{collections::HashMap, u32};
+use std::collections::HashMap;
 
 use esosim::data::item_type::EnchantType;
 use esosim::data::item_type::GearSlot;

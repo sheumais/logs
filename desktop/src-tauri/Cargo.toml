@@ -19,12 +19,12 @@ serde_json = "^1"
 parser = { path = "../../parser" }
 cli = { path = "../../cli" }
 esologtool-common = {path = "../common" }
-reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "json", "cookies", "multipart"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json", "cookies", "multipart"] }
 cookie_store = { version = "0.22.1", features = ["serde"] }
 reqwest_cookie_store = "0.10.0"
 dirs = "6.0.0"
 ftail = "0.3.1"
-log = "0.4.33"
+log = "0.4.35"
 chrono = "0.4.45"
 
 
